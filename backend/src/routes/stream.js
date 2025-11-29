@@ -6,9 +6,26 @@ const router = express.Router();
 // Store active connections
 const connections = new Map();
 
+// CORS middleware for SSE - must run BEFORE any response
+const sseCorsMw = (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+};
+
+// Apply CORS to all routes in this router
+router.use(sseCorsMw);
+
 // SSE endpoint for streaming quotes
 router.get('/quotes', async (req, res) => {
-  // Require authentication
+  // Require authentication (CORS headers already set by middleware)
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -30,8 +47,7 @@ router.get('/quotes', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.flushHeaders(); // Flush headers immediately for SSE
 
   // Send initial connection event
   res.write(`data: ${JSON.stringify({ type: 'connected', symbols })}\n\n`);

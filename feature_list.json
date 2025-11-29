@@ -347,7 +347,7 @@
       "Step 5: Verify red candles for down days",
       "Step 6: Verify volume bars below price chart"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
