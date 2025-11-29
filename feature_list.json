@@ -528,7 +528,7 @@
       "Step 5: Apply selection",
       "Step 6: Verify chart loads only data in date range"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
