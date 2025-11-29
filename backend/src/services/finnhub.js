@@ -165,6 +165,8 @@ class FinnhubService {
       try {
         return await this.request('/quote', { symbol: symbol.toUpperCase() });
       } catch (error) {
+        // Log the actual error before falling back
+        console.error(`❌ API call failed for ${symbol.toUpperCase()}:`, error.message);
         // Fallback to mock data
         const mockQuote = MOCK_DATA.quotes[symbol.toUpperCase()];
         if (mockQuote) {
