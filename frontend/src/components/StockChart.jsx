@@ -21,12 +21,31 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartType, setChartType] = useState(initialChartType);
-  const [timeframe, setTimeframe] = useState(initialTimeframe);
+  const [timeframe, setTimeframe] = useState(() => {
+    // Load saved timeframe from localStorage for this symbol
+    const savedTimeframe = localStorage.getItem(`chart_timeframe_${symbol}`);
+    return savedTimeframe || initialTimeframe;
+  });
   const [tooltipData, setTooltipData] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+
+  // Load saved timeframe when symbol changes
+  useEffect(() => {
+    const savedTimeframe = localStorage.getItem(`chart_timeframe_${symbol}`);
+    if (savedTimeframe) {
+      setTimeframe(savedTimeframe);
+    } else {
+      setTimeframe(initialTimeframe);
+    }
+  }, [symbol, initialTimeframe]);
+
+  // Save timeframe to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(`chart_timeframe_${symbol}`, timeframe);
+  }, [timeframe, symbol]);
 
   // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {

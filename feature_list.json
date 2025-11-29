@@ -541,7 +541,7 @@
       "Step 5: Navigate to GOOGL chart",
       "Step 6: Verify 5D timeframe still selected"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
