@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import useSSE from '../hooks/useSSE';
 import MarketStatusBadge from '../components/MarketStatusBadge';
+import AddToWatchlistModal from '../components/AddToWatchlistModal';
 
 function StockDetail() {
   const { symbol } = useParams();
@@ -13,6 +15,7 @@ function StockDetail() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isPulsing, setIsPulsing] = useState(false);
   const [user, setUser] = useState(null);
+  const [isAddToWatchlistModalOpen, setIsAddToWatchlistModalOpen] = useState(false);
 
   // SSE connection for real-time updates
   const { connected, reconnecting } = useSSE(
@@ -250,6 +253,13 @@ function StockDetail() {
                 </p>
               )}
             </div>
+            <button
+              onClick={() => setIsAddToWatchlistModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors mt-4 md:mt-0"
+            >
+              <Plus className="w-5 h-5" />
+              Add to Watchlist
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -377,6 +387,13 @@ function StockDetail() {
           </div>
         )}
       </main>
+
+      {/* Add to Watchlist Modal */}
+      <AddToWatchlistModal
+        isOpen={isAddToWatchlistModalOpen}
+        onClose={() => setIsAddToWatchlistModalOpen(false)}
+        symbol={symbol}
+      />
     </div>
   );
 }

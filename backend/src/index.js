@@ -44,12 +44,14 @@ import authRoutes from './routes/auth.js';
 import quotesRoutes from './routes/quotes.js';
 import searchRoutes from './routes/search.js';
 import streamRoutes from './routes/stream.js';
+import watchlistRoutes from './routes/watchlists.js';
 
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/quotes', quotesRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/stream', streamRoutes);
+app.use('/api/watchlists', watchlistRoutes);
 
 app.get('/api', (req, res) => {
   res.json({
