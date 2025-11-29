@@ -13,23 +13,36 @@ function useSSE(symbols, onQuoteUpdate, onError) {
   const eventSourceRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
+  const connectTimeoutRef = useRef(null);
+  const isCleaningUpRef = useRef(false);
+
+  // Memoize the symbols string to prevent unnecessary reconnects
+  const symbolsKey = symbols?.join(',') || '';
 
   useEffect(() => {
     // Don't connect if no symbols
-    if (!symbols || symbols.length === 0) {
+    if (!symbolsKey) {
       return;
     }
 
+    // Prevent rapid reconnects during StrictMode double-mount
+    isCleaningUpRef.current = false;
+
     const connect = () => {
+      // Don't connect if we're in cleanup phase
+      if (isCleaningUpRef.current) {
+        return;
+      }
+
       try {
         // Close existing connection
         if (eventSourceRef.current) {
           eventSourceRef.current.close();
+          eventSourceRef.current = null;
         }
 
-        const symbolsParam = symbols.join(',');
         const url = `http://localhost:3001/api/stream/quotes?symbols=${encodeURIComponent(
-          symbolsParam
+          symbolsKey
         )}`;
 
         console.log('[SSE] Connecting to:', url);
@@ -109,12 +122,23 @@ function useSSE(symbols, onQuoteUpdate, onError) {
       }
     };
 
-    // Initial connection
-    connect();
+    // Debounced initial connection to prevent rapid reconnects in StrictMode
+    connectTimeoutRef.current = setTimeout(() => {
+      if (!isCleaningUpRef.current) {
+        connect();
+      }
+    }, 100);
 
     // Cleanup function
     return () => {
       console.log('[SSE] Cleaning up connection');
+      isCleaningUpRef.current = true;
+
+      // Clear connect timeout
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
 
       // Clear reconnect timeout
       if (reconnectTimeoutRef.current) {
@@ -132,7 +156,7 @@ function useSSE(symbols, onQuoteUpdate, onError) {
       setReconnecting(false);
       reconnectAttemptsRef.current = 0;
     };
-  }, [symbols.join(',')]); // Re-connect if symbols change
+  }, [symbolsKey]); // Re-connect if symbols change
 
   return {
     connected,

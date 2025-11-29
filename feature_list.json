@@ -434,7 +434,7 @@
       "Step 5: Press Escape or click close",
       "Step 6: Verify exit fullscreen mode"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

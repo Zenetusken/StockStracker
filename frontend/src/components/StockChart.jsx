@@ -9,11 +9,14 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const chartContainerRef = useRef(null);
   const chart = useRef(null);
   const series = useRef(null);
+  const crosshairHandler = useRef(null);
+  const resizeTimeout = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartType, setChartType] = useState(initialChartType);
   const [timeframe, setTimeframe] = useState(initialTimeframe);
   const [tooltipData, setTooltipData] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -166,25 +169,43 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         // Fit content
         chart.current.timeScale().fitContent();
 
-        // Subscribe to crosshair move events for tooltip
-        chart.current.subscribeCrosshairMove((param) => {
-          if (!param.time || !param.point || !series.current) {
+        // Unsubscribe previous crosshair handler if exists
+        if (crosshairHandler.current && chart.current) {
+          try {
+            chart.current.unsubscribeCrosshairMove(crosshairHandler.current);
+          } catch (e) {
+            // Ignore errors from invalid handler
+          }
+        }
+
+        // Create new crosshair handler with current series reference
+        const currentSeries = series.current;
+        crosshairHandler.current = (param) => {
+          if (!param.time || !param.point || !currentSeries) {
             setTooltipData(null);
             return;
           }
 
-          const data = param.seriesData.get(series.current);
-          if (data) {
-            // Format the data for tooltip display
-            const tooltipInfo = {
-              time: param.time,
-              ...data
-            };
-            setTooltipData(tooltipInfo);
-          } else {
+          try {
+            const data = param.seriesData.get(currentSeries);
+            if (data) {
+              // Format the data for tooltip display
+              const tooltipInfo = {
+                time: param.time,
+                ...data
+              };
+              setTooltipData(tooltipInfo);
+            } else {
+              setTooltipData(null);
+            }
+          } catch (e) {
+            // Series may have been invalidated, clear tooltip
             setTooltipData(null);
           }
-        });
+        };
+
+        // Subscribe to crosshair move events for tooltip
+        chart.current.subscribeCrosshairMove(crosshairHandler.current);
 
         setLoading(false);
       } catch (err) {
@@ -217,6 +238,21 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   // Cleanup on unmount only
   useEffect(() => {
     return () => {
+      // Clear any pending resize timeout
+      if (resizeTimeout.current) {
+        clearTimeout(resizeTimeout.current);
+        resizeTimeout.current = null;
+      }
+      // Unsubscribe crosshair handler
+      if (crosshairHandler.current && chart.current) {
+        try {
+          chart.current.unsubscribeCrosshairMove(crosshairHandler.current);
+        } catch (e) {
+          // Ignore
+        }
+        crosshairHandler.current = null;
+      }
+      // Remove chart
       if (chart.current) {
         chart.current.remove();
         chart.current = null;
@@ -232,8 +268,51 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     }
   };
 
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 relative">
+  // Fullscreen handlers
+  const handleToggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
+  const handleExitFullscreen = () => {
+    setIsFullscreen(false);
+  };
+
+  // Handle Escape key to exit fullscreen
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+
+    if (isFullscreen) {
+      window.addEventListener('keydown', handleEscape);
+      return () => window.removeEventListener('keydown', handleEscape);
+    }
+  }, [isFullscreen]);
+
+  // Resize chart when entering/exiting fullscreen
+  useEffect(() => {
+    if (chart.current && chartContainerRef.current) {
+      // Clear previous timeout if any
+      if (resizeTimeout.current) {
+        clearTimeout(resizeTimeout.current);
+      }
+      // Small delay to allow DOM to update
+      resizeTimeout.current = setTimeout(() => {
+        if (chart.current && chartContainerRef.current) {
+          chart.current.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: isFullscreen ? window.innerHeight - 150 : 500,
+          });
+        }
+        resizeTimeout.current = null;
+      }, 100);
+    }
+  }, [isFullscreen]);
+
+  const chartContent = (
+    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 relative ${isFullscreen ? 'h-full' : ''}`}>
       {/* Loading Overlay */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-800 bg-opacity-90 dark:bg-opacity-90 rounded-lg z-10">
@@ -347,13 +426,28 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           </div>
         </div>
 
-        {/* Reset Zoom Button */}
-        <button
-          onClick={handleResetZoom}
-          className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-        >
-          Reset Zoom
-        </button>
+        {/* Reset Zoom and Fullscreen Buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleResetZoom}
+            className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+          >
+            Reset Zoom
+          </button>
+          <button
+            onClick={handleToggleFullscreen}
+            className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            title="Toggle fullscreen"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {isFullscreen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              )}
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Crosshair Tooltip */}
@@ -403,10 +497,23 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       <div
         ref={chartContainerRef}
         className="w-full"
-        style={{ minHeight: '500px' }}
+        style={{ minHeight: isFullscreen ? `${window.innerHeight - 150}px` : '500px' }}
       />
     </div>
   );
+
+  // Return fullscreen modal or normal chart
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4">
+        <div className="w-full h-full max-w-full max-h-full">
+          {chartContent}
+        </div>
+      </div>
+    );
+  }
+
+  return chartContent;
 }
 
 export default StockChart;
