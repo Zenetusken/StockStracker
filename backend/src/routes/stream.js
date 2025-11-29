@@ -30,7 +30,12 @@ router.get('/quotes', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5174');
+  // Allow both Vite dev server ports
+  const origin = req.headers.origin;
+  const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174'];
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   // Send initial connection event

@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import useSSE from '../hooks/useSSE';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import AddToWatchlistModal from '../components/AddToWatchlistModal';
+import StockChart from '../components/StockChart';
 
 function StockDetail() {
   const { symbol } = useParams();
@@ -337,6 +338,11 @@ function StockDetail() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Stock Chart */}
+        <div className="mb-6">
+          <StockChart symbol={symbol} chartType="candlestick" timeframe="6M" />
         </div>
 
         {/* Company Profile */}

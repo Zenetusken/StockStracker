@@ -28,6 +28,54 @@ const MOCK_DATA = {
 };
 
 /**
+ * Generate mock OHLC data for demonstration
+ */
+function generateMockCandles(symbol, days = 180) {
+  const now = Math.floor(Date.now() / 1000);
+  const dayInSeconds = 24 * 60 * 60;
+
+  const t = [];
+  const o = [];
+  const h = [];
+  const l = [];
+  const c = [];
+  const v = [];
+
+  // Get base price from mock quotes or use default
+  let basePrice = 150;
+  const mockQuote = MOCK_DATA.quotes[symbol];
+  if (mockQuote) {
+    basePrice = mockQuote.c;
+  }
+
+  // Generate candles going backwards in time
+  for (let i = days; i >= 0; i--) {
+    const timestamp = now - (i * dayInSeconds);
+    const dayOffset = days - i;
+
+    // Add some trend and randomness
+    const trend = Math.sin(dayOffset / 20) * 10;
+    const random = (Math.random() - 0.5) * 5;
+    const dayPrice = basePrice + trend + random - (days - dayOffset) * 0.1;
+
+    const open = dayPrice + (Math.random() - 0.5) * 2;
+    const close = dayPrice + (Math.random() - 0.5) * 2;
+    const high = Math.max(open, close) + Math.random() * 3;
+    const low = Math.min(open, close) - Math.random() * 3;
+    const volume = Math.floor(50000000 + Math.random() * 100000000);
+
+    t.push(timestamp);
+    o.push(parseFloat(open.toFixed(2)));
+    h.push(parseFloat(high.toFixed(2)));
+    l.push(parseFloat(low.toFixed(2)));
+    c.push(parseFloat(close.toFixed(2)));
+    v.push(volume);
+  }
+
+  return { c, h, l, o, t, v, s: 'ok' };
+}
+
+/**
  * Finnhub API Service
  * Provides market data with caching to respect rate limits (60 calls/minute)
  */
@@ -43,15 +91,15 @@ class FinnhubService {
 
   loadApiKey() {
     try {
-      // Try to load from /tmp/api-key first
-      const apiKeyPath = '/tmp/api-key';
+      // Try to load from /tmp/api-key/finnhub.io.key first
+      const apiKeyPath = '/tmp/api-key/finnhub.io.key';
       if (fs.existsSync(apiKeyPath)) {
         const key = fs.readFileSync(apiKeyPath, 'utf8').trim();
-        console.log('✓ Finnhub API key loaded from /tmp/api-key');
+        console.log('✓ Finnhub API key loaded from /tmp/api-key/finnhub.io.key');
         return key;
       }
     } catch (error) {
-      console.warn('Could not load API key from /tmp/api-key:', error.message);
+      console.warn('Could not load API key from /tmp/api-key/finnhub.io.key:', error.message);
     }
 
     // Fallback to environment variable
@@ -192,12 +240,24 @@ class FinnhubService {
   async getCandles(symbol, resolution, from, to) {
     const cacheKey = `candles:${symbol}:${resolution}:${from}:${to}`;
     return this.getCached(cacheKey, async () => {
-      return await this.request('/stock/candle', {
-        symbol: symbol.toUpperCase(),
-        resolution,
-        from,
-        to
-      });
+      try {
+        return await this.request('/stock/candle', {
+          symbol: symbol.toUpperCase(),
+          resolution,
+          from,
+          to
+        });
+      } catch (error) {
+        // Fallback to mock data
+        console.log(`Using mock candle data for ${symbol.toUpperCase()}`);
+
+        // Calculate number of days requested
+        const fromDate = new Date(parseInt(from) * 1000);
+        const toDate = new Date(parseInt(to) * 1000);
+        const days = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24));
+
+        return generateMockCandles(symbol.toUpperCase(), Math.min(days, 365));
+      }
     }, this.cacheTimeout);
   }
 

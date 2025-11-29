@@ -1,4 +1,29 @@
 ╔════════════════════════════════════════════════════════════════╗
+║  ⚠️⚠️⚠️ CRITICAL: FIX API KEY PATH FIRST ⚠️⚠️⚠️                  ║
+╚════════════════════════════════════════════════════════════════╝
+
+STOP! Before doing ANYTHING else, you must fix the Finnhub API integration:
+
+PROBLEM: The app is using MOCK DATA instead of REAL API DATA.
+The code in backend/src/services/finnhub.js looks for the API key at:
+  /tmp/api-key  (WRONG - this is a directory)
+
+The REAL API key is at:
+  /tmp/api-key/finnhub.io.key  (CORRECT)
+
+FIX REQUIRED:
+1. Update loadApiKey() in backend/src/services/finnhub.js to read from:
+   /tmp/api-key/finnhub.io.key
+2. Restart the backend server
+3. Verify logs show: "✓ Finnhub API key loaded from /tmp/api-key/finnhub.io.key"
+4. Verify dashboard shows REAL stock prices (not mock values like AAPL $178.72)
+5. Remove mock data fallbacks - if API fails, show errors, don't fake data
+
+DO NOT proceed to other features until real data is confirmed working.
+
+═══════════════════════════════════════════════════════════════
+
+╔════════════════════════════════════════════════════════════════╗
 ║       StockTracker Pro - Session 10 Progress Report           ║
 ╚════════════════════════════════════════════════════════════════╝
 
