@@ -268,7 +268,7 @@ function StockDetail() {
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Current Price</p>
               <p className="text-4xl font-bold font-mono text-gray-900 dark:text-white">
-                {formatPrice(quote?.c)}
+                {formatPrice(quote?.current)}
               </p>
               <div className={`flex items-center gap-2 mt-2 ${getChangeColor(quote?.change)}`}>
                 {quote?.change !== undefined && (
@@ -280,7 +280,7 @@ function StockDetail() {
                       {formatPrice(Math.abs(quote.change))}
                     </span>
                     <span className="text-xl font-semibold">
-                      ({formatPercent(quote.dp)})
+                      ({formatPercent(quote.percentChange)})
                     </span>
                   </>
                 )}
@@ -294,38 +294,38 @@ function StockDetail() {
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">High:</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
-                    {formatPrice(quote?.h)}
+                    {formatPrice(quote?.high)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Low:</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
-                    {formatPrice(quote?.l)}
+                    {formatPrice(quote?.low)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Open:</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
-                    {formatPrice(quote?.o)}
+                    {formatPrice(quote?.open)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Prev Close:</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
-                    {formatPrice(quote?.pc)}
+                    {formatPrice(quote?.previousClose)}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Volume */}
+            {/* Volume - Note: Volume not available from enriched quote */}
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Trading Info</p>
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Volume:</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
-                    {formatLargeNumber(quote?.v)}
+                    {formatLargeNumber(quote?.volume)}
                   </span>
                 </div>
                 {lastUpdate && (

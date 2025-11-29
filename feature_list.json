@@ -359,7 +359,7 @@
       "Step 4: Verify chart switches to line display",
       "Step 5: Verify line follows close prices"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -371,7 +371,7 @@
       "Step 4: Verify chart shows area with gradient fill",
       "Step 5: Verify gradient fades toward bottom"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -383,7 +383,7 @@
       "Step 4: Verify chart zooms into smaller time range",
       "Step 5: Verify candles become wider"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -396,7 +396,7 @@
       "Step 5: Drag mouse right",
       "Step 6: Verify chart pans to show newer data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

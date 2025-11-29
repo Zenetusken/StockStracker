@@ -328,7 +328,24 @@ class FinnhubService {
    */
   async getEnrichedQuote(symbol) {
     const quoteData = await this.getQuote(symbol);
-    return this.enrichQuote(symbol, quoteData);
+    const enriched = this.enrichQuote(symbol, quoteData);
+
+    // Try to get volume from today's candle data
+    if (enriched) {
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const dayAgo = now - (24 * 60 * 60);
+        const candles = await this.getCandles(symbol, 'D', dayAgo, now);
+        if (candles && candles.s === 'ok' && candles.v && candles.v.length > 0) {
+          enriched.volume = candles.v[candles.v.length - 1]; // Latest volume
+        }
+      } catch (err) {
+        // Volume is optional, don't fail if we can't get it
+        console.log(`Could not fetch volume for ${symbol}:`, err.message);
+      }
+    }
+
+    return enriched;
   }
 
   /**

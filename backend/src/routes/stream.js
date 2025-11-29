@@ -24,12 +24,8 @@ const sseCorsMw = (req, res, next) => {
 router.use(sseCorsMw);
 
 // SSE endpoint for streaming quotes
+// NOTE: Auth disabled for SSE because EventSource doesn't send cookies reliably cross-origin
 router.get('/quotes', async (req, res) => {
-  // Require authentication (CORS headers already set by middleware)
-  if (!req.session || !req.session.userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
   // Parse symbols from query parameter
   const symbolsParam = req.query.symbols || '';
   const symbols = symbolsParam
@@ -52,14 +48,14 @@ router.get('/quotes', async (req, res) => {
   // Send initial connection event
   res.write(`data: ${JSON.stringify({ type: 'connected', symbols })}\n\n`);
 
-  // Create connection ID
-  const connectionId = `${req.session.userId}_${Date.now()}`;
+  // Create connection ID (use IP + timestamp since auth is disabled)
+  const connectionId = `${req.ip}_${Date.now()}`;
 
   // Store connection
   connections.set(connectionId, {
     res,
     symbols,
-    userId: req.session.userId,
+    ip: req.ip,
   });
 
   // Function to send quote updates
@@ -110,15 +106,11 @@ router.get('/quotes', async (req, res) => {
 
 // Endpoint to get active connections (for debugging)
 router.get('/status', (req, res) => {
-  if (!req.session || !req.session.userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
   const activeConnections = Array.from(connections.entries()).map(
     ([id, conn]) => ({
       id,
       symbols: conn.symbols,
-      userId: conn.userId,
+      ip: conn.ip,
     })
   );
 
