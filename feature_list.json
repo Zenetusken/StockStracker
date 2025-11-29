@@ -38,7 +38,7 @@
       "Step 5: Verify error message is displayed",
       "Step 6: Verify user remains on login page"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -86,7 +86,7 @@
       "Step 3: Verify hash starts with $2b$ or $2a$ (bcrypt)",
       "Step 4: Verify bcrypt rounds >= 10"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
