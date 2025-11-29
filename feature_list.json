@@ -421,7 +421,7 @@
       "Step 5: Move to different candle",
       "Step 6: Verify tooltip updates with new values"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

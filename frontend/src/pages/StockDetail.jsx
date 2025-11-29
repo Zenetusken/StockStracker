@@ -287,30 +287,30 @@ function StockDetail() {
               </div>
             </div>
 
-            {/* High / Low */}
+            {/* Day Range */}
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Day Range</p>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">High:</span>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Day Range</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">High</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
                     {formatPrice(quote?.high)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Low:</span>
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Low</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
                     {formatPrice(quote?.low)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Open:</span>
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Open</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
                     {formatPrice(quote?.open)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Prev Close:</span>
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Prev Close</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
                     {formatPrice(quote?.previousClose)}
                   </span>
@@ -318,24 +318,22 @@ function StockDetail() {
               </div>
             </div>
 
-            {/* Volume - Note: Volume not available from enriched quote */}
+            {/* Trading Info */}
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Trading Info</p>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Volume:</span>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Trading Info</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Volume</span>
                   <span className="font-mono text-gray-900 dark:text-white font-semibold">
                     {formatLargeNumber(quote?.volume)}
                   </span>
                 </div>
-                {lastUpdate && (
-                  <div className="mt-4">
-                    <p className="text-xs text-gray-500 dark:text-gray-500">
-                      Last updated: {lastUpdate.toLocaleTimeString()}
-                    </p>
-                  </div>
-                )}
               </div>
+              {lastUpdate && (
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-3">
+                  Last updated: {lastUpdate.toLocaleTimeString()}
+                </p>
+              )}
             </div>
           </div>
         </div>

@@ -13,6 +13,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [error, setError] = useState(null);
   const [chartType, setChartType] = useState(initialChartType);
   const [timeframe, setTimeframe] = useState(initialTimeframe);
+  const [tooltipData, setTooltipData] = useState(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -164,6 +165,26 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
         // Fit content
         chart.current.timeScale().fitContent();
+
+        // Subscribe to crosshair move events for tooltip
+        chart.current.subscribeCrosshairMove((param) => {
+          if (!param.time || !param.point || !series.current) {
+            setTooltipData(null);
+            return;
+          }
+
+          const data = param.seriesData.get(series.current);
+          if (data) {
+            // Format the data for tooltip display
+            const tooltipInfo = {
+              time: param.time,
+              ...data
+            };
+            setTooltipData(tooltipInfo);
+          } else {
+            setTooltipData(null);
+          }
+        });
 
         setLoading(false);
       } catch (err) {
@@ -334,6 +355,49 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           Reset Zoom
         </button>
       </div>
+
+      {/* Crosshair Tooltip */}
+      {tooltipData && (
+        <div className="absolute top-20 left-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3 shadow-lg z-20 pointer-events-none">
+          <div className="text-xs space-y-1">
+            <div className="font-semibold text-gray-900 dark:text-white mb-2">
+              {new Date(typeof tooltipData.time === 'number' ? tooltipData.time * 1000 : tooltipData.time).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: tooltipData.time && (timeframe === '1D' || timeframe === '5D') ? 'numeric' : undefined,
+                minute: tooltipData.time && (timeframe === '1D' || timeframe === '5D') ? 'numeric' : undefined,
+              })}
+            </div>
+            {tooltipData.open !== undefined && (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-600 dark:text-gray-400">Open:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">${tooltipData.open.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-600 dark:text-gray-400">High:</span>
+                  <span className="font-medium text-green-600 dark:text-green-400">${tooltipData.high.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-600 dark:text-gray-400">Low:</span>
+                  <span className="font-medium text-red-600 dark:text-red-400">${tooltipData.low.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-600 dark:text-gray-400">Close:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">${tooltipData.close.toFixed(2)}</span>
+                </div>
+              </>
+            )}
+            {tooltipData.value !== undefined && (
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-600 dark:text-gray-400">Price:</span>
+                <span className="font-medium text-gray-900 dark:text-white">${tooltipData.value.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Chart Container - always rendered so ref is available */}
       <div

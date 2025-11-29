@@ -324,24 +324,46 @@ class FinnhubService {
   }
 
   /**
+   * Get volume for a symbol using a stable cache key
+   * Uses day-rounded timestamps for consistent caching
+   */
+  async getVolume(symbol) {
+    const upperSymbol = symbol.toUpperCase();
+    const cacheKey = `volume:${upperSymbol}`;
+
+    return this.getCached(cacheKey, async () => {
+      try {
+        // Use day-rounded timestamps for stable cache keys
+        const now = Math.floor(Date.now() / 1000);
+        const dayRounded = Math.floor(now / 86400) * 86400; // Round to start of day
+        const weekAgo = dayRounded - (7 * 86400); // 7 days back to handle weekends
+
+        // Use getCandles which has mock data fallback
+        const candles = await this.getCandles(upperSymbol, 'D', weekAgo, dayRounded);
+
+        if (candles && candles.s === 'ok' && candles.v && candles.v.length > 0) {
+          return candles.v[candles.v.length - 1]; // Latest day's volume
+        }
+        return null;
+      } catch (error) {
+        console.log(`Could not fetch volume for ${upperSymbol}:`, error.message);
+        return null;
+      }
+    }, 60000); // Cache volume for 1 minute
+  }
+
+  /**
    * Get enriched quote with all calculated fields
    */
   async getEnrichedQuote(symbol) {
     const quoteData = await this.getQuote(symbol);
     const enriched = this.enrichQuote(symbol, quoteData);
 
-    // Try to get volume from today's candle data
+    // Try to get volume (uses separate cache)
     if (enriched) {
-      try {
-        const now = Math.floor(Date.now() / 1000);
-        const dayAgo = now - (24 * 60 * 60);
-        const candles = await this.getCandles(symbol, 'D', dayAgo, now);
-        if (candles && candles.s === 'ok' && candles.v && candles.v.length > 0) {
-          enriched.volume = candles.v[candles.v.length - 1]; // Latest volume
-        }
-      } catch (err) {
-        // Volume is optional, don't fail if we can't get it
-        console.log(`Could not fetch volume for ${symbol}:`, err.message);
+      const volume = await this.getVolume(symbol);
+      if (volume) {
+        enriched.volume = volume;
       }
     }
 
