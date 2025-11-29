@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import StockDetail from './pages/StockDetail';
+import WatchlistDetail from './pages/WatchlistDetail';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }) {
@@ -75,6 +76,14 @@ function App() {
           element={
             <ProtectedRoute>
               <StockDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/watchlist/:id"
+          element={
+            <ProtectedRoute>
+              <WatchlistDetail />
             </ProtectedRoute>
           }
         />

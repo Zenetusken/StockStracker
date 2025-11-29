@@ -232,7 +232,7 @@
       "Step 5: Verify symbol is removed from list",
       "Step 6: Verify removal persisted in database"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -284,7 +284,7 @@
       "Step 5: Verify all symbols update in real-time",
       "Step 6: Verify visual flash on each update"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
