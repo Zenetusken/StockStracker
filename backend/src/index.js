@@ -41,9 +41,13 @@ app.get('/health', (req, res) => {
 
 // Import routes
 import authRoutes from './routes/auth.js';
+import quotesRoutes from './routes/quotes.js';
+import searchRoutes from './routes/search.js';
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/quotes', quotesRoutes);
+app.use('/api/search', searchRoutes);
 
 app.get('/api', (req, res) => {
   res.json({

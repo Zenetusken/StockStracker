@@ -11,7 +11,7 @@
       "Step 6: Verify redirect to dashboard or login page",
       "Step 7: Verify default watchlist and portfolio are created"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -25,7 +25,7 @@
       "Step 6: Verify redirect to dashboard",
       "Step 7: Verify user info appears in header"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -50,7 +50,7 @@
       "Step 4: Attempt to access /portfolio directly",
       "Step 5: Verify redirect to login page"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -63,7 +63,7 @@
       "Step 5: Attempt to access dashboard",
       "Step 6: Verify redirect to login page"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -75,7 +75,7 @@
       "Step 4: Verify user is still logged in",
       "Step 5: Verify access to protected routes"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
