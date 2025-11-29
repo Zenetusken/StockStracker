@@ -1,5 +1,5 @@
 import express from 'express';
-import { getEnrichedQuote } from '../services/finnhub.js';
+import finnhubService from '../services/finnhub.js';
 
 const router = express.Router();
 
@@ -56,7 +56,7 @@ router.get('/quotes', async (req, res) => {
       const quotes = await Promise.all(
         connection.symbols.map(async (symbol) => {
           try {
-            const quote = await getEnrichedQuote(symbol);
+            const quote = await finnhubService.getEnrichedQuote(symbol);
             return { symbol, quote, error: null };
           } catch (err) {
             return { symbol, quote: null, error: err.message };

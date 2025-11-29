@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// Popular stocks to suggest when no results found
+const POPULAR_STOCKS = [
+  { symbol: 'AAPL', description: 'Apple Inc' },
+  { symbol: 'GOOGL', description: 'Alphabet Inc Class A' },
+  { symbol: 'MSFT', description: 'Microsoft Corporation' },
+  { symbol: 'AMZN', description: 'Amazon.com Inc' },
+  { symbol: 'TSLA', description: 'Tesla Inc' },
+];
+
 function SearchBar() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -194,24 +203,47 @@ function SearchBar() {
 
           {/* No Results */}
           {query.trim().length > 0 && !loading && results.length === 0 && (
-            <div className="px-4 py-8 text-center">
-              <svg
-                className="mx-auto h-12 w-12 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">No results found</p>
-              <p className="text-sm text-gray-500 dark:text-gray-500">
-                Try a different search term
-              </p>
+            <div>
+              <div className="px-4 py-8 text-center border-b border-gray-200 dark:border-gray-700">
+                <svg
+                  className="mx-auto h-12 w-12 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                <p className="mt-2 text-gray-600 dark:text-gray-400">No results found</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500">
+                  Try a different search term
+                </p>
+              </div>
+
+              {/* Popular Stocks Suggestions */}
+              <div>
+                <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                  Popular Stocks
+                </div>
+                {POPULAR_STOCKS.map((stock) => (
+                  <button
+                    key={stock.symbol}
+                    onClick={() => handleSelectSymbol(stock.symbol, stock.description)}
+                    className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                  >
+                    <div className="font-semibold text-gray-900 dark:text-white">
+                      {stock.symbol}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      {stock.description}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import useSSE from '../hooks/useSSE';
-import { MarketStatusBadge } from '../utils/marketStatus';
+import MarketStatusBadge from '../components/MarketStatusBadge';
 
 function StockDetail() {
   const { symbol } = useParams();
