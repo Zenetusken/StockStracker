@@ -1,4 +1,5 @@
 import fs from 'fs';
+import alphaVantageService from './alphavantage.js';
 
 /**
  * Mock data for development/demo when API key is not available
@@ -232,28 +233,55 @@ class FinnhubService {
   /**
    * Get candles (OHLCV data)
    * Returns: { c: [], h: [], l: [], o: [], s: 'ok', t: [], v: [] }
+   *
+   * Priority:
+   * 1. Try Finnhub (if paid account with candle access)
+   * 2. Try Alpha Vantage (free tier includes historical data)
+   * 3. Fall back to mock data (last resort)
    */
   async getCandles(symbol, resolution, from, to) {
     const cacheKey = `candles:${symbol}:${resolution}:${from}:${to}`;
     return this.getCached(cacheKey, async () => {
+      // Try Finnhub first (for paid accounts)
       try {
-        return await this.request('/stock/candle', {
+        const finnhubData = await this.request('/stock/candle', {
           symbol: symbol.toUpperCase(),
           resolution,
           from,
           to
         });
-      } catch (error) {
-        // Fallback to mock data
-        console.log(`Using mock candle data for ${symbol.toUpperCase()}`);
-
-        // Calculate number of days requested
-        const fromDate = new Date(parseInt(from) * 1000);
-        const toDate = new Date(parseInt(to) * 1000);
-        const days = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24));
-
-        return generateMockCandles(symbol.toUpperCase(), Math.min(days, 365));
+        if (finnhubData && finnhubData.s === 'ok') {
+          console.log(`✓ Using Finnhub candle data for ${symbol.toUpperCase()}`);
+          return finnhubData;
+        }
+      } catch (finnhubError) {
+        console.log(`Finnhub candles not available for ${symbol.toUpperCase()}: ${finnhubError.message}`);
       }
+
+      // Try Alpha Vantage (free tier includes historical data)
+      if (alphaVantageService.hasApiKey()) {
+        try {
+          console.log(`Trying Alpha Vantage for ${symbol.toUpperCase()}...`);
+          const avData = await alphaVantageService.getCandles(symbol, resolution, from, to);
+          if (avData && avData.s === 'ok' && avData.t && avData.t.length > 0) {
+            console.log(`✓ Using Alpha Vantage candle data for ${symbol.toUpperCase()} (${avData.t.length} points)`);
+            return avData;
+          }
+        } catch (avError) {
+          console.log(`Alpha Vantage error for ${symbol.toUpperCase()}: ${avError.message}`);
+        }
+      }
+
+      // Last resort: mock data
+      console.log(`⚠ Using mock candle data for ${symbol.toUpperCase()} (no API keys available for historical data)`);
+      console.log(`  To get real data, add an Alpha Vantage API key to /tmp/api-key/alphavantage.key`);
+      console.log(`  Get a free key at: https://www.alphavantage.co/support/#api-key`);
+
+      const fromDate = new Date(parseInt(from) * 1000);
+      const toDate = new Date(parseInt(to) * 1000);
+      const days = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24));
+
+      return generateMockCandles(symbol.toUpperCase(), Math.min(days, 365));
     }, this.cacheTimeout);
   }
 

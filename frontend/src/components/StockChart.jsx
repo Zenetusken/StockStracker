@@ -4,6 +4,7 @@ import { createChart } from 'lightweight-charts';
 /**
  * StockChart Component
  * Displays candlestick, line, or area charts using TradingView Lightweight Charts
+ * Supports custom date range picker for flexible time period selection
  *
  * IMPORTANT: The chart background MUST be a solid color (not transparent) for visibility.
  * Using '#f9fafb' (gray-50) - very light, close to white but slightly grey.
@@ -23,6 +24,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [timeframe, setTimeframe] = useState(initialTimeframe);
   const [tooltipData, setTooltipData] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {
@@ -59,27 +63,46 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         setLoading(true);
         setError(null);
 
-        // Calculate date range based on timeframe
+        // Calculate date range based on timeframe or custom dates
         const now = Math.floor(Date.now() / 1000);
         const dayInSeconds = 86400;
 
-        let days, resolution;
-        switch (timeframe) {
-          case '1D': days = 1; resolution = '15'; break;
-          case '5D': days = 5; resolution = '60'; break;
-          case '1M': days = 30; resolution = 'D'; break;
-          case '6M': days = 180; resolution = 'D'; break;
-          case '1Y': days = 365; resolution = 'D'; break;
-          case '5Y': days = 1825; resolution = 'D'; break; // 5 years
-          case 'Max': days = 7300; resolution = 'W'; break; // ~20 years, weekly candles
-          default: days = 180; resolution = 'D';
-        }
+        let from, to, resolution;
 
-        const from = now - (days * dayInSeconds);
+        // Check if using custom date range
+        if (timeframe === 'custom' && customStartDate && customEndDate) {
+          from = Math.floor(new Date(customStartDate).getTime() / 1000);
+          to = Math.floor(new Date(customEndDate).getTime() / 1000);
+
+          // Determine resolution based on date range
+          const rangeDays = (to - from) / dayInSeconds;
+          if (rangeDays <= 7) {
+            resolution = '60'; // Hourly for week or less
+          } else if (rangeDays <= 90) {
+            resolution = 'D'; // Daily for up to 3 months
+          } else {
+            resolution = 'D'; // Daily for longer ranges
+          }
+        } else {
+          // Use predefined timeframes
+          let days;
+          switch (timeframe) {
+            case '1D': days = 1; resolution = '15'; break;
+            case '5D': days = 5; resolution = '60'; break;
+            case '1M': days = 30; resolution = 'D'; break;
+            case '6M': days = 180; resolution = 'D'; break;
+            case '1Y': days = 365; resolution = 'D'; break;
+            case '5Y': days = 1825; resolution = 'D'; break; // 5 years
+            case 'Max': days = 7300; resolution = 'W'; break; // ~20 years, weekly candles
+            default: days = 180; resolution = 'D';
+          }
+          from = now - (days * dayInSeconds);
+          to = now;
+        }
 
         // Fetch candle data
         const response = await fetch(
-          `http://localhost:3001/api/quotes/${symbol}/candles?resolution=${resolution}&from=${from}&to=${now}`,
+          `http://localhost:3001/api/quotes/${symbol}/candles?resolution=${resolution}&from=${from}&to=${to}`,
           { credentials: 'include' }
         );
 
@@ -244,7 +267,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [symbol, chartType, timeframe, isFullscreen]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -279,6 +302,24 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       }
     } catch (err) {
       console.error('Failed to export chart:', err);
+    }
+  };
+
+  // Apply custom date range handler
+  const handleApplyCustomRange = () => {
+    if (customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      const end = new Date(customEndDate);
+
+      if (start >= end) {
+        alert('Start date must be before end date');
+        return;
+      }
+
+      setTimeframe('custom');
+      setShowDatePicker(false);
+    } else {
+      alert('Please select both start and end dates');
     }
   };
 
@@ -350,6 +391,17 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                 {tf}
               </button>
             ))}
+            <button
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                timeframe === 'custom'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              title="Custom date range"
+            >
+              📅
+            </button>
           </div>
         </div>
 
@@ -386,6 +438,52 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           </button>
         </div>
       </div>
+
+      {/* Custom Date Range Picker Modal */}
+      {showDatePicker && (
+        <div className="mb-4 p-4 bg-white border border-gray-300 rounded-lg shadow-lg">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <label htmlFor="start-date" className="text-sm font-medium text-gray-700">
+                Start Date:
+              </label>
+              <input
+                id="start-date"
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="end-date" className="text-sm font-medium text-gray-700">
+                End Date:
+              </label>
+              <input
+                id="end-date"
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleApplyCustomRange}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => setShowDatePicker(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Crosshair Tooltip */}
       {tooltipData && (
