@@ -504,7 +504,7 @@
       "Step 3: Verify chart loads 5 years of data",
       "Step 4: Verify may use weekly candles for performance"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -515,7 +515,7 @@
       "Step 3: Verify chart loads maximum available history",
       "Step 4: Verify extends back to IPO or data limit"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

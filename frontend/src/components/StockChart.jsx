@@ -4,13 +4,19 @@ import { createChart } from 'lightweight-charts';
 /**
  * StockChart Component
  * Displays candlestick, line, or area charts using TradingView Lightweight Charts
+ *
+ * IMPORTANT: The chart background MUST be a solid color (not transparent) for visibility.
+ * Using '#f9fafb' (gray-50) - very light, close to white but slightly grey.
  */
+
+// Chart background color - MUST be solid, not transparent
+// Using #f9fafb (gray-50) - very light, close to white but slightly grey
+const CHART_BACKGROUND_COLOR = '#f9fafb';
+
 function StockChart({ symbol, chartType: initialChartType = 'candlestick', timeframe: initialTimeframe = '6M' }) {
   const chartContainerRef = useRef(null);
-  const chart = useRef(null);
-  const series = useRef(null);
-  const crosshairHandler = useRef(null);
-  const resizeTimeout = useRef(null);
+  const chartRef = useRef(null);
+  const seriesRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartType, setChartType] = useState(initialChartType);
@@ -18,43 +24,55 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [tooltipData, setTooltipData] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    // Local variable - each effect invocation has its own isolated isActive
+    let isActive = true;
+    let chartInstance = null;
+    let seriesInstance = null;
+    let crosshairHandler = null;
+    let resizeObserver = null;
 
     const loadChart = async () => {
+      const container = chartContainerRef.current;
+      if (!container) return;
+
+      // Wait for next frame to ensure container has dimensions
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      if (!isActive) return;
+
+      // Retry if container has zero width
+      let containerWidth = container.clientWidth;
+      if (containerWidth === 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (!isActive) return;
+        containerWidth = container.clientWidth;
+      }
+
+      if (containerWidth === 0) {
+        setError('Chart container has no width');
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
         // Calculate date range based on timeframe
         const now = Math.floor(Date.now() / 1000);
-        const dayInSeconds = 24 * 60 * 60;
+        const dayInSeconds = 86400;
 
         let days, resolution;
         switch (timeframe) {
-          case '1D':
-            days = 1;
-            resolution = '15'; // 15-minute candles
-            break;
-          case '5D':
-            days = 5;
-            resolution = '60'; // 1-hour candles
-            break;
-          case '1M':
-            days = 30;
-            resolution = 'D'; // Daily candles
-            break;
-          case '6M':
-            days = 180;
-            resolution = 'D';
-            break;
-          case '1Y':
-            days = 365;
-            resolution = 'D';
-            break;
-          default:
-            days = 180;
-            resolution = 'D';
+          case '1D': days = 1; resolution = '15'; break;
+          case '5D': days = 5; resolution = '60'; break;
+          case '1M': days = 30; resolution = 'D'; break;
+          case '6M': days = 180; resolution = 'D'; break;
+          case '1Y': days = 365; resolution = 'D'; break;
+          case '5Y': days = 1825; resolution = 'D'; break; // 5 years
+          case 'Max': days = 7300; resolution = 'W'; break; // ~20 years, weekly candles
+          default: days = 180; resolution = 'D';
         }
 
         const from = now - (days * dayInSeconds);
@@ -64,6 +82,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           `http://localhost:3001/api/quotes/${symbol}/candles?resolution=${resolution}&from=${from}&to=${now}`,
           { credentials: 'include' }
         );
+
+        if (!isActive) return;
 
         if (!response.ok) {
           throw new Error('Failed to fetch chart data');
@@ -75,224 +95,180 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           throw new Error('No chart data available');
         }
 
-        // Transform data to Lightweight Charts format
-        const candlestickData = [];
-        for (let i = 0; i < data.t.length; i++) {
-          candlestickData.push({
-            time: data.t[i],
-            open: data.o[i],
-            high: data.h[i],
-            low: data.l[i],
-            close: data.c[i],
-          });
-        }
+        // Transform data
+        const chartData = data.t.map((timestamp, i) => ({
+          time: timestamp,
+          open: data.o[i],
+          high: data.h[i],
+          low: data.l[i],
+          close: data.c[i],
+        }));
 
-        // Create chart if it doesn't exist
-        if (!chart.current) {
-          chart.current = createChart(chartContainerRef.current, {
-            width: chartContainerRef.current.clientWidth,
-            height: 500,
-            layout: {
-              background: { color: 'transparent' },
-              textColor: '#9CA3AF',
-            },
-            grid: {
-              vertLines: { color: '#374151' },
-              horzLines: { color: '#374151' },
-            },
-            crosshair: {
-              mode: 1,
-            },
-            rightPriceScale: {
-              borderColor: '#4B5563',
-            },
-            timeScale: {
-              borderColor: '#4B5563',
-              timeVisible: true,
-              secondsVisible: false,
-            },
-            handleScroll: {
-              mouseWheel: true,
-              pressedMouseMove: true,
-              horzTouchDrag: true,
-              vertTouchDrag: true,
-            },
-            handleScale: {
-              mouseWheel: true,
-              pinch: true,
-              axisPressedMouseMove: true,
-            },
-          });
-        }
+        if (!isActive || !container) return;
 
-        // Remove existing series if any (with safety check for HMR)
-        if (series.current && chart.current) {
-          try {
-            chart.current.removeSeries(series.current);
-          } catch (e) {
-            // Series may have been invalidated by HMR, ignore
-          }
-          series.current = null;
-        }
+        // Get fresh dimensions
+        const width = container.clientWidth || 800;
+        const height = isFullscreen ? window.innerHeight - 150 : 500;
+
+        // Create chart with SOLID LIGHT GRAY background
+        chartInstance = createChart(container, {
+          width,
+          height,
+          layout: {
+            background: { type: 'solid', color: CHART_BACKGROUND_COLOR },
+            textColor: '#374151',
+          },
+          grid: {
+            vertLines: { color: '#d1d5db' },
+            horzLines: { color: '#d1d5db' },
+          },
+          crosshair: { mode: 1 },
+          rightPriceScale: { borderColor: '#9ca3af' },
+          timeScale: {
+            borderColor: '#9ca3af',
+            timeVisible: true,
+            secondsVisible: false,
+          },
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: true,
+          },
+          handleScale: {
+            mouseWheel: true,
+            pinch: true,
+            axisPressedMouseMove: true,
+          },
+        });
+
+        // Store in ref for external access (reset zoom, export)
+        chartRef.current = chartInstance;
 
         // Add series based on chart type
         if (chartType === 'line') {
-          series.current = chart.current.addLineSeries({
+          seriesInstance = chartInstance.addLineSeries({
             color: '#3B82F6',
             lineWidth: 2,
           });
-          // For line chart, only use close prices
-          const lineData = candlestickData.map(d => ({ time: d.time, value: d.close }));
-          series.current.setData(lineData);
+          seriesInstance.setData(chartData.map(d => ({ time: d.time, value: d.close })));
         } else if (chartType === 'area') {
-          series.current = chart.current.addAreaSeries({
+          seriesInstance = chartInstance.addAreaSeries({
             topColor: 'rgba(59, 130, 246, 0.4)',
             bottomColor: 'rgba(59, 130, 246, 0.0)',
             lineColor: '#3B82F6',
             lineWidth: 2,
           });
-          // For area chart, only use close prices
-          const areaData = candlestickData.map(d => ({ time: d.time, value: d.close }));
-          series.current.setData(areaData);
+          seriesInstance.setData(chartData.map(d => ({ time: d.time, value: d.close })));
         } else {
-          // Default to candlestick
-          series.current = chart.current.addCandlestickSeries({
+          seriesInstance = chartInstance.addCandlestickSeries({
             upColor: '#10B981',
             downColor: '#EF4444',
             borderVisible: false,
             wickUpColor: '#10B981',
             wickDownColor: '#EF4444',
           });
-          series.current.setData(candlestickData);
+          seriesInstance.setData(chartData);
         }
+
+        seriesRef.current = seriesInstance;
 
         // Fit content
-        chart.current.timeScale().fitContent();
+        chartInstance.timeScale().fitContent();
 
-        // Unsubscribe previous crosshair handler if exists
-        if (crosshairHandler.current && chart.current) {
-          try {
-            chart.current.unsubscribeCrosshairMove(crosshairHandler.current);
-          } catch (e) {
-            // Ignore errors from invalid handler
-          }
-        }
-
-        // Create new crosshair handler with current series reference
-        const currentSeries = series.current;
-        crosshairHandler.current = (param) => {
-          if (!param.time || !param.point || !currentSeries) {
+        // Setup crosshair handler
+        crosshairHandler = (param) => {
+          if (!param.time || !param.point || !seriesInstance) {
             setTooltipData(null);
             return;
           }
-
           try {
-            const data = param.seriesData.get(currentSeries);
-            if (data) {
-              // Format the data for tooltip display
-              const tooltipInfo = {
-                time: param.time,
-                ...data
-              };
-              setTooltipData(tooltipInfo);
+            const seriesData = param.seriesData.get(seriesInstance);
+            if (seriesData) {
+              setTooltipData({ time: param.time, ...seriesData });
             } else {
               setTooltipData(null);
             }
-          } catch (e) {
-            // Series may have been invalidated, clear tooltip
+          } catch {
             setTooltipData(null);
           }
         };
+        chartInstance.subscribeCrosshairMove(crosshairHandler);
 
-        // Subscribe to crosshair move events for tooltip
-        chart.current.subscribeCrosshairMove(crosshairHandler.current);
+        // Setup resize observer
+        resizeObserver = new ResizeObserver(entries => {
+          if (!chartInstance || !isActive) return;
+          const entry = entries[0];
+          if (entry && entry.contentRect.width > 0) {
+            chartInstance.applyOptions({ width: entry.contentRect.width });
+          }
+        });
+        resizeObserver.observe(container);
 
         setLoading(false);
       } catch (err) {
         console.error('Chart error:', err);
-        setError(err.message);
-        setLoading(false);
+        if (isActive) {
+          setError(err.message);
+          setLoading(false);
+        }
       }
     };
 
     loadChart();
 
-    // Handle resize
-    const handleResize = () => {
-      if (chart.current && chartContainerRef.current) {
-        chart.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    // Cleanup - only remove chart when component unmounts or symbol changes
-    // Don't destroy chart on chartType/timeframe change, just remove series (handled above)
+    // Consolidated cleanup function
     return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [symbol, chartType, timeframe]);
+      isActive = false;
 
-  // Cleanup on unmount only
-  useEffect(() => {
-    return () => {
-      // Clear any pending resize timeout
-      if (resizeTimeout.current) {
-        clearTimeout(resizeTimeout.current);
-        resizeTimeout.current = null;
+      if (resizeObserver) {
+        resizeObserver.disconnect();
       }
-      // Unsubscribe crosshair handler
-      if (crosshairHandler.current && chart.current) {
+
+      if (crosshairHandler && chartInstance) {
         try {
-          chart.current.unsubscribeCrosshairMove(crosshairHandler.current);
-        } catch (e) {
+          chartInstance.unsubscribeCrosshairMove(crosshairHandler);
+        } catch {
           // Ignore
         }
-        crosshairHandler.current = null;
       }
-      // Remove chart
-      if (chart.current) {
-        chart.current.remove();
-        chart.current = null;
+
+      if (chartInstance) {
+        try {
+          chartInstance.remove();
+        } catch {
+          // Ignore
+        }
       }
-      series.current = null;
+
+      chartRef.current = null;
+      seriesRef.current = null;
     };
-  }, []);
+  }, [symbol, chartType, timeframe, isFullscreen]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
-    if (chart.current) {
-      chart.current.timeScale().fitContent();
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent();
     }
   };
 
-  // Fullscreen handlers
+  // Fullscreen handler
   const handleToggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
+    setIsFullscreen(prev => !prev);
   };
 
-  const handleExitFullscreen = () => {
-    setIsFullscreen(false);
-  };
-
-  // Export chart as PNG handler
+  // Export PNG handler
   const handleExportPNG = () => {
-    if (!chart.current) return;
-
+    if (!chartRef.current) return;
     try {
-      // Use the built-in takeScreenshot method from Lightweight Charts
-      const canvas = chart.current.takeScreenshot();
-
+      const canvas = chartRef.current.takeScreenshot();
       if (canvas) {
-        // Convert canvas to blob and trigger download
         canvas.toBlob((blob) => {
           if (blob) {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-            link.download = `${symbol}_${timestamp}.png`;
+            link.download = `${symbol}_${new Date().toISOString().split('T')[0]}.png`;
             link.href = url;
             document.body.appendChild(link);
             link.click();
@@ -301,60 +277,36 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           }
         });
       }
-    } catch (error) {
-      console.error('Failed to export chart as PNG:', error);
+    } catch (err) {
+      console.error('Failed to export chart:', err);
     }
   };
 
-  // Handle Escape key to exit fullscreen
+  // Escape key handler for fullscreen
   useEffect(() => {
+    if (!isFullscreen) return;
     const handleEscape = (e) => {
-      if (e.key === 'Escape' && isFullscreen) {
-        setIsFullscreen(false);
-      }
+      if (e.key === 'Escape') setIsFullscreen(false);
     };
-
-    if (isFullscreen) {
-      window.addEventListener('keydown', handleEscape);
-      return () => window.removeEventListener('keydown', handleEscape);
-    }
-  }, [isFullscreen]);
-
-  // Resize chart when entering/exiting fullscreen
-  useEffect(() => {
-    if (chart.current && chartContainerRef.current) {
-      // Clear previous timeout if any
-      if (resizeTimeout.current) {
-        clearTimeout(resizeTimeout.current);
-      }
-      // Small delay to allow DOM to update
-      resizeTimeout.current = setTimeout(() => {
-        if (chart.current && chartContainerRef.current) {
-          chart.current.applyOptions({
-            width: chartContainerRef.current.clientWidth,
-            height: isFullscreen ? window.innerHeight - 150 : 500,
-          });
-        }
-        resizeTimeout.current = null;
-      }, 100);
-    }
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
   }, [isFullscreen]);
 
   const chartContent = (
-    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 relative ${isFullscreen ? 'h-full' : ''}`}>
+    <div className={`bg-gray-50 rounded-lg shadow-lg p-4 relative ${isFullscreen ? 'h-full' : ''}`}>
       {/* Loading Overlay */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-800 bg-opacity-90 dark:bg-opacity-90 rounded-lg z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-lg z-10">
           <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
         </div>
       )}
 
       {/* Error Overlay */}
       {error && !loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-800 bg-opacity-90 dark:bg-opacity-90 rounded-lg z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-lg z-10">
           <div className="text-center">
-            <p className="text-red-600 dark:text-red-400 mb-2">Failed to load chart</p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">{error}</p>
+            <p className="text-red-600 mb-2">Failed to load chart</p>
+            <p className="text-sm text-gray-600">{error}</p>
           </div>
         </div>
       )}
@@ -363,119 +315,65 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
         {/* Chart Type Selector */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Chart Type:</span>
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            <button
-              onClick={() => setChartType('candlestick')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                chartType === 'candlestick'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Candlestick
-            </button>
-            <button
-              onClick={() => setChartType('line')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                chartType === 'line'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Line
-            </button>
-            <button
-              onClick={() => setChartType('area')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                chartType === 'area'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Area
-            </button>
+          <span className="text-sm text-gray-700 font-medium">Chart Type:</span>
+          <div className="flex gap-1 bg-gray-300 rounded-lg p-1">
+            {['candlestick', 'line', 'area'].map(type => (
+              <button
+                key={type}
+                onClick={() => setChartType(type)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  chartType === type
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Timeframe Selector */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Timeframe:</span>
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            <button
-              onClick={() => setTimeframe('1D')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                timeframe === '1D'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              1D
-            </button>
-            <button
-              onClick={() => setTimeframe('5D')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                timeframe === '5D'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              5D
-            </button>
-            <button
-              onClick={() => setTimeframe('1M')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                timeframe === '1M'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              1M
-            </button>
-            <button
-              onClick={() => setTimeframe('6M')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                timeframe === '6M'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              6M
-            </button>
-            <button
-              onClick={() => setTimeframe('1Y')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                timeframe === '1Y'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              1Y
-            </button>
+          <span className="text-sm text-gray-700 font-medium">Timeframe:</span>
+          <div className="flex gap-1 bg-gray-300 rounded-lg p-1">
+            {['1D', '5D', '1M', '6M', '1Y', '5Y', 'Max'].map(tf => (
+              <button
+                key={tf}
+                onClick={() => setTimeframe(tf)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  timeframe === tf
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {tf}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Reset Zoom, Export, and Fullscreen Buttons */}
+        {/* Action Buttons */}
         <div className="flex gap-2">
           <button
             onClick={handleResetZoom}
-            className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-gray-300 hover:bg-gray-400 rounded-lg transition-colors"
           >
             Reset Zoom
           </button>
           <button
             onClick={handleExportPNG}
-            className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2"
-            title="Export chart as PNG"
+            className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-gray-300 hover:bg-gray-400 rounded-lg transition-colors flex items-center gap-2"
+            title="Export as PNG"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            <span>Export PNG</span>
+            Export
           </button>
           <button
             onClick={handleToggleFullscreen}
-            className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-gray-300 hover:bg-gray-400 rounded-lg transition-colors"
             title="Toggle fullscreen"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -491,57 +389,56 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
       {/* Crosshair Tooltip */}
       {tooltipData && (
-        <div className="absolute top-20 left-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3 shadow-lg z-20 pointer-events-none">
+        <div className="absolute top-20 left-4 bg-white border border-gray-300 rounded-lg p-3 shadow-lg z-20 pointer-events-none">
           <div className="text-xs space-y-1">
-            <div className="font-semibold text-gray-900 dark:text-white mb-2">
+            <div className="font-semibold text-gray-900 mb-2">
               {new Date(typeof tooltipData.time === 'number' ? tooltipData.time * 1000 : tooltipData.time).toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
                 year: 'numeric',
-                hour: tooltipData.time && (timeframe === '1D' || timeframe === '5D') ? 'numeric' : undefined,
-                minute: tooltipData.time && (timeframe === '1D' || timeframe === '5D') ? 'numeric' : undefined,
+                hour: (timeframe === '1D' || timeframe === '5D') ? 'numeric' : undefined,
+                minute: (timeframe === '1D' || timeframe === '5D') ? 'numeric' : undefined,
               })}
             </div>
             {tooltipData.open !== undefined && (
               <>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-600 dark:text-gray-400">Open:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">${tooltipData.open.toFixed(2)}</span>
+                  <span className="text-gray-500">Open:</span>
+                  <span className="font-medium text-gray-900">${tooltipData.open.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-600 dark:text-gray-400">High:</span>
-                  <span className="font-medium text-green-600 dark:text-green-400">${tooltipData.high.toFixed(2)}</span>
+                  <span className="text-gray-500">High:</span>
+                  <span className="font-medium text-green-600">${tooltipData.high.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-600 dark:text-gray-400">Low:</span>
-                  <span className="font-medium text-red-600 dark:text-red-400">${tooltipData.low.toFixed(2)}</span>
+                  <span className="text-gray-500">Low:</span>
+                  <span className="font-medium text-red-600">${tooltipData.low.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-600 dark:text-gray-400">Close:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">${tooltipData.close.toFixed(2)}</span>
+                  <span className="text-gray-500">Close:</span>
+                  <span className="font-medium text-gray-900">${tooltipData.close.toFixed(2)}</span>
                 </div>
               </>
             )}
             {tooltipData.value !== undefined && (
               <div className="flex justify-between gap-4">
-                <span className="text-gray-600 dark:text-gray-400">Price:</span>
-                <span className="font-medium text-gray-900 dark:text-white">${tooltipData.value.toFixed(2)}</span>
+                <span className="text-gray-500">Price:</span>
+                <span className="font-medium text-gray-900">${tooltipData.value.toFixed(2)}</span>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Chart Container - always rendered so ref is available */}
+      {/* Chart Container */}
       <div
         ref={chartContainerRef}
         className="w-full"
-        style={{ minHeight: isFullscreen ? `${window.innerHeight - 150}px` : '500px' }}
+        style={{ height: isFullscreen ? `${window.innerHeight - 150}px` : '500px' }}
       />
     </div>
   );
 
-  // Return fullscreen modal or normal chart
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4">
