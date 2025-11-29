@@ -245,7 +245,7 @@
       "Step 5: Refresh page",
       "Step 6: Verify new order persists"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

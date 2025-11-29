@@ -1,10 +1,152 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Trash2, TrendingUp, TrendingDown, Minus, Edit2, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, Download } from 'lucide-react';
+import { Trash2, TrendingUp, TrendingDown, Minus, Edit2, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, Download, GripVertical } from 'lucide-react';
 import Layout from '../components/Layout';
 import useSSE from '../hooks/useSSE';
 import RenameWatchlistModal from '../components/RenameWatchlistModal';
 import DeleteWatchlistModal from '../components/DeleteWatchlistModal';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// Sortable row component
+function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumber, navigate, handleRemoveSymbol, removingSymbol, isDragging }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isSortableDragging,
+  } = useSortable({ id: item.symbol });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isSortableDragging ? 0.5 : 1,
+    cursor: isSortableDragging ? 'grabbing' : 'default',
+  };
+
+  const isPositive = quote?.dp > 0;
+  const isNegative = quote?.dp < 0;
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+    >
+      {/* Drag handle */}
+      <td className="px-4 py-4 whitespace-nowrap">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+          title="Drag to reorder"
+        >
+          <GripVertical className="w-5 h-5 text-gray-400" />
+        </button>
+      </td>
+      <td
+        className="px-6 py-4 whitespace-nowrap cursor-pointer"
+        onClick={() => navigate(`/stock/${item.symbol}`)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-900 dark:text-white">
+            {item.symbol}
+          </span>
+          {quote && (
+            <span className={`text-xs ${
+              isPositive ? 'text-green-600 dark:text-green-400' :
+              isNegative ? 'text-red-600 dark:text-red-400' :
+              'text-gray-500 dark:text-gray-400'
+            }`}>
+              {isPositive ? '▲' : isNegative ? '▼' : '—'}
+            </span>
+          )}
+        </div>
+      </td>
+      <td
+        className="px-6 py-4 whitespace-nowrap cursor-pointer"
+        onClick={() => navigate(`/stock/${item.symbol}`)}
+      >
+        <span className="text-sm text-gray-600 dark:text-gray-400">
+          {quote?.name || 'Loading...'}
+        </span>
+      </td>
+      <td
+        className="px-6 py-4 whitespace-nowrap text-right cursor-pointer"
+        onClick={() => navigate(`/stock/${item.symbol}`)}
+      >
+        <span className="text-sm font-medium text-gray-900 dark:text-white">
+          {quote ? formatPrice(quote.c) : '-'}
+        </span>
+      </td>
+      <td
+        className="px-6 py-4 whitespace-nowrap text-right cursor-pointer"
+        onClick={() => navigate(`/stock/${item.symbol}`)}
+      >
+        <span className={`text-sm font-medium ${
+          isPositive ? 'text-green-600 dark:text-green-400' :
+          isNegative ? 'text-red-600 dark:text-red-400' :
+          'text-gray-600 dark:text-gray-400'
+        }`}>
+          {quote ? (quote.d > 0 ? '+' : '') + quote.d.toFixed(2) : '-'}
+        </span>
+      </td>
+      <td
+        className="px-6 py-4 whitespace-nowrap text-right cursor-pointer"
+        onClick={() => navigate(`/stock/${item.symbol}`)}
+      >
+        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+          isPositive ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
+          isNegative ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
+          'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-400'
+        }`}>
+          {quote ? formatPercentChange(quote.dp) : '-'}
+        </span>
+      </td>
+      <td
+        className="px-6 py-4 whitespace-nowrap text-right cursor-pointer"
+        onClick={() => navigate(`/stock/${item.symbol}`)}
+      >
+        <span className="text-sm text-gray-600 dark:text-gray-400">
+          {quote ? formatNumber(quote.v) : '-'}
+        </span>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-right">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRemoveSymbol(item.symbol);
+          }}
+          disabled={removingSymbol === item.symbol}
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+          title="Remove from watchlist"
+        >
+          {removingSymbol === item.symbol ? (
+            <Minus className="w-4 h-4 text-gray-400 animate-spin" />
+          ) : (
+            <Trash2 className="w-4 h-4 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400" />
+          )}
+        </button>
+      </td>
+    </tr>
+  );
+}
 
 function WatchlistDetail() {
   const { id } = useParams();
@@ -22,6 +164,14 @@ function WatchlistDetail() {
   const [quickAddSymbol, setQuickAddSymbol] = useState('');
   const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [quickAddError, setQuickAddError] = useState(null);
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Fetch watchlist details
   useEffect(() => {
@@ -314,6 +464,55 @@ function WatchlistDetail() {
     }
   };
 
+  // Handle drag end
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = watchlist.items.findIndex(item => item.symbol === active.id);
+    const newIndex = watchlist.items.findIndex(item => item.symbol === over.id);
+
+    // Optimistically update UI
+    const newItems = arrayMove(watchlist.items, oldIndex, newIndex);
+    setWatchlist(prev => ({
+      ...prev,
+      items: newItems,
+    }));
+
+    // Prepare data for API - send symbol and new position
+    const itemsWithNewPositions = newItems.map((item, index) => ({
+      symbol: item.symbol,
+      position: index,
+    }));
+
+    // Save to backend
+    try {
+      const response = await fetch(`http://localhost:3001/api/watchlists/${id}/items/reorder`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ items: itemsWithNewPositions }),
+      });
+
+      if (!response.ok) {
+        // Revert on error
+        const data = await response.json();
+        console.error('Failed to reorder:', data.error);
+        alert('Failed to save new order');
+        fetchWatchlist(); // Reload original order
+      }
+    } catch (err) {
+      console.error('Error reordering items:', err);
+      alert('Failed to save new order');
+      fetchWatchlist(); // Reload original order
+    }
+  };
+
   // Format number with K/M/B suffix
   const formatNumber = (num) => {
     if (!num) return '-';
@@ -465,18 +664,26 @@ function WatchlistDetail() {
         {/* Watchlist table */}
         {watchlist.items && watchlist.items.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                <tr>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors select-none"
-                    onClick={() => handleSort('symbol')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Symbol
-                      {renderSortIcon('symbol')}
-                    </div>
-                  </th>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {/* Drag handle column */}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors select-none"
+                      onClick={() => handleSort('symbol')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Symbol
+                        {renderSortIcon('symbol')}
+                      </div>
+                    </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Name
                   </th>
@@ -521,92 +728,31 @@ function WatchlistDetail() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {getSortedItems().map((item) => {
-                  const quote = quotes[item.symbol];
-                  const isPositive = quote?.dp > 0;
-                  const isNegative = quote?.dp < 0;
-
-                  return (
-                    <tr
-                      key={item.symbol}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer"
-                      onClick={(e) => {
-                        if (e.target.closest('button')) return; // Don't navigate if clicking button
-                        navigate(`/stock/${item.symbol}`);
-                      }}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            {item.symbol}
-                          </span>
-                          {quote && (
-                            <span className={`text-xs ${
-                              isPositive ? 'text-green-600 dark:text-green-400' :
-                              isNegative ? 'text-red-600 dark:text-red-400' :
-                              'text-gray-500 dark:text-gray-400'
-                            }`}>
-                              {isPositive ? '▲' : isNegative ? '▼' : '—'}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {quote?.name || 'Loading...'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">
-                          {quote ? formatPrice(quote.c) : '-'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className={`text-sm font-medium ${
-                          isPositive ? 'text-green-600 dark:text-green-400' :
-                          isNegative ? 'text-red-600 dark:text-red-400' :
-                          'text-gray-600 dark:text-gray-400'
-                        }`}>
-                          {quote ? (quote.d > 0 ? '+' : '') + quote.d.toFixed(2) : '-'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                          isPositive ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
-                          isNegative ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
-                          'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-400'
-                        }`}>
-                          {quote ? formatPercentChange(quote.dp) : '-'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {quote ? formatNumber(quote.v) : '-'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveSymbol(item.symbol);
-                          }}
-                          disabled={removingSymbol === item.symbol}
-                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
-                          title="Remove from watchlist"
-                        >
-                          {removingSymbol === item.symbol ? (
-                            <Minus className="w-4 h-4 text-gray-400 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400" />
-                          )}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+              <SortableContext
+                items={getSortedItems().map(item => item.symbol)}
+                strategy={verticalListSortingStrategy}
+              >
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {getSortedItems().map((item) => {
+                    const quote = quotes[item.symbol];
+                    return (
+                      <SortableRow
+                        key={item.symbol}
+                        item={item}
+                        quote={quote}
+                        formatPrice={formatPrice}
+                        formatPercentChange={formatPercentChange}
+                        formatNumber={formatNumber}
+                        navigate={navigate}
+                        handleRemoveSymbol={handleRemoveSymbol}
+                        removingSymbol={removingSymbol}
+                      />
+                    );
+                  })}
+                </tbody>
+              </SortableContext>
             </table>
+            </DndContext>
 
             {/* Quick-add symbol form */}
             <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900">
