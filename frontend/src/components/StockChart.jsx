@@ -277,6 +277,35 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     setIsFullscreen(false);
   };
 
+  // Export chart as PNG handler
+  const handleExportPNG = () => {
+    if (!chart.current) return;
+
+    try {
+      // Use the built-in takeScreenshot method from Lightweight Charts
+      const canvas = chart.current.takeScreenshot();
+
+      if (canvas) {
+        // Convert canvas to blob and trigger download
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+            link.download = `${symbol}_${timestamp}.png`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to export chart as PNG:', error);
+    }
+  };
+
   // Handle Escape key to exit fullscreen
   useEffect(() => {
     const handleEscape = (e) => {
@@ -426,13 +455,23 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           </div>
         </div>
 
-        {/* Reset Zoom and Fullscreen Buttons */}
+        {/* Reset Zoom, Export, and Fullscreen Buttons */}
         <div className="flex gap-2">
           <button
             onClick={handleResetZoom}
             className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
           >
             Reset Zoom
+          </button>
+          <button
+            onClick={handleExportPNG}
+            className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2"
+            title="Export chart as PNG"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Export PNG</span>
           </button>
           <button
             onClick={handleToggleFullscreen}

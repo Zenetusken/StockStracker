@@ -446,7 +446,7 @@
       "Step 4: Verify PNG file downloads",
       "Step 5: Open PNG and verify chart rendered correctly"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
