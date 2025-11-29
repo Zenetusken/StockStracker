@@ -408,7 +408,7 @@
       "Step 4: Verify chart returns to default full range",
       "Step 5: Verify all data visible again"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -458,7 +458,7 @@
       "Step 4: Verify appropriate candle interval (5min or 15min)",
       "Step 5: Verify x-axis shows time of day"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -470,7 +470,7 @@
       "Step 4: Verify intraday intervals",
       "Step 5: Verify x-axis shows dates"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -481,7 +481,7 @@
       "Step 3: Verify chart loads 1 month of daily candles",
       "Step 4: Verify approximately 20-22 trading days shown"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -493,7 +493,7 @@
       "Step 4: Verify daily candles",
       "Step 5: Verify approximately 252 trading days"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

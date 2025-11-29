@@ -5,13 +5,14 @@ import { createChart } from 'lightweight-charts';
  * StockChart Component
  * Displays candlestick, line, or area charts using TradingView Lightweight Charts
  */
-function StockChart({ symbol, chartType: initialChartType = 'candlestick', timeframe = '6M' }) {
+function StockChart({ symbol, chartType: initialChartType = 'candlestick', timeframe: initialTimeframe = '6M' }) {
   const chartContainerRef = useRef(null);
   const chart = useRef(null);
   const series = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartType, setChartType] = useState(initialChartType);
+  const [timeframe, setTimeframe] = useState(initialTimeframe);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -21,15 +22,42 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         setLoading(true);
         setError(null);
 
-        // Calculate date range
+        // Calculate date range based on timeframe
         const now = Math.floor(Date.now() / 1000);
         const dayInSeconds = 24 * 60 * 60;
-        const days = 180; // 6 months
+
+        let days, resolution;
+        switch (timeframe) {
+          case '1D':
+            days = 1;
+            resolution = '15'; // 15-minute candles
+            break;
+          case '5D':
+            days = 5;
+            resolution = '60'; // 1-hour candles
+            break;
+          case '1M':
+            days = 30;
+            resolution = 'D'; // Daily candles
+            break;
+          case '6M':
+            days = 180;
+            resolution = 'D';
+            break;
+          case '1Y':
+            days = 365;
+            resolution = 'D';
+            break;
+          default:
+            days = 180;
+            resolution = 'D';
+        }
+
         const from = now - (days * dayInSeconds);
 
         // Fetch candle data
         const response = await fetch(
-          `http://localhost:3001/api/quotes/${symbol}/candles?resolution=D&from=${from}&to=${now}`,
+          `http://localhost:3001/api/quotes/${symbol}/candles?resolution=${resolution}&from=${from}&to=${now}`,
           { credentials: 'include' }
         );
 
@@ -93,9 +121,14 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           });
         }
 
-        // Remove existing series if any
-        if (series.current) {
-          chart.current.removeSeries(series.current);
+        // Remove existing series if any (with safety check for HMR)
+        if (series.current && chart.current) {
+          try {
+            chart.current.removeSeries(series.current);
+          } catch (e) {
+            // Series may have been invalidated by HMR, ignore
+          }
+          series.current = null;
         }
 
         // Add series based on chart type
@@ -153,15 +186,30 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
     window.addEventListener('resize', handleResize);
 
-    // Cleanup
+    // Cleanup - only remove chart when component unmounts or symbol changes
+    // Don't destroy chart on chartType/timeframe change, just remove series (handled above)
     return () => {
       window.removeEventListener('resize', handleResize);
+    };
+  }, [symbol, chartType, timeframe]);
+
+  // Cleanup on unmount only
+  useEffect(() => {
+    return () => {
       if (chart.current) {
         chart.current.remove();
         chart.current = null;
       }
+      series.current = null;
     };
-  }, [symbol, chartType]);
+  }, []);
+
+  // Reset zoom handler
+  const handleResetZoom = () => {
+    if (chart.current) {
+      chart.current.timeScale().fitContent();
+    }
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 relative">
@@ -182,41 +230,109 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         </div>
       )}
 
-      {/* Chart Type Selector */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Chart Type:</span>
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-          <button
-            onClick={() => setChartType('candlestick')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              chartType === 'candlestick'
-                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            Candlestick
-          </button>
-          <button
-            onClick={() => setChartType('line')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              chartType === 'line'
-                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            Line
-          </button>
-          <button
-            onClick={() => setChartType('area')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              chartType === 'area'
-                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            Area
-          </button>
+      {/* Chart Controls */}
+      <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+        {/* Chart Type Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Chart Type:</span>
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setChartType('candlestick')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                chartType === 'candlestick'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              Candlestick
+            </button>
+            <button
+              onClick={() => setChartType('line')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                chartType === 'line'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              Line
+            </button>
+            <button
+              onClick={() => setChartType('area')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                chartType === 'area'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              Area
+            </button>
+          </div>
         </div>
+
+        {/* Timeframe Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Timeframe:</span>
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setTimeframe('1D')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                timeframe === '1D'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              1D
+            </button>
+            <button
+              onClick={() => setTimeframe('5D')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                timeframe === '5D'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              5D
+            </button>
+            <button
+              onClick={() => setTimeframe('1M')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                timeframe === '1M'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              1M
+            </button>
+            <button
+              onClick={() => setTimeframe('6M')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                timeframe === '6M'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              6M
+            </button>
+            <button
+              onClick={() => setTimeframe('1Y')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                timeframe === '1Y'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              1Y
+            </button>
+          </div>
+        </div>
+
+        {/* Reset Zoom Button */}
+        <button
+          onClick={handleResetZoom}
+          className="px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+        >
+          Reset Zoom
+        </button>
       </div>
 
       {/* Chart Container - always rendered so ref is available */}
