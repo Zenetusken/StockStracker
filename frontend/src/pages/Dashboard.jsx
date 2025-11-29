@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import SearchBar from '../components/SearchBar';
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -30,22 +31,28 @@ function Dashboard() {
     <div className="min-h-screen bg-light-bg dark:bg-dark-bg">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            StockTracker Pro
-          </h1>
-          <div className="flex items-center gap-4">
-            {user && (
-              <span className="text-sm text-gray-600 dark:text-gray-400" id="user-email">
-                {user.email}
-              </span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-            >
-              Logout
-            </button>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              StockTracker Pro
+            </h1>
+            <div className="flex items-center gap-4">
+              {user && (
+                <span className="text-sm text-gray-600 dark:text-gray-400" id="user-email">
+                  {user.email}
+                </span>
+              )}
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+          {/* Search Bar */}
+          <div className="flex justify-center">
+            <SearchBar />
           </div>
         </div>
       </header>

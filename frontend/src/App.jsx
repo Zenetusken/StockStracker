@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
+import StockDetail from './pages/StockDetail';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }) {
@@ -66,6 +67,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/stock/:symbol"
+          element={
+            <ProtectedRoute>
+              <StockDetail />
             </ProtectedRoute>
           }
         />
