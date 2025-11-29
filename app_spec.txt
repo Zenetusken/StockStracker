@@ -1,0 +1,1492 @@
+<project_specification>
+  <project_name>StockTracker Pro - Real-Time Portfolio Management</project_name>
+
+  <overview>
+    Build a production-ready stock tracking and portfolio management application with real-time market data
+    integration. The application provides live stock quotes, interactive candlestick charts, watchlist
+    management, advanced portfolio tracking with tax lot support, price alerts, and market news. The UI
+    should be a professional trading dashboard with dark/light themes, responsive design, and smooth
+    real-time updates using Server-Sent Events (SSE).
+  </overview>
+
+  <technology_stack>
+    <api_key>
+      You can use an API key located at /tmp/api-key for the Finnhub API. You will not be allowed to read
+      this file directly, but you can reference it in code to load the key.
+    </api_key>
+    <market_data_apis>
+      <primary>Finnhub API - Real-time quotes, company profiles, news, WebSocket streaming</primary>
+      <secondary>Alpha Vantage - Technical indicators (SMA, RSI, MACD, Bollinger Bands)</secondary>
+      <rate_limits>Finnhub: 60 calls/minute. Implement in-memory caching to respect limits.</rate_limits>
+    </market_data_apis>
+    <frontend>
+      <framework>React 18 with Vite</framework>
+      <styling>Tailwind CSS (via CDN or installed)</styling>
+      <state_management>Zustand for global state (quotes, portfolio, alerts)</state_management>
+      <routing>React Router for navigation</routing>
+      <charts>Lightweight Charts (TradingView) for candlestick/line charts</charts>
+      <tables>TanStack Table with TanStack Virtual for large lists</tables>
+      <icons>Lucide React for icons</icons>
+      <port>Frontend on port 5173 (Vite default)</port>
+    </frontend>
+    <backend>
+      <runtime>Node.js with Express</runtime>
+      <database>SQLite with better-sqlite3, WAL mode enabled</database>
+      <authentication>bcrypt for password hashing, express-session for sessions</authentication>
+      <real_time>Server-Sent Events (SSE) for streaming quote updates</real_time>
+      <port>Backend API on port 3001</port>
+    </backend>
+    <communication>
+      <api>RESTful JSON endpoints</api>
+      <streaming>SSE endpoint at /api/stream/quotes for real-time updates</streaming>
+      <market_api>Finnhub REST API with fetch, caching layer for rate limiting</market_api>
+    </communication>
+  </technology_stack>
+
+  <core_features>
+    <authentication>
+      - User registration with email and password
+      - Secure login with session-based authentication
+      - Password hashing with bcrypt (min 10 rounds)
+      - Session persistence across browser sessions
+      - Logout with session invalidation
+      - Protected routes requiring authentication
+      - Redirect to login for unauthenticated users
+      - Display current user info in header
+    </authentication>
+
+    <real_time_quotes>
+      - Live stock price display with current price, change, and percent change
+      - Color-coded price changes (green for up, red for down)
+      - Real-time updates via SSE connection
+      - Visual pulse/flash animation on price updates
+      - Bid/ask spread display
+      - Daily high/low prices
+      - Trading volume with K/M/B formatting
+      - Last updated timestamp
+      - Market status indicator (pre-market, open, after-hours, closed)
+      - Auto-reconnect on SSE connection loss
+    </real_time_quotes>
+
+    <symbol_search>
+      - Search input with debounced API calls (300ms)
+      - Autocomplete dropdown with symbol and company name
+      - Search results show exchange and stock type
+      - Click to navigate to stock detail page
+      - Recent searches history (stored locally)
+      - Clear search button
+      - Loading indicator during search
+      - No results message for empty searches
+    </symbol_search>
+
+    <watchlists>
+      - Create multiple watchlists with custom names
+      - Default watchlist created for new users
+      - Add symbols to watchlist from search or stock page
+      - Remove symbols from watchlist
+      - Drag-and-drop reorder symbols within watchlist
+      - Rename watchlist
+      - Delete watchlist with confirmation
+      - Watchlist color/icon customization
+      - Real-time quote updates for all watchlist symbols
+      - Sortable columns (symbol, price, change, volume)
+      - Compact and expanded view modes
+      - Quick-add symbol input at bottom of list
+      - Export watchlist to CSV
+    </watchlists>
+
+    <price_charts>
+      - Candlestick chart with OHLC data (default view)
+      - Line chart option for close prices
+      - Area chart option with gradient fill
+      - Zoom in/out with mouse wheel
+      - Pan left/right with click and drag
+      - Reset zoom button
+      - Crosshair with price and date tooltip
+      - Volume bars below price chart
+      - Time axis with smart date formatting
+      - Price axis with currency formatting
+      - Fullscreen chart mode
+      - Chart screenshot/export to PNG
+    </price_charts>
+
+    <chart_timeframes>
+      - Intraday: 1 minute, 5 minute, 15 minute, 30 minute, 1 hour
+      - Daily: 1 day candles
+      - Weekly: 1 week candles
+      - Monthly: 1 month candles
+      - Preset ranges: 1D, 5D, 1M, 3M, 6M, YTD, 1Y, 5Y, Max
+      - Custom date range picker
+      - Remember last selected timeframe per symbol
+      - Loading skeleton during data fetch
+      - Error handling for unavailable timeframes
+    </chart_timeframes>
+
+    <technical_indicators>
+      - Simple Moving Average (SMA) - configurable periods (10, 20, 50, 200)
+      - Exponential Moving Average (EMA) - configurable periods
+      - Relative Strength Index (RSI) - 14 period default, separate subplot
+      - MACD - 12/26/9 default, histogram display
+      - Bollinger Bands - 20 period, 2 standard deviations
+      - Volume Moving Average
+      - Indicator toggle panel (show/hide each)
+      - Indicator settings modal (change periods, colors)
+      - Multiple indicators simultaneously
+      - Indicator values in tooltip on hover
+      - Overbought/oversold zones for RSI (70/30 lines)
+    </technical_indicators>
+
+    <portfolios>
+      - Create multiple portfolios per user
+      - Default portfolio created for new users
+      - Portfolio name and description
+      - Cash balance tracking
+      - Paper trading vs real portfolio flag
+      - Portfolio summary card (total value, day change, total gain)
+      - Delete portfolio with confirmation
+      - Portfolio settings modal
+    </portfolios>
+
+    <portfolio_holdings>
+      - View all current positions in portfolio
+      - Per-holding display: symbol, shares, avg cost, current price
+      - Market value calculation (shares * current price)
+      - Cost basis calculation (shares * avg cost)
+      - Unrealized gain/loss (market value - cost basis)
+      - Unrealized gain percentage
+      - Day change per holding
+      - Allocation percentage (holding value / total portfolio)
+      - Sort by any column
+      - Filter holdings by gain/loss
+      - Real-time price updates for holdings
+    </portfolio_holdings>
+
+    <transactions>
+      - Record buy transactions (symbol, shares, price, date, fees)
+      - Record sell transactions with lot selection (FIFO default)
+      - Record dividend transactions
+      - Record stock split adjustments
+      - Transaction history table with filters
+      - Edit transaction (with recalculation)
+      - Delete transaction with confirmation
+      - Transaction notes field
+      - Import transactions from CSV
+      - Export transactions to CSV
+    </transactions>
+
+    <tax_lots>
+      - Track individual purchase lots per symbol
+      - Lot date, shares, cost basis
+      - Support for partial lot sales
+      - FIFO (First In, First Out) selling method
+      - Specific lot identification for sales
+      - Realized gain/loss calculation per lot
+      - Short-term vs long-term capital gains (1 year threshold)
+      - Wash sale tracking (basic)
+      - Lot history view
+    </tax_lots>
+
+    <portfolio_analytics>
+      - Portfolio value over time chart
+      - Comparison to benchmark (S&P 500 / SPY)
+      - Daily, weekly, monthly returns
+      - Allocation pie chart by sector
+      - Allocation pie chart by holding
+      - Top performers table
+      - Bottom performers table
+      - Concentration metrics
+      - Dividend income tracking
+      - Realized gains summary (YTD)
+    </portfolio_analytics>
+
+    <price_alerts>
+      - Create price above threshold alert
+      - Create price below threshold alert
+      - Create percentage change alert
+      - Custom alert name/message
+      - One-time vs recurring alerts
+      - Alert notification in-app (toast)
+      - Browser notification (with permission)
+      - Alert list management (view, edit, delete)
+      - Alert history (triggered alerts log)
+      - Pause/resume individual alerts
+      - Alert expiration date (optional)
+    </price_alerts>
+
+    <company_info>
+      - Company name and logo
+      - Stock exchange and currency
+      - Sector and industry
+      - Market capitalization (formatted)
+      - P/E ratio
+      - 52-week high and low
+      - Dividend yield
+      - Beta
+      - EPS (Earnings Per Share)
+      - Company description/summary
+      - Website link
+      - Employee count
+      - IPO date
+    </company_info>
+
+    <market_news>
+      - Stock-specific news articles
+      - General market news feed
+      - News card with headline, source, time ago
+      - Thumbnail image when available
+      - Click to open article in new tab
+      - Sentiment indicator (positive/negative/neutral)
+      - Related symbols tags
+      - Infinite scroll pagination
+      - Category filters (earnings, mergers, general)
+      - Refresh news button
+    </market_news>
+
+    <stock_screener>
+      - Filter by market cap range
+      - Filter by P/E ratio range
+      - Filter by sector
+      - Filter by industry
+      - Filter by price range
+      - Filter by volume threshold
+      - Filter by 52-week high/low proximity
+      - Filter by dividend yield
+      - Combine multiple filters
+      - Screener results table
+      - Add result to watchlist
+      - Save screener configuration
+      - Load saved screeners
+    </stock_screener>
+
+    <market_overview>
+      - Major indices (S&P 500, Dow, Nasdaq) with live updates
+      - Sector performance heatmap
+      - Top gainers list
+      - Top losers list
+      - Most active by volume
+      - Market status (open/closed) with countdown
+      - Economic calendar highlights
+    </market_overview>
+
+    <settings>
+      - Theme toggle (light/dark/system)
+      - Default chart type preference
+      - Default timeframe preference
+      - Number format (decimal places)
+      - Notification preferences
+      - Session timeout setting
+      - Change password
+      - Delete account (with confirmation)
+      - Export all data (JSON backup)
+      - Import data from backup
+    </settings>
+
+    <export_functionality>
+      - Export watchlist to CSV
+      - Export portfolio holdings to CSV
+      - Export transaction history to CSV
+      - Export chart as PNG image
+      - Full data backup to JSON
+      - Date range selection for exports
+    </export_functionality>
+
+    <responsive_design>
+      - Mobile-first responsive layout
+      - Collapsible sidebar on mobile
+      - Touch-friendly chart interactions
+      - Swipe gestures for navigation
+      - Optimized table layout for small screens
+      - Bottom navigation on mobile
+      - Adaptive chart sizing
+    </responsive_design>
+
+    <accessibility>
+      - Keyboard navigation for all features
+      - ARIA labels on interactive elements
+      - Focus indicators
+      - Screen reader friendly tables
+      - High contrast mode support
+      - Reduced motion preference support
+      - Proper heading hierarchy
+    </accessibility>
+
+    <error_handling>
+      - API error messages (user-friendly)
+      - Network offline detection
+      - Retry mechanisms for failed requests
+      - Form validation with inline errors
+      - 404 page for unknown routes
+      - Session expired handling
+      - Rate limit exceeded notification
+    </error_handling>
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <users>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - email TEXT UNIQUE NOT NULL
+        - password_hash TEXT NOT NULL
+        - name TEXT
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - last_login_at DATETIME
+        - is_active INTEGER DEFAULT 1
+      </users>
+
+      <sessions>
+        - id TEXT PRIMARY KEY
+        - user_id INTEGER NOT NULL REFERENCES users(id)
+        - expires_at DATETIME NOT NULL
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </sessions>
+
+      <user_preferences>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - user_id INTEGER UNIQUE REFERENCES users(id)
+        - theme TEXT DEFAULT 'system'
+        - default_chart_type TEXT DEFAULT 'candle'
+        - default_timeframe TEXT DEFAULT '1D'
+        - decimal_places INTEGER DEFAULT 2
+        - notifications_enabled INTEGER DEFAULT 1
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </user_preferences>
+
+      <watchlists>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - user_id INTEGER NOT NULL REFERENCES users(id)
+        - name TEXT NOT NULL
+        - color TEXT DEFAULT '#3B82F6'
+        - icon TEXT DEFAULT 'star'
+        - position INTEGER DEFAULT 0
+        - is_default INTEGER DEFAULT 0
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </watchlists>
+
+      <watchlist_items>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE
+        - symbol TEXT NOT NULL
+        - position INTEGER DEFAULT 0
+        - notes TEXT
+        - added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - UNIQUE(watchlist_id, symbol)
+      </watchlist_items>
+
+      <portfolios>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - user_id INTEGER NOT NULL REFERENCES users(id)
+        - name TEXT NOT NULL
+        - description TEXT
+        - cash_balance REAL DEFAULT 0
+        - is_paper_trading INTEGER DEFAULT 0
+        - is_default INTEGER DEFAULT 0
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </portfolios>
+
+      <portfolio_holdings>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - portfolio_id INTEGER NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE
+        - symbol TEXT NOT NULL
+        - total_shares REAL NOT NULL
+        - average_cost REAL NOT NULL
+        - first_purchase_date DATE
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - UNIQUE(portfolio_id, symbol)
+      </portfolio_holdings>
+
+      <transactions>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - portfolio_id INTEGER NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE
+        - symbol TEXT NOT NULL
+        - type TEXT NOT NULL CHECK(type IN ('buy', 'sell', 'dividend', 'split'))
+        - shares REAL NOT NULL
+        - price REAL NOT NULL
+        - fees REAL DEFAULT 0
+        - notes TEXT
+        - executed_at DATETIME NOT NULL
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </transactions>
+
+      <tax_lots>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - portfolio_id INTEGER NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE
+        - symbol TEXT NOT NULL
+        - purchase_date DATE NOT NULL
+        - shares_remaining REAL NOT NULL
+        - cost_per_share REAL NOT NULL
+        - transaction_id INTEGER REFERENCES transactions(id)
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </tax_lots>
+
+      <lot_sales>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - tax_lot_id INTEGER NOT NULL REFERENCES tax_lots(id)
+        - sell_transaction_id INTEGER NOT NULL REFERENCES transactions(id)
+        - shares_sold REAL NOT NULL
+        - sale_price REAL NOT NULL
+        - realized_gain REAL NOT NULL
+        - is_short_term INTEGER NOT NULL
+        - sale_date DATE NOT NULL
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </lot_sales>
+
+      <alerts>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - user_id INTEGER NOT NULL REFERENCES users(id)
+        - symbol TEXT NOT NULL
+        - name TEXT
+        - type TEXT NOT NULL CHECK(type IN ('price_above', 'price_below', 'percent_change'))
+        - target_value REAL NOT NULL
+        - is_active INTEGER DEFAULT 1
+        - is_recurring INTEGER DEFAULT 0
+        - triggered_at DATETIME
+        - expires_at DATETIME
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </alerts>
+
+      <alert_history>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - alert_id INTEGER REFERENCES alerts(id) ON DELETE SET NULL
+        - user_id INTEGER NOT NULL REFERENCES users(id)
+        - symbol TEXT NOT NULL
+        - trigger_price REAL NOT NULL
+        - message TEXT
+        - triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </alert_history>
+
+      <saved_screeners>
+        - id INTEGER PRIMARY KEY AUTOINCREMENT
+        - user_id INTEGER NOT NULL REFERENCES users(id)
+        - name TEXT NOT NULL
+        - filters TEXT NOT NULL (JSON)
+        - created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        - updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </saved_screeners>
+
+      <quote_cache>
+        - symbol TEXT PRIMARY KEY
+        - data TEXT NOT NULL (JSON)
+        - cached_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      </quote_cache>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <authentication>
+      - POST /api/auth/register - Create new user account
+      - POST /api/auth/login - Authenticate and create session
+      - POST /api/auth/logout - Invalidate session
+      - GET /api/auth/me - Get current user info
+      - PUT /api/auth/password - Change password
+    </authentication>
+
+    <quotes>
+      - GET /api/quotes/:symbol - Get real-time quote for symbol
+      - GET /api/quotes/batch?symbols=AAPL,GOOGL - Get multiple quotes
+      - GET /api/quotes/stream - SSE endpoint for real-time updates
+    </quotes>
+
+    <charts>
+      - GET /api/charts/:symbol/candles?timeframe=1D&from=&to= - Get OHLCV data
+      - GET /api/charts/:symbol/intraday?interval=5m - Get intraday data
+    </charts>
+
+    <indicators>
+      - GET /api/indicators/:symbol/sma?period=20 - Simple Moving Average
+      - GET /api/indicators/:symbol/ema?period=20 - Exponential Moving Average
+      - GET /api/indicators/:symbol/rsi?period=14 - Relative Strength Index
+      - GET /api/indicators/:symbol/macd - MACD indicator
+      - GET /api/indicators/:symbol/bbands?period=20 - Bollinger Bands
+    </indicators>
+
+    <search>
+      - GET /api/search?q=apple - Search symbols and companies
+    </search>
+
+    <company>
+      - GET /api/company/:symbol/profile - Company profile and metrics
+      - GET /api/company/:symbol/news - Company-specific news
+    </company>
+
+    <news>
+      - GET /api/news/market - General market news
+      - GET /api/news/market?category=earnings - Filtered news
+    </news>
+
+    <watchlists>
+      - GET /api/watchlists - Get user's watchlists
+      - POST /api/watchlists - Create watchlist
+      - GET /api/watchlists/:id - Get watchlist with items
+      - PUT /api/watchlists/:id - Update watchlist
+      - DELETE /api/watchlists/:id - Delete watchlist
+      - POST /api/watchlists/:id/items - Add symbol to watchlist
+      - DELETE /api/watchlists/:id/items/:symbol - Remove symbol
+      - PUT /api/watchlists/:id/items/reorder - Reorder items
+    </watchlists>
+
+    <portfolios>
+      - GET /api/portfolios - Get user's portfolios
+      - POST /api/portfolios - Create portfolio
+      - GET /api/portfolios/:id - Get portfolio with holdings
+      - PUT /api/portfolios/:id - Update portfolio
+      - DELETE /api/portfolios/:id - Delete portfolio
+      - GET /api/portfolios/:id/performance?period=1M - Performance data
+    </portfolios>
+
+    <holdings>
+      - GET /api/portfolios/:id/holdings - Get all holdings
+      - GET /api/portfolios/:id/holdings/:symbol - Get specific holding
+    </holdings>
+
+    <transactions>
+      - GET /api/portfolios/:id/transactions - Get transactions
+      - POST /api/portfolios/:id/transactions - Create transaction
+      - PUT /api/transactions/:id - Update transaction
+      - DELETE /api/transactions/:id - Delete transaction
+    </transactions>
+
+    <lots>
+      - GET /api/portfolios/:id/lots?symbol=AAPL - Get tax lots for symbol
+    </lots>
+
+    <alerts>
+      - GET /api/alerts - Get user's alerts
+      - POST /api/alerts - Create alert
+      - PUT /api/alerts/:id - Update alert
+      - DELETE /api/alerts/:id - Delete alert
+      - GET /api/alerts/history - Get triggered alerts
+    </alerts>
+
+    <screener>
+      - POST /api/screener/run - Execute screen with filters
+      - GET /api/screener/saved - Get saved screeners
+      - POST /api/screener/saved - Save screener
+      - DELETE /api/screener/saved/:id - Delete saved screener
+    </screener>
+
+    <market>
+      - GET /api/market/indices - Major indices quotes
+      - GET /api/market/movers?type=gainers - Top movers
+      - GET /api/market/sectors - Sector performance
+      - GET /api/market/status - Market open/closed status
+    </market>
+
+    <settings>
+      - GET /api/settings - Get user preferences
+      - PUT /api/settings - Update preferences
+    </settings>
+
+    <export>
+      - GET /api/export/watchlist/:id?format=csv - Export watchlist
+      - GET /api/export/portfolio/:id?format=csv - Export portfolio
+      - GET /api/export/transactions/:portfolioId?format=csv - Export transactions
+      - GET /api/export/backup - Full JSON backup
+    </export>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      - Three-column layout: left sidebar, main content, right panel
+      - Collapsible sidebar with toggle button
+      - Fixed header with navigation and user menu
+      - Right panel for news/details (collapsible)
+      - Responsive: single column on mobile, two on tablet, three on desktop
+    </main_structure>
+
+    <header>
+      - App logo and name (left)
+      - Global symbol search (center)
+      - Notification bell with alert count badge
+      - Theme toggle (sun/moon icon)
+      - User avatar with dropdown menu
+      - Dropdown: Settings, Export Data, Logout
+    </header>
+
+    <left_sidebar>
+      - Navigation sections:
+        - Dashboard (home icon)
+        - Watchlists (list icon) - expandable with user's lists
+        - Portfolio (briefcase icon) - expandable with user's portfolios
+        - Alerts (bell icon)
+        - Screener (filter icon)
+        - Market Overview (chart icon)
+        - News (newspaper icon)
+      - Active item highlighted
+      - Collapse to icons only on smaller screens
+    </left_sidebar>
+
+    <main_content>
+      - Dynamic based on current route
+      - Dashboard: summary cards, mini charts, quick actions
+      - Stock detail: quote card, large chart, company info tabs
+      - Watchlist: table view with real-time updates
+      - Portfolio: holdings table, summary cards, transactions tab
+      - Screener: filter form, results table
+      - Breadcrumb navigation
+      - Page title
+    </main_content>
+
+    <right_panel>
+      - Context-aware content
+      - On stock page: company info, related news
+      - On portfolio: analytics charts, recent transactions
+      - On dashboard: market news, trending stocks
+      - Toggle button to expand/collapse
+      - Slide-in animation
+    </right_panel>
+
+    <modals>
+      - Add to watchlist modal
+      - New transaction modal (buy/sell form)
+      - Alert creation modal
+      - Confirm delete modal
+      - Settings modal (tabbed)
+      - Chart fullscreen modal
+      - Export options modal
+    </modals>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      <light_mode>
+        <core_palette>
+          - Swatch 1 - Background base: #E8E8E8 (light warm gray)
+          - Swatch 2 - Primary accent: #B1C2F0 (periwinkle blue)
+          - Swatch 3 - Secondary accent: #B9D7EB (sky blue)
+          - Swatch 4 - Tertiary accent: #EBBDFF (lavender pink)
+          - Swatch 5 - Muted text: #9A96B0 (purple-gray)
+        </core_palette>
+        <applied_colors>
+          - Background: #E8E8E8 (light warm gray)
+          - Surface: #F5F5F5 (slightly lighter for cards)
+          - Surface elevated: #FFFFFF (white for modals, dropdowns)
+          - Border: #D1D1D1 (medium gray border)
+          - Border subtle: #E0E0E0 (lighter dividers)
+          - Text primary: #1A1A1A (near black for readability)
+          - Text secondary: #9A96B0 (muted purple-gray)
+          - Text tertiary: #B1B1B1 (very muted)
+          - Primary accent: #B1C2F0 (periwinkle blue)
+          - Primary hover: #9AAFE8 (darker periwinkle)
+          - Primary text: #4A5A8A (dark blue for text on light)
+          - Secondary accent: #B9D7EB (sky blue)
+          - Tertiary accent: #EBBDFF (lavender pink)
+          - Positive/Up: #2E9E6B (green - slightly muted to match palette)
+          - Positive background: #E8F5EF (light green tint)
+          - Negative/Down: #C45C4A (muted red-orange to complement palette)
+          - Negative background: #FDEAE8 (light red tint)
+          - Warning: #D4A24C (warm amber)
+          - Warning background: #FEF6E8 (light amber tint)
+          - Info: #B9D7EB (sky blue - reuse secondary)
+          - Chart grid: #D8D8D8 (subtle gray)
+          - Chart background: #F0F0F0 (slightly darker than page)
+          - Input background: #FFFFFF (white inputs)
+          - Input border: #D1D1D1 (gray border)
+          - Input focus: #B1C2F0 (primary accent ring)
+          - Button primary bg: #B1C2F0 (periwinkle)
+          - Button primary text: #1A1A1A (dark text on light button)
+          - Button secondary bg: transparent
+          - Button secondary border: #9A96B0 (muted purple-gray)
+          - Sidebar background: #E0E0E0 (slightly darker than main)
+          - Header background: #F5F5F5 (surface color)
+          - Skeleton: #D8D8D8 (shimmer base)
+          - Skeleton shimmer: #E8E8E8 (shimmer highlight)
+        </applied_colors>
+      </light_mode>
+      <dark_mode>
+        <core_palette>
+          - Swatch 1 - Background base: #262625 (dark charcoal)
+          - Swatch 2 - Text primary: #BFBDB8 (warm light gray)
+          - Swatch 3 - Primary accent: #BF573F (burnt orange/terracotta)
+          - Swatch 4 - Secondary accent: #733F34 (dark reddish brown)
+          - Swatch 5 - Muted/borders: #595959 (medium gray)
+        </core_palette>
+        <applied_colors>
+          - Background: #262625 (dark charcoal)
+          - Surface: #2E2E2D (slightly lighter for cards)
+          - Surface elevated: #3A3A38 (modals, dropdowns)
+          - Border: #595959 (medium gray)
+          - Border subtle: #3D3D3C (darker dividers)
+          - Text primary: #BFBDB8 (warm light gray)
+          - Text secondary: #8A8884 (muted warm gray)
+          - Text tertiary: #6B6B68 (very muted)
+          - Primary accent: #BF573F (burnt orange/terracotta)
+          - Primary hover: #D4644A (lighter terracotta)
+          - Primary text: #BF573F (accent color for links)
+          - Secondary accent: #733F34 (dark reddish brown)
+          - Tertiary accent: #8B5A4A (medium brown)
+          - Positive/Up: #4ADE80 (bright green - stands out on dark)
+          - Positive background: #1A2E1A (dark green tint)
+          - Negative/Down: #F87171 (coral red - visible on dark)
+          - Negative background: #2E1A1A (dark red tint)
+          - Warning: #FBBF24 (bright amber)
+          - Warning background: #2E2A1A (dark amber tint)
+          - Info: #60A5FA (light blue for visibility)
+          - Chart grid: #3D3D3C (subtle dark gray)
+          - Chart background: #1E1E1D (darker than page)
+          - Input background: #2E2E2D (surface color)
+          - Input border: #595959 (medium gray)
+          - Input focus: #BF573F (primary accent ring)
+          - Button primary bg: #BF573F (terracotta)
+          - Button primary text: #FFFFFF (white text on colored button)
+          - Button secondary bg: transparent
+          - Button secondary border: #595959 (gray border)
+          - Sidebar background: #1E1E1D (darker than main)
+          - Header background: #2E2E2D (surface color)
+          - Skeleton: #3A3A38 (shimmer base)
+          - Skeleton shimmer: #4A4A48 (shimmer highlight)
+        </applied_colors>
+      </dark_mode>
+      <semantic_colors>
+        <stock_indicators>
+          - Price up: Use Positive/Up from current theme
+          - Price down: Use Negative/Down from current theme
+          - Price unchanged: Use Text tertiary from current theme
+          - Flash up: Positive with 15% opacity background
+          - Flash down: Negative with 15% opacity background
+          - Sparkline up: Positive color
+          - Sparkline down: Negative color
+        </stock_indicators>
+        <status_dots>
+          - Market open: #22C55E (consistent green)
+          - Market closed: #EF4444 (consistent red)
+          - Pre-market: #EAB308 (yellow)
+          - After-hours: #F97316 (orange)
+          - Connected: hidden (no indicator)
+          - Disconnected: #EF4444 (red)
+          - Reconnecting: #EAB308 (yellow, pulsing)
+        </status_dots>
+        <alerts>
+          - Alert active: Primary accent
+          - Alert triggered: Positive color
+          - Alert expired: Text tertiary
+          - Alert paused: Warning color
+        </alerts>
+        <portfolio>
+          - Gain: Positive/Up color
+          - Loss: Negative/Down color
+          - Neutral: Text secondary
+          - Allocation sector 1: Primary accent
+          - Allocation sector 2: Secondary accent
+          - Allocation sector 3: Tertiary accent
+          - Additional sectors: Generate from palette rotation
+        </portfolio>
+      </semantic_colors>
+      <css_variables>
+        /* Generate these CSS custom properties for runtime theming */
+        --color-bg: var(--theme-background);
+        --color-surface: var(--theme-surface);
+        --color-surface-elevated: var(--theme-surface-elevated);
+        --color-border: var(--theme-border);
+        --color-border-subtle: var(--theme-border-subtle);
+        --color-text-primary: var(--theme-text-primary);
+        --color-text-secondary: var(--theme-text-secondary);
+        --color-text-tertiary: var(--theme-text-tertiary);
+        --color-accent-primary: var(--theme-primary-accent);
+        --color-accent-primary-hover: var(--theme-primary-hover);
+        --color-accent-secondary: var(--theme-secondary-accent);
+        --color-positive: var(--theme-positive);
+        --color-negative: var(--theme-negative);
+        --color-warning: var(--theme-warning);
+        --color-info: var(--theme-info);
+        /* Apply via data-theme="light" or data-theme="dark" on html element */
+      </css_variables>
+      <tailwind_config>
+        /* Extend Tailwind with custom color tokens */
+        colors: {
+          background: 'var(--color-bg)',
+          surface: 'var(--color-surface)',
+          'surface-elevated': 'var(--color-surface-elevated)',
+          border: 'var(--color-border)',
+          'text-primary': 'var(--color-text-primary)',
+          'text-secondary': 'var(--color-text-secondary)',
+          accent: 'var(--color-accent-primary)',
+          positive: 'var(--color-positive)',
+          negative: 'var(--color-negative)',
+          warning: 'var(--color-warning)',
+        }
+      </tailwind_config>
+    </color_palette>
+
+    <typography>
+      - Font family: Inter, system-ui, sans-serif
+      - Monospace (prices): JetBrains Mono, Consolas, monospace
+      - Base size: 14px
+      - Headings: font-semibold, tracking-tight
+      - Prices: tabular-nums for alignment
+      - Large numbers: font-bold
+    </typography>
+
+    <components>
+      <quote_card>
+        - Symbol in bold, company name below
+        - Large price display with change
+        - Percentage change with up/down arrow
+        - Background flash on update (subtle green/red)
+        - Mini sparkline (optional)
+      </quote_card>
+
+      <data_table>
+        - Alternating row backgrounds
+        - Sticky header on scroll
+        - Sortable column headers with arrow indicators
+        - Right-align numeric columns
+        - Hover highlight
+        - Loading skeleton rows
+      </data_table>
+
+      <buttons>
+        - Primary: blue background, white text
+        - Secondary: border, transparent background
+        - Danger: red for destructive actions
+        - Icon buttons: square, subtle background on hover
+        - Loading state: spinner icon
+      </buttons>
+
+      <inputs>
+        - Rounded borders
+        - Focus ring in blue
+        - Error state: red border, error message below
+        - Label above input
+        - Helper text below
+        - Number inputs with increment/decrement
+      </inputs>
+
+      <cards>
+        - Rounded corners (8px)
+        - Subtle border or shadow
+        - Padding: 16-24px
+        - Header with title and optional actions
+      </cards>
+
+      <charts>
+        - Dark background for chart area
+        - Grid lines: subtle gray
+        - Crosshair: dotted line
+        - Tooltip: dark background, white text
+        - Legend: top or bottom positioned
+      </charts>
+
+      <notifications>
+        - Toast notifications: bottom-right
+        - Slide-in animation
+        - Auto-dismiss after 5 seconds
+        - Close button
+        - Color-coded (success, error, warning, info)
+      </notifications>
+    </components>
+
+    <animations>
+      - Page transitions: subtle fade
+      - Modal: scale and fade in
+      - Price updates: flash/pulse effect (300ms)
+      - Sidebar: slide transition
+      - Loading: skeleton shimmer
+      - Charts: smooth data transitions
+      - Hover: 150ms transition
+    </animations>
+  </design_system>
+
+  <design_polish>
+    <micro_interactions>
+      - Button press: subtle scale down (0.98) on mousedown, spring back on release
+      - Checkbox toggle: smooth check mark draw animation (150ms)
+      - Toggle switch: sliding animation with color transition
+      - Dropdown open: fade + slight slide down (100ms ease-out)
+      - Tab switch: underline slides to active tab
+      - Card hover: subtle lift with shadow increase
+      - Row hover: background color fade (not instant)
+      - Link hover: color transition + optional underline slide-in
+      - Icon button hover: background circle fade in
+      - Input focus: border color transition + subtle glow
+      - Form submit: button shows spinner, disables, prevents double-click
+      - Delete action: item fades out, list smoothly collapses
+      - Add action: new item fades in with slide from top
+      - Drag start: item lifts with shadow, slight rotation
+      - Drag over: drop zone highlights with dashed border
+      - Drop complete: item settles with bounce effect
+    </micro_interactions>
+
+    <financial_number_formatting>
+      - Prices: Always 2 decimal places ($150.00, not $150)
+      - Price changes: Show sign always (+$2.34, -$1.50)
+      - Percentages: 2 decimal places with % symbol (+1.25%)
+      - Large numbers: Abbreviate with K/M/B/T (1.5M, 2.3B)
+      - Volume: Comma separated or abbreviated (1,234,567 or 1.23M)
+      - Market cap: Always abbreviated ($2.5T)
+      - Currency symbol: Prefix for USD ($), respect locale for others
+      - Negative numbers: Red color, parentheses optional (($500) or -$500)
+      - Tabular nums: Use font-variant-numeric: tabular-nums for aligned columns
+      - Monospace font: Use for all price displays for consistent width
+      - Thousands separator: Comma for US locale
+      - Decimal separator: Period for US locale
+      - Null/undefined: Show dash (—) not "N/A" or empty
+      - Zero values: Show as $0.00, not blank
+      - Crypto precision: Support up to 8 decimal places when needed
+    </financial_number_formatting>
+
+    <price_change_indicators>
+      - Up arrow: Filled triangle pointing up (▲) in green
+      - Down arrow: Filled triangle pointing down (▼) in red
+      - Unchanged: Horizontal dash (—) in gray
+      - Arrow placement: Before or after number, consistent throughout
+      - Background flash: Subtle green/red pulse on price update (300ms)
+      - Flash intensity: Light tint, not overwhelming (10-15% opacity)
+      - Trend line: Small inline sparkline showing recent movement
+      - Percentage badge: Pill-shaped with colored background
+      - Heat intensity: Darker green/red for larger percentage changes
+    </price_change_indicators>
+
+    <status_indicators>
+      <market_status>
+        - Open: Green dot + "Market Open" text
+        - Closed: Red dot + "Market Closed" text
+        - Pre-market: Yellow dot + "Pre-Market" + time until open
+        - After-hours: Orange dot + "After Hours"
+        - Weekend: Gray dot + "Markets Closed" + opens Monday time
+        - Holiday: Gray dot + holiday name + next open date
+        - Countdown: Live countdown to market open/close
+      </market_status>
+      <connection_status>
+        - Connected: Hidden (don't show when working)
+        - Connecting: Yellow dot + "Connecting..." in header
+        - Disconnected: Red dot + "Offline" + retry button
+        - Reconnecting: Pulsing yellow dot + "Reconnecting..."
+        - Stale data: Warning icon + "Data may be delayed"
+      </connection_status>
+      <data_freshness>
+        - Live: No indicator (assume fresh)
+        - Delayed: Clock icon + "15 min delay" badge
+        - Last updated: Relative time "Updated 2s ago"
+        - Stale (>1 min): Warning color on timestamp
+        - Very stale (>5 min): Show warning banner
+      </data_freshness>
+    </status_indicators>
+
+    <empty_states>
+      <watchlist_empty>
+        - Illustration: Simple line drawing of a star or list
+        - Headline: "Your watchlist is empty"
+        - Subtext: "Search for stocks to add to your watchlist"
+        - CTA button: "Search Stocks" (primary button)
+      </watchlist_empty>
+      <portfolio_empty>
+        - Illustration: Briefcase or chart icon
+        - Headline: "No holdings yet"
+        - Subtext: "Record your first transaction to start tracking"
+        - CTA button: "Add Transaction" (primary button)
+      </portfolio_empty>
+      <alerts_empty>
+        - Illustration: Bell with plus icon
+        - Headline: "No price alerts"
+        - Subtext: "Create alerts to get notified when prices move"
+        - CTA button: "Create Alert" (primary button)
+      </alerts_empty>
+      <search_no_results>
+        - Illustration: Magnifying glass with X
+        - Headline: "No results found"
+        - Subtext: "Try a different search term or check the spelling"
+        - Suggestions: Show popular stocks as alternatives
+      </search_no_results>
+      <transactions_empty>
+        - Illustration: Receipt or document icon
+        - Headline: "No transactions"
+        - Subtext: "Your buy, sell, and dividend history will appear here"
+      </transactions_empty>
+      <news_empty>
+        - Illustration: Newspaper icon
+        - Headline: "No news available"
+        - Subtext: "Check back later for the latest market news"
+      </news_empty>
+    </empty_states>
+
+    <loading_states>
+      <skeleton_screens>
+        - Quote card: Gray rectangles for symbol, price, change
+        - Table rows: 5 skeleton rows with alternating widths
+        - Chart: Gray rectangle with subtle shimmer
+        - News cards: Image placeholder + text lines
+        - Profile: Circle avatar + text blocks
+        - Shimmer animation: Left-to-right gradient sweep (1.5s loop)
+        - Skeleton color: Use surface color (not too dark/light)
+      </skeleton_screens>
+      <spinners>
+        - Page load: Centered spinner with logo
+        - Button loading: Replace text with spinner, same size
+        - Inline loading: Small spinner next to text
+        - Chart loading: Spinner overlay on chart area
+        - Spinner style: Simple circle, not complex animation
+        - Spinner color: Primary accent color
+      </spinners>
+      <progress_indicators>
+        - Data export: Progress bar with percentage
+        - File upload: Progress bar + file name
+        - Bulk operations: "Processing 5 of 20..."
+      </progress_indicators>
+    </loading_states>
+
+    <error_states>
+      <inline_errors>
+        - Form field: Red border + error message below
+        - Error message: Red text, small font, icon optional
+        - Shake animation: Subtle horizontal shake on submit fail
+        - Focus: Auto-focus first field with error
+      </inline_errors>
+      <api_errors>
+        - Toast notification: Red background, white text
+        - Retry button: Include in toast for retryable errors
+        - Error details: Expandable for technical info
+        - Friendly messages: "Couldn't load prices. Please try again."
+      </api_errors>
+      <page_errors>
+        - 404 page: Illustration + "Page not found" + home link
+        - 500 page: "Something went wrong" + retry + support link
+        - Network error: Offline illustration + "Check your connection"
+        - Rate limited: "Too many requests. Please wait." + countdown
+      </page_errors>
+      <chart_errors>
+        - No data: "No data available for this timeframe"
+        - API error: "Couldn't load chart data" + retry button
+        - Partial data: Show available data with gap indicator
+      </chart_errors>
+    </error_states>
+
+    <sparklines_and_mini_charts>
+      - Watchlist sparkline: 50px wide, last 24 hours, no axes
+      - Quote card sparkline: Inline with price, shows day trend
+      - Portfolio mini chart: 7-day performance, area chart
+      - Sparkline colors: Green if up overall, red if down
+      - Line thickness: 1.5px for visibility at small size
+      - No labels: Sparklines are visual indicators only
+      - Hover: Optional tooltip with high/low values
+      - Responsive: Hide sparklines on mobile to save space
+    </sparklines_and_mini_charts>
+
+    <iconography>
+      - Icon set: Lucide React (consistent, modern, MIT licensed)
+      - Size scale: 16px (inline), 20px (buttons), 24px (headers), 32px (features)
+      - Stroke width: 1.5px default, 2px for emphasis
+      - Color: Inherit text color, or specific semantic color
+      - Interactive icons: Hover state (color change or background)
+      - Icon + text: 8px gap between icon and label
+      - Icon buttons: Minimum 44px touch target on mobile
+      - Consistent meaning: Same icon = same action everywhere
+      - Common icons:
+        - Plus: Add action
+        - X: Close/remove
+        - Pencil: Edit
+        - Trash: Delete
+        - Search: Search action
+        - Bell: Notifications/alerts
+        - Star: Watchlist/favorite
+        - ChevronDown: Dropdown
+        - ArrowUpRight: External link
+        - RefreshCw: Refresh/reload
+        - Settings: Settings/gear
+        - LogOut: Sign out
+    </iconography>
+
+    <spacing_system>
+      - Base unit: 4px
+      - Scale: 4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96
+      - Component padding: 16px default (cards, modals)
+      - Section spacing: 32px between major sections
+      - List item gap: 8px between items
+      - Form field gap: 16px between fields
+      - Button padding: 12px vertical, 16px horizontal
+      - Table cell padding: 12px vertical, 16px horizontal
+      - Header height: 64px
+      - Sidebar width: 256px (expanded), 64px (collapsed)
+      - Right panel width: 320px (expanded)
+      - Mobile margins: 16px horizontal
+      - Consistent rhythm: All spacing from the scale, no arbitrary values
+    </spacing_system>
+
+    <shadows_and_depth>
+      - Elevation levels: 0 (flat), 1 (raised), 2 (floating), 3 (modal)
+      - Level 0: No shadow (inline elements)
+      - Level 1: 0 1px 2px rgba(0,0,0,0.05) (cards, buttons)
+      - Level 2: 0 4px 6px rgba(0,0,0,0.07) (dropdowns, popovers)
+      - Level 3: 0 10px 15px rgba(0,0,0,0.1) (modals, dialogs)
+      - Dark mode: Reduce shadow opacity, increase elevation contrast
+      - Hover elevation: Cards lift from level 1 to level 2
+      - Focus ring: 0 0 0 3px rgba(primary, 0.3) for focus states
+      - Inset shadows: Subtle for input fields (inner depth)
+    </shadows_and_depth>
+
+    <border_treatments>
+      - Border radius scale: 4px (small), 6px (default), 8px (large), 12px (xl), full (pills)
+      - Buttons: 6px border radius
+      - Cards: 8px border radius
+      - Modals: 12px border radius
+      - Inputs: 6px border radius
+      - Pills/badges: 9999px (full round)
+      - Images: 6px or match container
+      - Border colors: Use border color from palette (subtle)
+      - Border width: 1px default, 2px for emphasis
+      - Focus borders: 2px primary color
+      - Dividers: 1px horizontal lines between sections
+      - No double borders: Collapse adjacent borders
+    </border_treatments>
+
+    <hover_and_focus_states>
+      - Links: Color change + underline on hover
+      - Buttons: Darken background 10% on hover
+      - Table rows: Background color on hover
+      - Cards: Lift shadow on hover
+      - Icons: Background circle appears on hover
+      - Focus visible: Show focus ring only on keyboard nav
+      - Focus ring: 3px offset, primary color, semi-transparent
+      - Active state: Slightly darker than hover
+      - Disabled state: 50% opacity, no pointer events
+      - Transition duration: 150ms for hovers, 200ms for focus
+    </hover_and_focus_states>
+
+    <responsive_polish>
+      <breakpoints>
+        - Mobile: 0-639px (single column, bottom nav)
+        - Tablet: 640-1023px (two columns, collapsed sidebar)
+        - Desktop: 1024-1279px (three columns, full sidebar)
+        - Large: 1280px+ (wider content areas)
+      </breakpoints>
+      <mobile_adaptations>
+        - Sidebar: Full-height slide-out drawer
+        - Right panel: Full-screen modal
+        - Tables: Horizontal scroll or card view
+        - Charts: Full width, reduced height
+        - Modals: Full screen on mobile
+        - Buttons: Full width in forms
+        - Touch targets: Minimum 44px height
+        - Gestures: Swipe to dismiss modals/drawers
+      </mobile_adaptations>
+      <tablet_adaptations>
+        - Sidebar: Icons only, expand on hover
+        - Right panel: Collapsible
+        - Tables: Fewer columns, horizontal scroll
+        - Charts: Adjust aspect ratio
+      </tablet_adaptations>
+    </responsive_polish>
+
+    <print_and_export_styles>
+      - Print stylesheet: Hide navigation, headers, footers
+      - Charts: Render as static images for print
+      - Tables: Page break handling, repeat headers
+      - Colors: Ensure contrast works in grayscale
+      - Portfolio summary: Clean printable format
+      - Transaction history: One transaction per row, no pagination
+      - Export headers: Include app name, date, user info
+      - PDF generation: Consistent styling with app theme
+    </print_and_export_styles>
+
+    <branding_details>
+      - App name: "StockTracker Pro" in header
+      - Logo: Simple chart/trend icon, works at 32px
+      - Favicon: App icon, visible at 16px
+      - Loading screen: Logo + spinner on initial load
+      - About page: Version number, credits, links
+      - Footer: Copyright, privacy policy, terms links
+      - Color accent: Primary blue (#3B82F6) for brand consistency
+      - Typography: Inter for modern, professional feel
+    </branding_details>
+
+    <visual_hierarchy>
+      - Primary data: Largest, boldest (stock price)
+      - Secondary data: Medium size (change, volume)
+      - Tertiary data: Smallest, muted color (timestamps, labels)
+      - Actions: Clearly differentiated from content
+      - Warnings: Yellow/amber, not overwhelming
+      - Errors: Red, but not alarming for minor issues
+      - Success: Green, subtle for non-critical confirmations
+      - Information flow: Top-to-bottom, left-to-right
+      - Grouping: Related items visually clustered
+      - White space: Generous spacing to reduce cognitive load
+    </visual_hierarchy>
+
+    <motion_principles>
+      - Purpose: Motion should inform, not decorate
+      - Duration: 150ms for micro, 300ms for transitions, 500ms for page
+      - Easing: ease-out for entrances, ease-in for exits
+      - Direction: Elements enter from logical origin
+      - Stagger: List items animate in sequence (50ms delay each)
+      - Reduce motion: Respect prefers-reduced-motion setting
+      - Performance: Use transform/opacity only (GPU accelerated)
+      - Consistency: Same animation for same action type
+    </motion_principles>
+
+    <dark_mode_polish>
+      - True black: Avoid pure #000000, use #0F0F0F
+      - Contrast: Ensure 4.5:1 minimum for text
+      - Shadows: Reduce intensity, may need invert technique
+      - Images: Consider slight opacity reduction
+      - Charts: Adjust grid line colors for visibility
+      - Borders: Slightly lighter than background
+      - Hover states: Lighten instead of darken
+      - Primary colors: Adjust saturation for dark backgrounds
+      - Success/error: Use lighter variants (green-400, red-400)
+      - Code blocks: Dark theme syntax highlighting
+    </dark_mode_polish>
+  </design_polish>
+
+  <key_interactions>
+    <quote_stream_flow>
+      1. User adds symbol to watchlist or opens stock page
+      2. Client subscribes to SSE endpoint with symbol(s)
+      3. Server polls Finnhub API at rate-limited interval
+      4. Server broadcasts quote updates via SSE
+      5. Client updates Zustand store with new prices
+      6. React components re-render with visual feedback
+      7. Reconnect automatically on connection loss
+    </quote_stream_flow>
+
+    <transaction_flow>
+      1. User clicks "Add Transaction" button
+      2. Modal opens with buy/sell form
+      3. User enters symbol, shares, price, date
+      4. Form validates (symbol exists, positive values)
+      5. Submit creates transaction via API
+      6. Backend calculates new average cost
+      7. Backend updates or creates tax lot
+      8. Holdings table updates with new position
+      9. Portfolio summary recalculates
+      10. Success toast notification shown
+    </transaction_flow>
+
+    <alert_trigger_flow>
+      1. Background process checks prices against active alerts
+      2. When condition met, alert marked as triggered
+      3. Alert history record created
+      4. Notification sent via SSE to client
+      5. Toast notification displayed to user
+      6. If recurring, alert resets; otherwise deactivates
+      7. Alert list updates to show triggered status
+    </alert_trigger_flow>
+
+    <chart_interaction>
+      1. User selects symbol from watchlist or search
+      2. Chart loads with default timeframe (1D)
+      3. OHLCV data fetched from backend cache or Finnhub
+      4. Lightweight Charts renders candlesticks
+      5. User can scroll to zoom, drag to pan
+      6. Timeframe buttons switch data resolution
+      7. Indicator toggles add overlays/subplots
+      8. Crosshair shows OHLCV values on hover
+      9. Chart auto-updates with new candles during market hours
+    </chart_interaction>
+  </key_interactions>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Project Setup and Authentication</title>
+      <tasks>
+        - Initialize Vite React project with TypeScript
+        - Set up Tailwind CSS
+        - Create Express server with SQLite database
+        - Implement database schema migrations
+        - Build authentication endpoints (register, login, logout)
+        - Create protected route middleware
+        - Build login and registration pages
+        - Implement session management
+      </tasks>
+    </step>
+
+    <step number="2">
+      <title>Market Data Integration</title>
+      <tasks>
+        - Create Finnhub API client with rate limiting
+        - Implement in-memory quote cache
+        - Build quote endpoints (single, batch)
+        - Create SSE streaming endpoint
+        - Set up background quote refresh worker
+        - Implement symbol search endpoint
+        - Build company profile endpoint
+        - Create market status endpoint
+      </tasks>
+    </step>
+
+    <step number="3">
+      <title>Core UI and Quote Display</title>
+      <tasks>
+        - Create main layout with sidebar and header
+        - Build navigation components
+        - Implement theme toggle (light/dark)
+        - Create quote card component with real-time updates
+        - Build symbol search with autocomplete
+        - Implement SSE client hook
+        - Create Zustand store for quotes
+        - Build dashboard page with indices
+      </tasks>
+    </step>
+
+    <step number="4">
+      <title>Charts and Technical Analysis</title>
+      <tasks>
+        - Integrate Lightweight Charts library
+        - Build candlestick chart component
+        - Implement timeframe selector
+        - Create OHLCV data endpoints
+        - Add chart zoom and pan controls
+        - Build volume subplot
+        - Implement technical indicators (SMA, RSI, MACD)
+        - Add indicator toggle panel
+        - Create chart fullscreen mode
+      </tasks>
+    </step>
+
+    <step number="5">
+      <title>Watchlist System</title>
+      <tasks>
+        - Build watchlist CRUD endpoints
+        - Create watchlist sidebar component
+        - Implement watchlist table with TanStack Table
+        - Add drag-and-drop reordering
+        - Build add symbol dialog
+        - Implement watchlist rename/delete
+        - Create default watchlist for new users
+        - Add real-time updates to watchlist
+      </tasks>
+    </step>
+
+    <step number="6">
+      <title>Portfolio Management</title>
+      <tasks>
+        - Build portfolio CRUD endpoints
+        - Create holdings table component
+        - Implement portfolio summary cards
+        - Build transaction form modal
+        - Create transaction history table
+        - Implement buy/sell transaction logic
+        - Calculate average cost on transactions
+        - Build portfolio selector
+      </tasks>
+    </step>
+
+    <step number="7">
+      <title>Advanced Portfolio Features</title>
+      <tasks>
+        - Implement tax lot tracking
+        - Build lot sale logic (FIFO)
+        - Create realized/unrealized gain calculations
+        - Build short-term/long-term gain classification
+        - Implement dividend transaction type
+        - Create portfolio performance chart
+        - Build allocation pie charts
+        - Add benchmark comparison
+      </tasks>
+    </step>
+
+    <step number="8">
+      <title>Alerts and Notifications</title>
+      <tasks>
+        - Build alert CRUD endpoints
+        - Create alert form modal
+        - Implement alert list component
+        - Build background alert checker
+        - Create alert trigger logic
+        - Implement in-app toast notifications
+        - Add browser notification support
+        - Build alert history view
+      </tasks>
+    </step>
+
+    <step number="9">
+      <title>News and Market Overview</title>
+      <tasks>
+        - Implement news API endpoints
+        - Build news card component
+        - Create news feed with infinite scroll
+        - Implement company-specific news
+        - Build market overview page
+        - Create top movers lists
+        - Implement sector heatmap
+        - Add market status indicator
+      </tasks>
+    </step>
+
+    <step number="10">
+      <title>Stock Screener</title>
+      <tasks>
+        - Build screener filter form
+        - Create screener API endpoint
+        - Implement filter logic on backend
+        - Build results table component
+        - Add save screener functionality
+        - Create saved screener management
+        - Implement quick-add to watchlist
+      </tasks>
+    </step>
+
+    <step number="11">
+      <title>Settings and Export</title>
+      <tasks>
+        - Build settings page with tabs
+        - Implement preference persistence
+        - Create password change functionality
+        - Build export endpoints (CSV, JSON)
+        - Implement watchlist export
+        - Create portfolio export
+        - Build transaction export
+        - Add data backup/restore
+      </tasks>
+    </step>
+
+    <step number="12">
+      <title>Polish and Optimization</title>
+      <tasks>
+        - Implement responsive design
+        - Add loading skeletons
+        - Create error boundaries
+        - Optimize chart performance
+        - Add keyboard navigation
+        - Implement ARIA labels
+        - Create 404 page
+        - Add offline detection
+        - Performance testing and optimization
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      - Real-time quotes update without page refresh
+      - Charts display accurate OHLCV data
+      - All CRUD operations work correctly
+      - Authentication protects private routes
+      - Transactions calculate portfolio correctly
+      - Alerts trigger at correct thresholds
+      - Search returns relevant results
+      - Data persists across sessions
+    </functionality>
+
+    <performance>
+      - Page load under 3 seconds
+      - Quote updates with less than 2 second latency
+      - Charts render 1000+ candles smoothly
+      - Tables handle 100+ rows without lag
+      - API responses under 500ms
+      - SSE reconnects within 5 seconds
+    </performance>
+
+    <user_experience>
+      - Intuitive navigation
+      - Clear visual feedback on actions
+      - Smooth animations
+      - Consistent styling
+      - Mobile-friendly layouts
+      - Accessible to keyboard users
+    </user_experience>
+
+    <code_quality>
+      - TypeScript types for all data
+      - Error handling on all API calls
+      - Input validation on forms
+      - SQL injection prevention
+      - XSS prevention
+      - Session security
+    </code_quality>
+  </success_criteria>
+</project_specification>
