@@ -10,6 +10,17 @@ function Sidebar({ onCreateWatchlist }) {
 
   useEffect(() => {
     fetchWatchlists();
+
+    // Listen for watchlist updates
+    const handleWatchlistUpdate = () => {
+      fetchWatchlists();
+    };
+
+    window.addEventListener('watchlist-updated', handleWatchlistUpdate);
+
+    return () => {
+      window.removeEventListener('watchlist-updated', handleWatchlistUpdate);
+    };
   }, []);
 
   const fetchWatchlists = async () => {

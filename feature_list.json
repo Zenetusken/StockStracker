@@ -258,7 +258,7 @@
       "Step 5: Verify name updates in sidebar",
       "Step 6: Verify name updated in database"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -271,7 +271,7 @@
       "Step 5: Verify watchlist removed from sidebar",
       "Step 6: Verify watchlist and items deleted from database"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",

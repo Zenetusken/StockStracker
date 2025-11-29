@@ -27,3 +27,8 @@
 {"level":"info","message":"MCP server started successfully","service":"mcp-puppeteer","timestamp":"2025-11-29 02:11:22.554"}
 {"arguments":{"url":"http://localhost:5173"},"level":"debug","message":"Tool call received","service":"mcp-puppeteer","timestamp":"2025-11-29 02:11:55.592","tool":"puppeteer_navigate"}
 {"0":"n","1":"p","2":"x","level":"info","message":"Launching browser with config:","service":"mcp-puppeteer","timestamp":"2025-11-29 02:11:55.594"}
+{"level":"info","message":"Puppeteer MCP Server closing","service":"mcp-puppeteer","timestamp":"2025-11-29 02:21:43.959"}
+{"level":"info","message":"Starting MCP server","service":"mcp-puppeteer","timestamp":"2025-11-29 02:21:51.345"}
+{"level":"info","message":"MCP server started successfully","service":"mcp-puppeteer","timestamp":"2025-11-29 02:21:51.348"}
+{"arguments":{"url":"http://localhost:5174"},"level":"debug","message":"Tool call received","service":"mcp-puppeteer","timestamp":"2025-11-29 02:23:08.143","tool":"puppeteer_navigate"}
+{"0":"n","1":"p","2":"x","level":"info","message":"Launching browser with config:","service":"mcp-puppeteer","timestamp":"2025-11-29 02:23:08.145"}

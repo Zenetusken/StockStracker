@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Trash2, TrendingUp, TrendingDown, Minus, Edit2, MoreVertical } from 'lucide-react';
 import Layout from '../components/Layout';
 import useSSE from '../hooks/useSSE';
+import RenameWatchlistModal from '../components/RenameWatchlistModal';
+import DeleteWatchlistModal from '../components/DeleteWatchlistModal';
 
 function WatchlistDetail() {
   const { id } = useParams();
@@ -13,6 +15,8 @@ function WatchlistDetail() {
   const [error, setError] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [removingSymbol, setRemovingSymbol] = useState(null);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Fetch watchlist details
   useEffect(() => {
@@ -98,6 +102,26 @@ function WatchlistDetail() {
     } finally {
       setRemovingSymbol(null);
     }
+  };
+
+  // Handle rename success
+  const handleRenameSuccess = (updatedWatchlist) => {
+    setWatchlist(prev => ({
+      ...prev,
+      name: updatedWatchlist.name,
+      color: updatedWatchlist.color,
+      icon: updatedWatchlist.icon,
+    }));
+    // Trigger a page refresh event for sidebar to update
+    window.dispatchEvent(new Event('watchlist-updated'));
+  };
+
+  // Handle delete success
+  const handleDeleteSuccess = () => {
+    // Navigate back to dashboard after deletion
+    navigate('/dashboard');
+    // Trigger a page refresh event for sidebar to update
+    window.dispatchEvent(new Event('watchlist-updated'));
   };
 
   // Format number with K/M/B suffix
@@ -198,8 +222,7 @@ function WatchlistDetail() {
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                   onClick={() => {
                     setShowMenu(false);
-                    // TODO: Implement rename functionality
-                    alert('Rename functionality coming soon');
+                    setShowRenameModal(true);
                   }}
                 >
                   <Edit2 className="w-4 h-4" />
@@ -209,8 +232,7 @@ function WatchlistDetail() {
                   className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                   onClick={() => {
                     setShowMenu(false);
-                    // TODO: Implement delete functionality
-                    alert('Delete functionality coming soon');
+                    setShowDeleteModal(true);
                   }}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -358,6 +380,21 @@ function WatchlistDetail() {
           </div>
         )}
       </div>
+
+      {/* Modals */}
+      <RenameWatchlistModal
+        watchlist={watchlist}
+        isOpen={showRenameModal}
+        onClose={() => setShowRenameModal(false)}
+        onSuccess={handleRenameSuccess}
+      />
+
+      <DeleteWatchlistModal
+        watchlist={watchlist}
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onSuccess={handleDeleteSuccess}
+      />
     </Layout>
   );
 }
