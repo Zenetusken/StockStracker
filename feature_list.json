@@ -296,7 +296,7 @@
       "Step 4: Click 'Price' header again",
       "Step 5: Verify symbols sorted by price descending"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -308,7 +308,7 @@
       "Step 4: Verify negative values at top (biggest losers)",
       "Step 5: Click header again for ascending sort"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -321,7 +321,7 @@
       "Step 5: Verify TSLA added to watchlist",
       "Step 6: Verify quote loads for TSLA"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
@@ -334,7 +334,7 @@
       "Step 5: Open CSV and verify headers (Symbol, Price, Change, etc.)",
       "Step 6: Verify all watchlist symbols present in CSV"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "functional",
