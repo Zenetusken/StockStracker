@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production builds
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+backend/database/*.db
+backend/database/*.db-shm
+backend/database/*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
+*.log
+
+# Testing
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# API Keys (though we use /tmp/api-key, be safe)
+api-key
+*.key
