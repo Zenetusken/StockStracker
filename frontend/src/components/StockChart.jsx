@@ -14,10 +14,30 @@ import { createChart } from 'lightweight-charts';
 // Using #f9fafb (gray-50) - very light, close to white but slightly grey
 const CHART_BACKGROUND_COLOR = '#f9fafb';
 
+// Helper function to calculate Simple Moving Average
+function calculateSMA(data, period) {
+  if (!data || data.length < period) return [];
+
+  const smaData = [];
+  for (let i = period - 1; i < data.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < period; j++) {
+      sum += data[i - j].close;
+    }
+    const smaValue = sum / period;
+    smaData.push({
+      time: data[i].time,
+      value: smaValue
+    });
+  }
+  return smaData;
+}
+
 function StockChart({ symbol, chartType: initialChartType = 'candlestick', timeframe: initialTimeframe = '6M' }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
+  const smaSeriesRef = useRef(null); // Reference for SMA line series
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartType, setChartType] = useState(initialChartType);
@@ -31,6 +51,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [showIndicators, setShowIndicators] = useState(false);
+  const [smaEnabled, setSmaEnabled] = useState(false);
+  const [smaPeriod, setSmaPeriod] = useState(20);
 
   // Load saved timeframe when symbol changes
   useEffect(() => {
@@ -215,6 +238,22 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
         seriesRef.current = seriesInstance;
 
+        // Add SMA indicator if enabled
+        if (smaEnabled && smaPeriod > 0) {
+          const smaData = calculateSMA(chartData, smaPeriod);
+          if (smaData.length > 0) {
+            const smaSeries = chartInstance.addLineSeries({
+              color: '#FF6B00', // Orange color for SMA
+              lineWidth: 2,
+              title: `SMA(${smaPeriod})`,
+              priceLineVisible: false,
+              lastValueVisible: true,
+            });
+            smaSeries.setData(smaData);
+            smaSeriesRef.current = smaSeries;
+          }
+        }
+
         // Fit content
         chartInstance.timeScale().fitContent();
 
@@ -285,8 +324,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
       chartRef.current = null;
       seriesRef.current = null;
+      smaSeriesRef.current = null;
     };
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, smaEnabled, smaPeriod]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -427,6 +467,20 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         {/* Action Buttons */}
         <div className="flex gap-2">
           <button
+            onClick={() => setShowIndicators(!showIndicators)}
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+              showIndicators || smaEnabled
+                ? 'bg-blue-500 text-white hover:bg-blue-600'
+                : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+            }`}
+            title="Technical Indicators"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+            </svg>
+            Indicators
+          </button>
+          <button
             onClick={handleResetZoom}
             className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-gray-300 hover:bg-gray-400 rounded-lg transition-colors"
           >
@@ -500,6 +554,64 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Indicators Panel */}
+      {showIndicators && (
+        <div className="mb-4 p-4 bg-white border border-gray-300 rounded-lg shadow-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Technical Indicators</h3>
+
+          {/* SMA Indicator */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="sma-enabled"
+                  checked={smaEnabled}
+                  onChange={(e) => setSmaEnabled(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <label htmlFor="sma-enabled" className="text-sm font-medium text-gray-700">
+                  Simple Moving Average (SMA)
+                </label>
+              </div>
+              {smaEnabled && (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="sma-period" className="text-sm text-gray-600">
+                    Period:
+                  </label>
+                  <select
+                    id="sma-period"
+                    value={smaPeriod}
+                    onChange={(e) => setSmaPeriod(parseInt(e.target.value))}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={200}>200</option>
+                  </select>
+                </div>
+              )}
+            </div>
+            {smaEnabled && (
+              <div className="text-xs text-gray-500 pl-7">
+                Displays a {smaPeriod}-period moving average line on the chart (orange line)
+              </div>
+            )}
+          </div>
+
+          {/* Close button */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              onClick={() => setShowIndicators(false)}
+              className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
