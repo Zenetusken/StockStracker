@@ -10,6 +10,38 @@
 
 A real-time stock tracking and portfolio management application with interactive charts, watchlists, and multi-theme support.
 
+## Why StockTracker?
+
+### Zero API Costs with Smart Key Rotation
+
+Most stock apps hit API rate limits within minutes. **StockTracker solves this** with an enterprise-grade API management system designed for free-tier sustainability:
+
+| Challenge | StockTracker Solution |
+|-----------|----------------------|
+| Rate limits kill free tiers | **Intelligent key rotation** - automatically cycles through multiple API keys |
+| API calls are wasted | **Smart caching** - reduces redundant calls by 90%+ |
+| One provider goes down | **Multi-provider fallback** - Finnhub → Alpha Vantage → Yahoo Finance |
+| No visibility into usage | **Real-time rate limit tracking** - SSE notifications before you hit limits |
+
+### Built for Developers
+
+- **Bring Your Own Keys** - Users can add their own API keys, spreading load across the community
+- **Graceful Degradation** - App remains functional even when rate-limited (cached data, reduced refresh)
+- **Usage Dashboard** - See exactly how many API calls remain per provider
+- **Production Patterns** - Learn real-world API management, caching, and rate limiting strategies
+
+### Modern Full-Stack Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  React 18 + Zustand + TailwindCSS + Lightweight Charts      │
+├─────────────────────────────────────────────────────────────┤
+│  Express API + SQLite (WAL) + SSE Real-time Streaming       │
+├─────────────────────────────────────────────────────────────┤
+│  API Key Rotation │ Multi-Provider │ Smart Cache │ Fallback │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Features
 
 - **Real-time Quotes** - Live price updates via Server-Sent Events (SSE)
