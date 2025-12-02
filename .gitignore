@@ -63,6 +63,15 @@ verify-*.js
 verify-*.md
 backend/test-*.mjs
 
+# Test documentation
+TEST-*.md
+TEST-*.txt
+MANUAL-TEST-*.md
+MANUAL_TEST*.md
+MANUAL_TESTING.md
+TESTING.md
+*-TESTING-RESULTS.md
+
 # Test screenshots
 test-screenshots/
 
