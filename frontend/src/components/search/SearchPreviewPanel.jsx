@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import MiniChart from './MiniChart';
 import useSearchPreview from '../../hooks/useSearchPreview';
+import api from '../../api/client';
 
 /**
  * SearchPreviewPanel Component
@@ -38,33 +39,22 @@ function SearchPreviewPanel({ symbol, description, quote, onAddToWatchlist }) {
   useEffect(() => {
     const fetchWatchlists = async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/watchlists', {
-          credentials: 'include',
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setWatchlists(data);
+        const data = await api.get('/watchlists');
+        setWatchlists(data);
 
-          // Check which watchlists already contain this symbol
-          const containingSymbol = new Set();
-          for (const watchlist of data) {
-            try {
-              const itemsResponse = await fetch(
-                `http://localhost:3001/api/watchlists/${watchlist.id}`,
-                { credentials: 'include' }
-              );
-              if (itemsResponse.ok) {
-                const watchlistData = await itemsResponse.json();
-                if (watchlistData.items?.some(item => item.symbol === symbol)) {
-                  containingSymbol.add(watchlist.id);
-                }
-              }
-            } catch {
-              // Ignore errors for individual watchlist checks
+        // Check which watchlists already contain this symbol
+        const containingSymbol = new Set();
+        for (const watchlist of data) {
+          try {
+            const watchlistData = await api.get(`/watchlists/${watchlist.id}`);
+            if (watchlistData.items?.some(item => item.symbol === symbol)) {
+              containingSymbol.add(watchlist.id);
             }
+          } catch {
+            // Ignore errors for individual watchlist checks
           }
-          setAddedToWatchlists(containingSymbol);
         }
+        setAddedToWatchlists(containingSymbol);
       } catch (err) {
         console.error('Failed to fetch watchlists:', err);
       }
@@ -82,30 +72,28 @@ function SearchPreviewPanel({ symbol, description, quote, onAddToWatchlist }) {
 
     setAddingToWatchlist(true);
     try {
-      const response = await fetch(
-        `http://localhost:3001/api/watchlists/${watchlistId}/items`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ symbol }),
-        }
-      );
+      await api.post(`/watchlists/${watchlistId}/items`, { symbol });
 
-      if (response.ok || response.status === 409) {
-        // Success or already exists - mark as added either way
+      // Success - mark as added
+      setAddedToWatchlists(prev => new Set([...prev, watchlistId]));
+      setLastAddedName(watchlistName);
+      setShowWatchlistDropdown(false);
+
+      if (onAddToWatchlist) {
+        onAddToWatchlist(symbol, watchlistId);
+      }
+      // Dispatch event to refresh watchlists in sidebar
+      window.dispatchEvent(new CustomEvent('watchlist-updated'));
+    } catch (err) {
+      // Check if it's a 409 (already exists) - treat as success
+      if (err.status === 409) {
         setAddedToWatchlists(prev => new Set([...prev, watchlistId]));
         setLastAddedName(watchlistName);
         setShowWatchlistDropdown(false);
-
-        if (onAddToWatchlist) {
-          onAddToWatchlist(symbol, watchlistId);
-        }
-        // Dispatch event to refresh watchlists in sidebar
         window.dispatchEvent(new CustomEvent('watchlist-updated'));
+      } else {
+        console.error('Failed to add to watchlist:', err);
       }
-    } catch (err) {
-      console.error('Failed to add to watchlist:', err);
     } finally {
       setAddingToWatchlist(false);
     }
