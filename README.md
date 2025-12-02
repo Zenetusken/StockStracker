@@ -10,6 +10,12 @@
 
 A real-time stock tracking and portfolio management application with interactive charts, watchlists, and multi-theme support.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="StockTracker Dashboard" width="800">
+  <br>
+  <em>Dashboard with live search, instant preview panel, and the Jade Requiem theme</em>
+</p>
+
 ## Why StockTracker?
 
 ### Zero API Costs with Smart Key Rotation
