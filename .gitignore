@@ -56,6 +56,7 @@ debug-*.js
 get-*.mjs
 check-*.mjs
 check-*.js
+check-db.js
 setup-*.mjs
 setup-*.js
 create-*.js
