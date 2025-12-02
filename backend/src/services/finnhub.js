@@ -1,80 +1,7 @@
 import fs from 'fs';
 import alphaVantageService from './alphavantage.js';
-
-/**
- * Mock data for development/demo when API key is not available
- */
-const MOCK_DATA = {
-  quotes: {
-    AAPL: { c: 178.72, h: 179.50, l: 177.25, o: 178.10, pc: 177.50, t: Date.now() / 1000 },
-    GOOGL: { c: 140.25, h: 141.20, l: 139.50, o: 140.00, pc: 139.80, t: Date.now() / 1000 },
-    MSFT: { c: 378.91, h: 380.25, l: 377.40, o: 378.00, pc: 377.20, t: Date.now() / 1000 },
-    TSLA: { c: 242.84, h: 245.30, l: 240.10, o: 241.50, pc: 240.50, t: Date.now() / 1000 },
-    AMZN: { c: 152.48, h: 153.90, l: 151.20, o: 152.00, pc: 151.50, t: Date.now() / 1000 },
-  },
-  profiles: {
-    AAPL: { name: 'Apple Inc', ticker: 'AAPL', exchange: 'NASDAQ', country: 'US', currency: 'USD', finnhubIndustry: 'Technology' },
-    GOOGL: { name: 'Alphabet Inc Class A', ticker: 'GOOGL', exchange: 'NASDAQ', country: 'US', currency: 'USD', finnhubIndustry: 'Technology' },
-    MSFT: { name: 'Microsoft Corporation', ticker: 'MSFT', exchange: 'NASDAQ', country: 'US', currency: 'USD', finnhubIndustry: 'Technology' },
-    TSLA: { name: 'Tesla Inc', ticker: 'TSLA', exchange: 'NASDAQ', country: 'US', currency: 'USD', finnhubIndustry: 'Auto Manufacturers' },
-    AMZN: { name: 'Amazon.com Inc', ticker: 'AMZN', exchange: 'NASDAQ', country: 'US', currency: 'USD', finnhubIndustry: 'Retail' },
-  },
-  search: [
-    { symbol: 'AAPL', displaySymbol: 'AAPL', description: 'Apple Inc', type: 'Common Stock' },
-    { symbol: 'GOOGL', displaySymbol: 'GOOGL', description: 'Alphabet Inc Class A', type: 'Common Stock' },
-    { symbol: 'MSFT', displaySymbol: 'MSFT', description: 'Microsoft Corporation', type: 'Common Stock' },
-    { symbol: 'TSLA', displaySymbol: 'TSLA', description: 'Tesla Inc', type: 'Common Stock' },
-    { symbol: 'AMZN', displaySymbol: 'AMZN', description: 'Amazon.com Inc', type: 'Common Stock' },
-  ]
-};
-
-/**
- * Generate mock OHLC data for demonstration
- */
-function generateMockCandles(symbol, days = 180) {
-  const now = Math.floor(Date.now() / 1000);
-  const dayInSeconds = 24 * 60 * 60;
-
-  const t = [];
-  const o = [];
-  const h = [];
-  const l = [];
-  const c = [];
-  const v = [];
-
-  // Get base price from mock quotes or use default
-  let basePrice = 150;
-  const mockQuote = MOCK_DATA.quotes[symbol];
-  if (mockQuote) {
-    basePrice = mockQuote.c;
-  }
-
-  // Generate candles going backwards in time
-  for (let i = days; i >= 0; i--) {
-    const timestamp = now - (i * dayInSeconds);
-    const dayOffset = days - i;
-
-    // Add some trend and randomness
-    const trend = Math.sin(dayOffset / 20) * 10;
-    const random = (Math.random() - 0.5) * 5;
-    const dayPrice = basePrice + trend + random - (days - dayOffset) * 0.1;
-
-    const open = dayPrice + (Math.random() - 0.5) * 2;
-    const close = dayPrice + (Math.random() - 0.5) * 2;
-    const high = Math.max(open, close) + Math.random() * 3;
-    const low = Math.min(open, close) - Math.random() * 3;
-    const volume = Math.floor(50000000 + Math.random() * 100000000);
-
-    t.push(timestamp);
-    o.push(parseFloat(open.toFixed(2)));
-    h.push(parseFloat(high.toFixed(2)));
-    l.push(parseFloat(low.toFixed(2)));
-    c.push(parseFloat(close.toFixed(2)));
-    v.push(volume);
-  }
-
-  return { c, h, l, o, t, v, s: 'ok' };
-}
+import yahooFinanceService from './yahoo.js';
+import { getKeyProvider } from './api-keys/index.js';
 
 /**
  * Finnhub API Service
@@ -84,34 +11,78 @@ function generateMockCandles(symbol, days = 180) {
 class FinnhubService {
   constructor() {
     this.baseUrl = 'https://finnhub.io/api/v1';
-    this.apiKey = this.loadApiKey();
+    this._apiKey = null;
+    this._apiKeyLoaded = false;
     this.cache = new Map();
     this.cacheTimeout = 10000; // 10 seconds for quote data
     this.searchCacheTimeout = 300000; // 5 minutes for search/symbol data
   }
 
-  loadApiKey() {
+  /**
+   * Lazy-load API key (called on first use to allow dotenv to initialize first)
+   * This is necessary because ES module imports are hoisted before dotenv.config() runs
+   */
+  get apiKey() {
+    if (!this._apiKeyLoaded) {
+      this._apiKey = this._loadApiKey();
+      this._apiKeyLoaded = true;
+    }
+    return this._apiKey;
+  }
+
+  _loadApiKey() {
+    // Priority 1: KeyProvider (database-managed keys with rotation)
     try {
-      // Try to load from /tmp/api-key/finnhub.io.key first
+      const keyProvider = getKeyProvider();
+      if (keyProvider.isAvailable()) {
+        const key = keyProvider.getKey('finnhub', {
+          fallbackLoader: () => this._loadKeyFromEnvOrFile()
+        });
+        if (key) {
+          console.log('✓ Finnhub API key loaded via KeyProvider');
+          return key;
+        }
+      }
+    } catch (e) {
+      // Fallback to legacy loading
+    }
+
+    return this._loadKeyFromEnvOrFile();
+  }
+
+  _loadKeyFromEnvOrFile() {
+    // Priority 2: Environment variable (from .env file via dotenv)
+    if (process.env.FINNHUB_API_KEY && process.env.FINNHUB_API_KEY.trim()) {
+      console.log('✓ Finnhub API key loaded from environment variable (FINNHUB_API_KEY)');
+      return process.env.FINNHUB_API_KEY.trim();
+    }
+
+    // Priority 3: File-based key (legacy support)
+    try {
       const apiKeyPath = '/tmp/api-key/finnhub.io.key';
       if (fs.existsSync(apiKeyPath)) {
         const key = fs.readFileSync(apiKeyPath, 'utf8').trim();
-        console.log('✓ Finnhub API key loaded from /tmp/api-key/finnhub.io.key');
-        return key;
+        if (key) {
+          console.log('✓ Finnhub API key loaded from /tmp/api-key/finnhub.io.key');
+          return key;
+        }
       }
     } catch (error) {
       console.warn('Could not load API key from /tmp/api-key/finnhub.io.key:', error.message);
     }
 
-    // Fallback to environment variable
-    if (process.env.FINNHUB_API_KEY) {
-      console.log('✓ Finnhub API key loaded from environment variable');
-      return process.env.FINNHUB_API_KEY;
-    }
-
-    // Use demo key as fallback (very limited)
-    console.warn('⚠ Using Finnhub demo API key - limited functionality');
+    // No API key found - warn user
+    console.warn('⚠ No Finnhub API key found - real-time quotes will not work');
+    console.warn('  Add to .env as: FINNHUB_API_KEY=your_key_here');
+    console.warn('  Get a free key at: https://finnhub.io/register');
     return 'demo';
+  }
+
+  /**
+   * Check if we have a valid API key (not demo mode)
+   */
+  hasApiKey() {
+    return this.apiKey !== null && this.apiKey !== 'demo';
   }
 
   /**
@@ -137,8 +108,9 @@ class FinnhubService {
       throw new Error('Using demo mode - API calls not available');
     }
 
+    const keyValue = this.apiKey; // Store for tracking
     const url = new URL(`${this.baseUrl}${endpoint}`);
-    url.searchParams.append('token', this.apiKey);
+    url.searchParams.append('token', keyValue);
 
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
@@ -147,6 +119,26 @@ class FinnhubService {
     });
 
     const response = await fetch(url.toString());
+
+    // Track the API call (regardless of success/failure - the call was made)
+    try {
+      const keyProvider = getKeyProvider();
+      keyProvider.recordCall('finnhub', keyValue, endpoint);
+    } catch (e) {
+      console.warn('[Finnhub] Failed to record API usage:', e.message);
+    }
+
+    // Handle rate limiting (429)
+    if (response.status === 429) {
+      try {
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+        const keyProvider = getKeyProvider();
+        keyProvider.recordRateLimit('finnhub', keyValue, retryAfter);
+      } catch (e) {
+        // Silent fail for rate limit recording
+      }
+      throw new Error('Finnhub API rate limited');
+    }
 
     if (!response.ok) {
       const error = await response.text();
@@ -159,59 +151,163 @@ class FinnhubService {
   /**
    * Get real-time quote for a symbol
    * Returns: { c: current, h: high, l: low, o: open, pc: previous close, t: timestamp }
+   *
+   * Fallback Order:
+   * 1. Finnhub (if API key available)
+   * 2. Yahoo Finance (free, no API key required)
+   * 3. Alpha Vantage (if API key available) - last resort due to 25 calls/day limit
+   * 4. Error - no mock data
    */
   async getQuote(symbol) {
-    const cacheKey = `quote:${symbol.toUpperCase()}`;
+    const upperSymbol = symbol.toUpperCase();
+    const cacheKey = `quote:${upperSymbol}`;
     return this.getCached(cacheKey, async () => {
-      try {
-        return await this.request('/quote', { symbol: symbol.toUpperCase() });
-      } catch (error) {
-        // Log the actual error and throw - no mock fallback
-        console.error(`❌ API call failed for ${symbol.toUpperCase()}:`, error.message);
-        throw new Error(`Failed to fetch real-time quote for ${symbol.toUpperCase()}: ${error.message}`);
+      // 1. Try Finnhub first (if we have a valid API key)
+      if (this.hasApiKey()) {
+        try {
+          const finnhubData = await this.request('/quote', { symbol: upperSymbol });
+          if (finnhubData && finnhubData.c !== 0) {
+            console.log(`✓ Using Finnhub quote for ${upperSymbol}`);
+            return finnhubData;
+          }
+        } catch (finnhubError) {
+          console.log(`Finnhub quote not available for ${upperSymbol}: ${finnhubError.message}`);
+        }
       }
+
+      // 2. Try Yahoo Finance (free, no API key required)
+      try {
+        console.log(`Trying Yahoo Finance quote for ${upperSymbol}...`);
+        const yahooData = await yahooFinanceService.getQuote(upperSymbol);
+        if (yahooData && yahooData.c) {
+          console.log(`✓ Using Yahoo Finance quote for ${upperSymbol}`);
+          return yahooData;
+        }
+      } catch (yahooError) {
+        console.log(`Yahoo Finance quote error for ${upperSymbol}: ${yahooError.message}`);
+      }
+
+      // 3. Try Alpha Vantage (last resort - only 25 calls/day on free tier)
+      if (alphaVantageService.hasApiKey()) {
+        try {
+          console.log(`Trying Alpha Vantage quote for ${upperSymbol}...`);
+          const avData = await alphaVantageService.getQuote(upperSymbol);
+          if (avData && avData.c) {
+            console.log(`✓ Using Alpha Vantage quote for ${upperSymbol}`);
+            return avData;
+          }
+        } catch (avError) {
+          console.log(`Alpha Vantage quote error for ${upperSymbol}: ${avError.message}`);
+        }
+      }
+
+      // 4. Error - no mock data fallback
+      console.error(`❌ No quote data available for ${upperSymbol} - all providers exhausted`);
+      throw new Error(`No quote data available for ${upperSymbol}. All API providers exhausted or rate limited.`);
     }, this.cacheTimeout);
   }
 
   /**
    * Get company profile
    * Returns: { name, ticker, country, currency, exchange, ipo, marketCapitalization, ... }
+   *
+   * Fallback Order:
+   * 1. Finnhub (if API key available)
+   * 2. Yahoo Finance (free, no API key required)
+   * 3. Alpha Vantage (if API key available) - last resort due to 25 calls/day limit
+   * 4. Error - no mock data
    */
   async getCompanyProfile(symbol) {
-    const cacheKey = `profile:${symbol.toUpperCase()}`;
+    const upperSymbol = symbol.toUpperCase();
+    const cacheKey = `profile:${upperSymbol}`;
     return this.getCached(cacheKey, async () => {
-      try {
-        return await this.request('/stock/profile2', { symbol: symbol.toUpperCase() });
-      } catch (error) {
-        // Fallback to mock data
-        const mockProfile = MOCK_DATA.profiles[symbol.toUpperCase()];
-        if (mockProfile) {
-          console.log(`Using mock profile for ${symbol.toUpperCase()}`);
-          return mockProfile;
+      // 1. Try Finnhub first (if we have a valid API key)
+      if (this.hasApiKey()) {
+        try {
+          const profile = await this.request('/stock/profile2', { symbol: upperSymbol });
+          if (profile && profile.name) {
+            console.log(`✓ Using Finnhub profile for ${upperSymbol}`);
+            return profile;
+          }
+        } catch (finnhubError) {
+          console.log(`Finnhub profile not available for ${upperSymbol}: ${finnhubError.message}`);
         }
-        throw error;
       }
+
+      // 2. Try Yahoo Finance (free, no API key required)
+      try {
+        console.log(`Trying Yahoo Finance profile for ${upperSymbol}...`);
+        const yahooProfile = await yahooFinanceService.getProfile(upperSymbol);
+        if (yahooProfile && yahooProfile.name) {
+          console.log(`✓ Using Yahoo Finance profile for ${upperSymbol}`);
+          return yahooProfile;
+        }
+      } catch (yahooError) {
+        console.log(`Yahoo Finance profile error for ${upperSymbol}: ${yahooError.message}`);
+      }
+
+      // 3. Try Alpha Vantage (last resort - only 25 calls/day on free tier)
+      if (alphaVantageService.hasApiKey()) {
+        try {
+          console.log(`Trying Alpha Vantage profile for ${upperSymbol}...`);
+          const avProfile = await alphaVantageService.getCompanyOverview(upperSymbol);
+          if (avProfile && avProfile.name) {
+            console.log(`✓ Using Alpha Vantage profile for ${upperSymbol}`);
+            return avProfile;
+          }
+        } catch (avError) {
+          console.log(`Alpha Vantage profile error for ${upperSymbol}: ${avError.message}`);
+        }
+      }
+
+      // 4. Error - no mock data fallback
+      console.error(`❌ No profile data available for ${upperSymbol} - all providers exhausted`);
+      throw new Error(`No company profile available for ${upperSymbol}. All API providers exhausted or rate limited.`);
     }, this.searchCacheTimeout);
   }
 
   /**
    * Search for symbols
    * Returns: { count, result: [{ description, displaySymbol, symbol, type }] }
+   *
+   * Fallback Order:
+   * 1. Finnhub (if API key available)
+   * 2. Alpha Vantage (if API key available)
+   * 3. Error - no mock data
    */
   async searchSymbols(query) {
     const cacheKey = `search:${query.toLowerCase()}`;
     return this.getCached(cacheKey, async () => {
-      try {
-        return await this.request('/search', { q: query });
-      } catch (error) {
-        // Fallback to mock data
-        console.log(`Using mock search results for "${query}"`);
-        const results = MOCK_DATA.search.filter(item =>
-          item.symbol.toLowerCase().includes(query.toLowerCase()) ||
-          item.description.toLowerCase().includes(query.toLowerCase())
-        );
-        return { count: results.length, result: results };
+      // 1. Try Finnhub first
+      if (this.hasApiKey()) {
+        try {
+          const result = await this.request('/search', { q: query });
+          if (result && result.count > 0) {
+            console.log(`✓ Using Finnhub search results for "${query}"`);
+            return result;
+          }
+        } catch (finnhubError) {
+          console.log(`Finnhub search error for "${query}": ${finnhubError.message}`);
+        }
       }
+
+      // 2. Try Alpha Vantage (if API key available)
+      if (alphaVantageService.hasApiKey()) {
+        try {
+          console.log(`Trying Alpha Vantage search for "${query}"...`);
+          const avResult = await alphaVantageService.searchSymbols(query);
+          if (avResult && avResult.count > 0) {
+            console.log(`✓ Using Alpha Vantage search results for "${query}"`);
+            return avResult;
+          }
+        } catch (avError) {
+          console.log(`Alpha Vantage search error for "${query}": ${avError.message}`);
+        }
+      }
+
+      // 3. Error - no mock data fallback
+      console.error(`❌ No search results for "${query}" - all providers exhausted`);
+      throw new Error(`No search results for "${query}". All API providers exhausted or rate limited.`);
     }, this.searchCacheTimeout);
   }
 
@@ -231,57 +327,159 @@ class FinnhubService {
   }
 
   /**
-   * Get candles (OHLCV data)
+   * Map resolution to Finnhub format
+   * Finnhub supported resolutions: 1, 5, 15, 30, 60, D, W, M
+   */
+  _mapResolutionToFinnhub(resolution) {
+    const mapping = {
+      '1': '1',
+      '5': '5',
+      '15': '15',
+      '30': '30',
+      '60': '60',
+      'D': 'D',
+      'D1': 'D',
+      'W': 'W',
+      'M': 'M',
+    };
+    return mapping[resolution] || 'D';
+  }
+
+  /**
+   * Fetch candle data directly from Finnhub API
+   * Finnhub provides historical candle data (free tier has limitations but works for US stocks)
+   */
+  async _fetchFinnhubCandles(symbol, resolution, from, to) {
+    if (!this.hasApiKey()) {
+      return null;
+    }
+
+    try {
+      const finnhubResolution = this._mapResolutionToFinnhub(resolution);
+      console.log(`[Finnhub] Fetching candles for ${symbol} (${finnhubResolution})...`);
+
+      const data = await this.request('/stock/candle', {
+        symbol: symbol,
+        resolution: finnhubResolution,
+        from: from,
+        to: to,
+      });
+
+      // Finnhub returns { s: 'ok', c: [], h: [], l: [], o: [], t: [], v: [] }
+      // or { s: 'no_data' } if no data available
+      if (data && data.s === 'ok' && data.t && data.t.length > 0) {
+        console.log(`✓ Finnhub: ${data.t.length} candles for ${symbol} (${finnhubResolution})`);
+        return data;
+      }
+
+      if (data && data.s === 'no_data') {
+        console.log(`[Finnhub] No data for ${symbol} (${finnhubResolution})`);
+      }
+
+      return null;
+    } catch (error) {
+      console.log(`[Finnhub] Candle error for ${symbol}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get candles (OHLCV data) - Multi-provider cascade for maximum intraday coverage
    * Returns: { c: [], h: [], l: [], o: [], s: 'ok', t: [], v: [] }
    *
-   * Priority:
-   * 1. Try Finnhub (if paid account with candle access)
-   * 2. Try Alpha Vantage (free tier includes historical data)
-   * 3. Fall back to mock data (last resort)
+   * Provider Cascade (for intraday data):
+   * 1. Yahoo Finance (free, good coverage for most stocks)
+   * 2. Finnhub (if API key available, good for US stocks)
+   * 3. Daily fallback (LAST RESORT - only if both providers fail for intraday)
+   *
+   * This ensures maximum intraday data coverage by trying multiple sources.
    */
   async getCandles(symbol, resolution, from, to) {
-    const cacheKey = `candles:${symbol}:${resolution}:${from}:${to}`;
+    const upperSymbol = symbol.toUpperCase();
+    const cacheKey = `candles:${upperSymbol}:${resolution}:${from}:${to}`;
+    const isIntradayRequest = ['1', '5', '15', '30', '60'].includes(resolution);
+
     return this.getCached(cacheKey, async () => {
-      // Try Finnhub first (for paid accounts)
+      let intradayData = null;
+
+      // ========== PROVIDER 1: Yahoo Finance (try intraday first) ==========
       try {
-        const finnhubData = await this.request('/stock/candle', {
-          symbol: symbol.toUpperCase(),
-          resolution,
-          from,
-          to
-        });
-        if (finnhubData && finnhubData.s === 'ok') {
-          console.log(`✓ Using Finnhub candle data for ${symbol.toUpperCase()}`);
+        // Call Yahoo's _fetchCandles directly to avoid its internal daily fallback
+        const yahooData = await yahooFinanceService._fetchCandles(upperSymbol, resolution, from, to);
+        if (yahooData && yahooData.s === 'ok' && yahooData.t && yahooData.t.length > 0) {
+          console.log(`✓ Yahoo Finance: ${yahooData.t.length} intraday candles for ${upperSymbol} (${resolution})`);
+          return yahooData;
+        }
+      } catch (yahooError) {
+        console.log(`[Yahoo] Intraday error for ${upperSymbol}: ${yahooError.message}`);
+      }
+
+      // ========== PROVIDER 2: Finnhub (if Yahoo intraday failed) ==========
+      if (isIntradayRequest && this.hasApiKey()) {
+        console.log(`[Cascade] Yahoo intraday failed for ${upperSymbol}, trying Finnhub...`);
+        const finnhubData = await this._fetchFinnhubCandles(upperSymbol, resolution, from, to);
+        if (finnhubData && finnhubData.s === 'ok' && finnhubData.t && finnhubData.t.length > 0) {
+          finnhubData.provider = 'finnhub';
           return finnhubData;
         }
-      } catch (finnhubError) {
-        console.log(`Finnhub candles not available for ${symbol.toUpperCase()}: ${finnhubError.message}`);
       }
 
-      // Try Alpha Vantage (free tier includes historical data)
-      if (alphaVantageService.hasApiKey()) {
+      // ========== PROVIDER 3: Daily Fallback (LAST RESORT) ==========
+      if (isIntradayRequest) {
+        console.log(`⚠ [Cascade] Both providers failed for ${upperSymbol} intraday (${resolution}), trying daily fallback...`);
+
+        // Try Yahoo daily
         try {
-          console.log(`Trying Alpha Vantage for ${symbol.toUpperCase()}...`);
-          const avData = await alphaVantageService.getCandles(symbol, resolution, from, to);
-          if (avData && avData.s === 'ok' && avData.t && avData.t.length > 0) {
-            console.log(`✓ Using Alpha Vantage candle data for ${symbol.toUpperCase()} (${avData.t.length} points)`);
-            return avData;
+          const dailyData = await yahooFinanceService._fetchCandles(upperSymbol, 'D', from, to);
+          if (dailyData && dailyData.s === 'ok' && dailyData.t && dailyData.t.length > 0) {
+            dailyData.fallback = true;
+            dailyData.originalResolution = resolution;
+            console.log(`⚠ ${upperSymbol}: Using daily fallback (${dailyData.t.length} candles) - intraday unavailable from all providers`);
+            return dailyData;
           }
-        } catch (avError) {
-          console.log(`Alpha Vantage error for ${symbol.toUpperCase()}: ${avError.message}`);
+        } catch (dailyError) {
+          console.log(`[Yahoo] Daily fallback error for ${upperSymbol}: ${dailyError.message}`);
+        }
+
+        // Try Finnhub daily as absolute last resort
+        if (this.hasApiKey()) {
+          const finnhubDaily = await this._fetchFinnhubCandles(upperSymbol, 'D', from, to);
+          if (finnhubDaily && finnhubDaily.s === 'ok' && finnhubDaily.t && finnhubDaily.t.length > 0) {
+            finnhubDaily.fallback = true;
+            finnhubDaily.originalResolution = resolution;
+            finnhubDaily.provider = 'finnhub';
+            console.log(`⚠ ${upperSymbol}: Using Finnhub daily fallback (${finnhubDaily.t.length} candles)`);
+            return finnhubDaily;
+          }
         }
       }
 
-      // Last resort: mock data
-      console.log(`⚠ Using mock candle data for ${symbol.toUpperCase()} (no API keys available for historical data)`);
-      console.log(`  To get real data, add an Alpha Vantage API key to /tmp/api-key/alphavantage.key`);
-      console.log(`  Get a free key at: https://www.alphavantage.co/support/#api-key`);
+      // ========== Non-intraday requests (D, W, M) - simpler flow ==========
+      if (!isIntradayRequest) {
+        // Try Yahoo first
+        try {
+          const yahooData = await yahooFinanceService._fetchCandles(upperSymbol, resolution, from, to);
+          if (yahooData && yahooData.s === 'ok' && yahooData.t && yahooData.t.length > 0) {
+            console.log(`✓ Yahoo Finance: ${yahooData.t.length} candles for ${upperSymbol} (${resolution})`);
+            return yahooData;
+          }
+        } catch (error) {
+          console.log(`[Yahoo] Error for ${upperSymbol} (${resolution}): ${error.message}`);
+        }
 
-      const fromDate = new Date(parseInt(from) * 1000);
-      const toDate = new Date(parseInt(to) * 1000);
-      const days = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24));
+        // Try Finnhub
+        if (this.hasApiKey()) {
+          const finnhubData = await this._fetchFinnhubCandles(upperSymbol, resolution, from, to);
+          if (finnhubData) {
+            finnhubData.provider = 'finnhub';
+            return finnhubData;
+          }
+        }
+      }
 
-      return generateMockCandles(symbol.toUpperCase(), Math.min(days, 365));
+      // Error - all providers exhausted
+      console.error(`❌ No candle data available for ${upperSymbol} (${resolution}) - all providers exhausted`);
+      throw new Error(`No candle data available for ${upperSymbol}. All providers (Yahoo, Finnhub) returned no data.`);
     }, this.cacheTimeout);
   }
 
@@ -376,20 +574,13 @@ class FinnhubService {
 
   /**
    * Get enriched quote with all calculated fields
+   * Note: Volume is no longer fetched here - it comes from the chart candles
+   * when needed. This reduces API calls from 2 to 1 per quote request.
    */
   async getEnrichedQuote(symbol) {
     const quoteData = await this.getQuote(symbol);
-    const enriched = this.enrichQuote(symbol, quoteData);
-
-    // Try to get volume (uses separate cache)
-    if (enriched) {
-      const volume = await this.getVolume(symbol);
-      if (volume) {
-        enriched.volume = volume;
-      }
-    }
-
-    return enriched;
+    return this.enrichQuote(symbol, quoteData);
+    // Volume is available from getCandles() when displaying charts
   }
 
   /**
