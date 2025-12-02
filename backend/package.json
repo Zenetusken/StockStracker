@@ -1,7 +1,7 @@
 {
   "name": "stocktracker-pro-backend",
   "version": "1.0.0",
-  "description": "StockTracker Pro - Backend API Server",
+  "description": "StockTracker - Backend API Server",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

@@ -1,3 +1,12 @@
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Load .env from project root (parent of backend directory)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: join(__dirname, '../../.env') });
+
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
@@ -45,6 +54,9 @@ import quotesRoutes from './routes/quotes.js';
 import searchRoutes from './routes/search.js';
 import streamRoutes from './routes/stream.js';
 import watchlistRoutes from './routes/watchlists.js';
+import apiKeysRoutes from './routes/api-keys.js';
+import symbolsRoutes from './routes/symbols.js';
+import rateLimitEventsRoutes from './routes/rate-limit-events.js';
 
 // API routes
 app.use('/api/auth', authRoutes);
@@ -52,10 +64,13 @@ app.use('/api/quotes', quotesRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/stream', streamRoutes);
 app.use('/api/watchlists', watchlistRoutes);
+app.use('/api/admin/api-keys', apiKeysRoutes);
+app.use('/api/symbols', symbolsRoutes);
+app.use('/api/rate-limits', rateLimitEventsRoutes);
 
 app.get('/api', (req, res) => {
   res.json({
-    message: 'StockTracker Pro API',
+    message: 'StockTracker API',
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',
@@ -90,7 +105,7 @@ app.use((req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log('╔════════════════════════════════════════════════════════════════╗');
-  console.log('║         StockTracker Pro - Backend API Server                 ║');
+  console.log('║         StockTracker - Backend API Server                 ║');
   console.log('╚════════════════════════════════════════════════════════════════╝');
   console.log('');
   console.log(`[Server] Running on http://localhost:${PORT}`);
