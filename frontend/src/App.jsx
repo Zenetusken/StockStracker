@@ -1,47 +1,23 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import StockDetail from './pages/StockDetail';
 import WatchlistDetail from './pages/WatchlistDetail';
+import ToastContainer from './components/toast/ToastContainer';
+import useRateLimitEvents from './hooks/useRateLimitEvents';
+import { useAuthStore } from './stores/authStore';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Check if user is logged in
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('http://localhost:3001/api/auth/me', {
-          credentials: 'include',
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          sessionStorage.setItem('user', JSON.stringify(data.user));
-          setIsAuthenticated(true);
-        } else {
-          sessionStorage.removeItem('user');
-          setIsAuthenticated(false);
-        }
-      } catch (err) {
-        console.error('Auth check error:', err);
-        setIsAuthenticated(false);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkAuth();
-  }, []);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-light-bg dark:bg-dark-bg flex items-center justify-center">
-        <div className="text-gray-600 dark:text-gray-400">Loading...</div>
+      <div className="min-h-screen bg-page-bg dark:bg-dark-bg flex items-center justify-center">
+        <div className="text-text-muted dark:text-gray-400">Loading...</div>
       </div>
     );
   }
@@ -49,10 +25,23 @@ function ProtectedRoute({ children }) {
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
+function RateLimitEventsProvider({ children }) {
+  useRateLimitEvents();
+  return children;
+}
+
 function App() {
+  const checkAuth = useAuthStore((state) => state.checkAuth);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
   return (
-    <BrowserRouter>
-      <Routes>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <RateLimitEventsProvider>
+        <ToastContainer />
+        <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route
@@ -88,7 +77,8 @@ function App() {
           }
         />
         <Route path="/" element={<Navigate to="/login" replace />} />
-      </Routes>
+        </Routes>
+      </RateLimitEventsProvider>
     </BrowserRouter>
   );
 }
