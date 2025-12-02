@@ -30,35 +30,58 @@ A real-time stock tracking and portfolio management application with interactive
 
 ## Quick Start
 
+### 1. Clone and Install
+
 ```bash
-# Clone and setup
 git clone <repository-url>
 cd autonomous_demo_project
 ./init.sh
+```
 
-# Configure API keys
+### 2. Configure API Keys
+
+```bash
 cp .env.example .env
-# Add your Finnhub and Alpha Vantage API keys to .env
+```
 
-# Start development servers
+Edit `.env` and add your API keys:
+
+| Variable | Required | Get Key |
+|----------|----------|---------|
+| `FINNHUB_API_KEY` | Yes | [finnhub.io/register](https://finnhub.io/register) → Dashboard → API Key |
+| `ALPHAVANTAGE_API_KEY` | Yes | [alphavantage.co](https://www.alphavantage.co/support/#api-key) → Get Free API Key |
+
+**Getting your keys:**
+
+1. **Finnhub** (for real-time quotes, search, news)
+   - Go to [finnhub.io/register](https://finnhub.io/register)
+   - Create free account
+   - Copy API key from Dashboard
+   - Free tier: 60 API calls/minute
+
+2. **Alpha Vantage** (for chart historical data)
+   - Go to [alphavantage.co/support/#api-key](https://www.alphavantage.co/support/#api-key)
+   - Enter email, get key instantly
+   - Free tier: 25 calls/day
+
+Your `.env` should look like:
+```bash
+FINNHUB_API_KEY=abc123your_finnhub_key_here
+ALPHAVANTAGE_API_KEY=xyz789your_alphavantage_key_here
+SESSION_SECRET=any-random-string-for-sessions
+```
+
+> **Note:** Without API keys, the app runs in demo mode with limited functionality.
+
+### 3. Start Development
+
+```bash
 ./start-dev.sh
 ```
 
 **Access:**
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:3001
-
-## Environment Variables
-
-```bash
-FINNHUB_API_KEY=your_key      # Required - real-time quotes
-ALPHAVANTAGE_API_KEY=your_key # Required - historical data
-SESSION_SECRET=your_secret    # Change in production
-```
-
-Get free API keys:
-- [Finnhub](https://finnhub.io/register) (60 calls/min)
-- [Alpha Vantage](https://www.alphavantage.co/support/#api-key) (25 calls/day)
 
 ## Project Structure
 
