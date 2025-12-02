@@ -85,9 +85,11 @@ docs/archive/
 # Development artifacts (local only)
 .dev/
 .claude/
+.github/
 tests/
 .claude_settings.json
 claude-progress.txt
 app_spec.txt
 frontend-temp/
 feature_list.json
+CLAUDE.md
