@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# StockTracker Pro - Start Development Servers
+# StockTracker - Start Development Servers
 # Starts both backend and frontend servers simultaneously
 
 set -e
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║       StockTracker Pro - Starting Development Servers         ║"
+echo "║       StockTracker - Starting Development Servers         ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 

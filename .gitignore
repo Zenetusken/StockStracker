@@ -46,3 +46,17 @@ temp/
 # API Keys (though we use /tmp/api-key, be safe)
 api-key
 *.key
+
+# Test scripts and debug files
+test-*.mjs
+test-*.py
+debug-*.mjs
+get-*.mjs
+check-*.mjs
+setup-*.mjs
+
+# Test screenshots
+test-screenshots/
+
+# MCP logs
+logs/

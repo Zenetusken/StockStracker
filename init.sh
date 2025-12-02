@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# StockTracker Pro - Development Environment Setup Script
+# StockTracker - Development Environment Setup Script
 # This script sets up and runs the complete development environment
 
 set -e  # Exit on error
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║         StockTracker Pro - Environment Setup                  ║"
+echo "║         StockTracker - Environment Setup                  ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -130,7 +130,7 @@ echo "╔═══════════════════════�
 echo "║                    Setup Complete!                             ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
-print_success "StockTracker Pro development environment is ready!"
+print_success "StockTracker development environment is ready!"
 echo ""
 echo "To start the application:"
 echo ""
