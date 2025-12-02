@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Check, Star, ChevronDown } from 'lucide-react';
+import api from '../../api/client';
+import { useWatchlistStore } from '../../stores/watchlistStore';
 
 /**
  * WatchlistQuickAdd - Inline dropdown for quickly adding a symbol to a watchlist
@@ -55,16 +57,8 @@ function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:3001/api/watchlists', {
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setWatchlists(data);
-      } else {
-        setError('Failed to load');
-      }
+      const data = await api.get('/watchlists');
+      setWatchlists(data);
     } catch (err) {
       console.error('Error fetching watchlists:', err);
       setError('Failed to load');
@@ -78,35 +72,21 @@ function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
     setError('');
 
     try {
-      const response = await fetch(
-        `http://localhost:3001/api/watchlists/${watchlistId}/items`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ symbol }),
-        }
-      );
-
-      if (response.ok) {
-        setSuccess(true);
-        setAddedTo(watchlistName);
-        onSuccess?.(symbol, watchlistName);
-        // Dispatch event to refresh watchlists in sidebar
-        window.dispatchEvent(new CustomEvent('watchlist-updated'));
-      } else {
-        const data = await response.json();
-        if (response.status === 409) {
-          setError('Already in list');
-        } else {
-          setError(data.error || 'Failed to add');
-        }
-      }
+      // Use watchlistStore.addSymbol which handles:
+      // - API call with CSRF token
+      // - Optimistic store update with rollback on failure
+      // - Store state sync (no custom events needed)
+      await useWatchlistStore.getState().addSymbol(watchlistId, symbol);
+      setSuccess(true);
+      setAddedTo(watchlistName);
+      onSuccess?.(symbol, watchlistName);
     } catch (err) {
       console.error('Error adding to watchlist:', err);
-      setError('Failed to add');
+      if (err.message?.includes('already')) {
+        setError('Already in list');
+      } else {
+        setError(err.message || 'Failed to add');
+      }
     } finally {
       setAdding(false);
     }

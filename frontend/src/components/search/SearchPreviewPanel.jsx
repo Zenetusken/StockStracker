@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import MiniChart from './MiniChart';
 import useSearchPreview from '../../hooks/useSearchPreview';
-import api from '../../api/client';
+import { useWatchlistStore } from '../../stores/watchlistStore';
 
 /**
  * SearchPreviewPanel Component
@@ -29,38 +29,23 @@ const formatChange = (change, percentChange) => {
 
 function SearchPreviewPanel({ symbol, description, quote, onAddToWatchlist }) {
   const { profile, loading, formatMarketCap } = useSearchPreview(symbol, true);
-  const [watchlists, setWatchlists] = useState([]);
   const [showWatchlistDropdown, setShowWatchlistDropdown] = useState(false);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
-  const [addedToWatchlists, setAddedToWatchlists] = useState(new Set()); // Track which watchlists contain this symbol
   const [, setLastAddedName] = useState('');
 
-  // Fetch user's watchlists and check which ones contain this symbol
-  useEffect(() => {
-    const fetchWatchlists = async () => {
-      try {
-        const data = await api.get('/watchlists');
-        setWatchlists(data);
+  // Use watchlistStore for data and actions
+  const watchlists = useWatchlistStore((state) => state.watchlists);
+  const fetchWatchlists = useWatchlistStore((state) => state.fetchWatchlists);
+  const getWatchlistsContainingSymbol = useWatchlistStore((state) => state.getWatchlistsContainingSymbol);
+  const addSymbol = useWatchlistStore((state) => state.addSymbol);
 
-        // Check which watchlists already contain this symbol
-        const containingSymbol = new Set();
-        for (const watchlist of data) {
-          try {
-            const watchlistData = await api.get(`/watchlists/${watchlist.id}`);
-            if (watchlistData.items?.some(item => item.symbol === symbol)) {
-              containingSymbol.add(watchlist.id);
-            }
-          } catch {
-            // Ignore errors for individual watchlist checks
-          }
-        }
-        setAddedToWatchlists(containingSymbol);
-      } catch (err) {
-        console.error('Failed to fetch watchlists:', err);
-      }
-    };
+  // Get which watchlists already contain this symbol (derived from store state)
+  const addedToWatchlists = new Set(getWatchlistsContainingSymbol(symbol));
+
+  // Fetch watchlists on mount if not already loaded
+  useEffect(() => {
     fetchWatchlists();
-  }, [symbol]);
+  }, [fetchWatchlists]);
 
   const handleAddToWatchlist = async (watchlistId, watchlistName) => {
     if (addingToWatchlist) return;
@@ -72,25 +57,23 @@ function SearchPreviewPanel({ symbol, description, quote, onAddToWatchlist }) {
 
     setAddingToWatchlist(true);
     try {
-      await api.post(`/watchlists/${watchlistId}/items`, { symbol });
+      // Use store's addSymbol which handles:
+      // - API call with CSRF token
+      // - Optimistic store update with rollback on failure
+      // - Store state sync (triggers automatic re-renders - no custom events needed)
+      await addSymbol(watchlistId, symbol);
 
-      // Success - mark as added
-      setAddedToWatchlists(prev => new Set([...prev, watchlistId]));
       setLastAddedName(watchlistName);
       setShowWatchlistDropdown(false);
 
       if (onAddToWatchlist) {
         onAddToWatchlist(symbol, watchlistId);
       }
-      // Dispatch event to refresh watchlists in sidebar
-      window.dispatchEvent(new CustomEvent('watchlist-updated'));
     } catch (err) {
       // Check if it's a 409 (already exists) - treat as success
-      if (err.status === 409) {
-        setAddedToWatchlists(prev => new Set([...prev, watchlistId]));
+      if (err.status === 409 || err.message?.includes('already')) {
         setLastAddedName(watchlistName);
         setShowWatchlistDropdown(false);
-        window.dispatchEvent(new CustomEvent('watchlist-updated'));
       } else {
         console.error('Failed to add to watchlist:', err);
       }
