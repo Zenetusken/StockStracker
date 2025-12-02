@@ -1,6 +1,7 @@
 import { create } from 'zustand';
+import { api } from '../api/client';
 
-const API_BASE = 'http://localhost:3001/api/admin/api-keys';
+const API_BASE = '/admin/api-keys';
 
 export const useApiKeysStore = create((set, get) => ({
   services: [],
@@ -20,13 +21,7 @@ export const useApiKeysStore = create((set, get) => ({
   fetchServices: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`${API_BASE}/services`, {
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch services');
-      }
-      const data = await response.json();
+      const data = await api.get(`${API_BASE}/services`);
       set({
         services: data.services,
         isLoading: false,
@@ -78,18 +73,9 @@ export const useApiKeysStore = create((set, get) => ({
   // Add a new API key
   addKey: async (serviceName, keyValue, keyName) => {
     try {
-      const response = await fetch(`${API_BASE}/keys`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ serviceName, keyValue, keyName })
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to add key');
-      }
+      const result = await api.post(`${API_BASE}/keys`, { serviceName, keyValue, keyName });
       await get().fetchServices();
-      return await response.json();
+      return result;
     } catch (error) {
       set({ error: error.message });
       throw error;
@@ -99,18 +85,9 @@ export const useApiKeysStore = create((set, get) => ({
   // Update an API key
   updateKey: async (keyId, updates) => {
     try {
-      const response = await fetch(`${API_BASE}/keys/${keyId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(updates)
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update key');
-      }
+      const result = await api.put(`${API_BASE}/keys/${keyId}`, updates);
       await get().fetchServices();
-      return await response.json();
+      return result;
     } catch (error) {
       set({ error: error.message });
       throw error;
@@ -120,16 +97,9 @@ export const useApiKeysStore = create((set, get) => ({
   // Delete an API key
   deleteKey: async (keyId) => {
     try {
-      const response = await fetch(`${API_BASE}/keys/${keyId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to delete key');
-      }
+      const result = await api.delete(`${API_BASE}/keys/${keyId}`);
       await get().fetchServices();
-      return await response.json();
+      return result;
     } catch (error) {
       set({ error: error.message });
       throw error;
@@ -139,15 +109,7 @@ export const useApiKeysStore = create((set, get) => ({
   // Test an API key
   testKey: async (keyId) => {
     try {
-      const response = await fetch(`${API_BASE}/keys/${keyId}/test`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to test key');
-      }
-      return await response.json();
+      return await api.post(`${API_BASE}/keys/${keyId}/test`);
     } catch (error) {
       set({ error: error.message });
       throw error;
@@ -157,13 +119,7 @@ export const useApiKeysStore = create((set, get) => ({
   // Fetch detailed usage for a service (with individual call timestamps)
   fetchDetailedUsage: async (serviceName) => {
     try {
-      const response = await fetch(`${API_BASE}/services/${serviceName}/usage`, {
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch detailed usage');
-      }
-      const data = await response.json();
+      const data = await api.get(`${API_BASE}/services/${serviceName}/usage`);
 
       // Store the detailed usage data
       set((state) => ({
@@ -215,13 +171,7 @@ export const useApiKeysStore = create((set, get) => ({
   // Fetch burst events for a service (per-second rate limit hits)
   fetchBurstEvents: async (serviceName) => {
     try {
-      const response = await fetch(`${API_BASE}/services/${serviceName}/burst-events`, {
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch burst events');
-      }
-      const data = await response.json();
+      const data = await api.get(`${API_BASE}/services/${serviceName}/burst-events`);
 
       // Store the burst event data
       set((state) => ({
