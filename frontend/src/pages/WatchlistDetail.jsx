@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Trash2, TrendingUp, TrendingDown, Minus, Edit2, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, Download, GripVertical } from 'lucide-react';
 import Layout from '../components/Layout';
-import useSSE from '../hooks/useSSE';
+import { useQuotes } from '../stores/quoteStore';
+import { useWatchlistStore } from '../stores/watchlistStore';
 import RenameWatchlistModal from '../components/RenameWatchlistModal';
 import DeleteWatchlistModal from '../components/DeleteWatchlistModal';
 import {
@@ -47,17 +48,17 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
     <tr
       ref={setNodeRef}
       style={style}
-      className="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+      className="hover:bg-card-hover transition-colors"
     >
       {/* Drag handle */}
       <td className="px-4 py-4 whitespace-nowrap">
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+          className="cursor-grab active:cursor-grabbing p-1 hover:bg-card-hover rounded transition-colors"
           title="Drag to reorder"
         >
-          <GripVertical className="w-5 h-5 text-gray-400" />
+          <GripVertical className="w-5 h-5 text-text-secondary" />
         </button>
       </td>
       <td
@@ -65,14 +66,14 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
         onClick={() => navigate(`/stock/${item.symbol}`)}
       >
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900 dark:text-white">
+          <span className="font-medium text-text-primary">
             {item.symbol}
           </span>
           {quote && (
             <span className={`text-xs ${
-              isPositive ? 'text-green-600 dark:text-green-400' :
-              isNegative ? 'text-red-600 dark:text-red-400' :
-              'text-gray-500 dark:text-gray-400'
+              isPositive ? 'text-gain' :
+              isNegative ? 'text-loss' :
+              'text-text-muted'
             }`}>
               {isPositive ? '▲' : isNegative ? '▼' : '—'}
             </span>
@@ -83,7 +84,7 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
         className="px-6 py-4 whitespace-nowrap cursor-pointer"
         onClick={() => navigate(`/stock/${item.symbol}`)}
       >
-        <span className="text-sm text-gray-600 dark:text-gray-400">
+        <span className="text-sm text-text-secondary">
           {quote?.name || 'Loading...'}
         </span>
       </td>
@@ -91,7 +92,7 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
         className="px-6 py-4 whitespace-nowrap text-right cursor-pointer"
         onClick={() => navigate(`/stock/${item.symbol}`)}
       >
-        <span className="text-sm font-medium text-gray-900 dark:text-white">
+        <span className="text-sm font-medium text-text-primary">
           {quote ? formatPrice(quote.c) : '-'}
         </span>
       </td>
@@ -100,9 +101,9 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
         onClick={() => navigate(`/stock/${item.symbol}`)}
       >
         <span className={`text-sm font-medium ${
-          isPositive ? 'text-green-600 dark:text-green-400' :
-          isNegative ? 'text-red-600 dark:text-red-400' :
-          'text-gray-600 dark:text-gray-400'
+          isPositive ? 'text-gain' :
+          isNegative ? 'text-loss' :
+          'text-text-muted'
         }`}>
           {quote ? (quote.d > 0 ? '+' : '') + quote.d.toFixed(2) : '-'}
         </span>
@@ -112,9 +113,9 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
         onClick={() => navigate(`/stock/${item.symbol}`)}
       >
         <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-          isPositive ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
-          isNegative ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
-          'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-400'
+          isPositive ? 'bg-gain/10 text-gain' :
+          isNegative ? 'bg-loss/10 text-loss' :
+          'bg-mint/10 text-text-secondary'
         }`}>
           {quote ? formatPercentChange(quote.dp) : '-'}
         </span>
@@ -123,7 +124,7 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
         className="px-6 py-4 whitespace-nowrap text-right cursor-pointer"
         onClick={() => navigate(`/stock/${item.symbol}`)}
       >
-        <span className="text-sm text-gray-600 dark:text-gray-400">
+        <span className="text-sm text-text-secondary">
           {quote ? formatNumber(quote.v) : '-'}
         </span>
       </td>
@@ -134,13 +135,13 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
             handleRemoveSymbol(item.symbol);
           }}
           disabled={removingSymbol === item.symbol}
-          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+          className="p-1 hover:bg-card-hover rounded transition-colors disabled:opacity-50"
           title="Remove from watchlist"
         >
           {removingSymbol === item.symbol ? (
-            <Minus className="w-4 h-4 text-gray-400 animate-spin" />
+            <Minus className="w-4 h-4 text-text-secondary animate-spin" />
           ) : (
-            <Trash2 className="w-4 h-4 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400" />
+            <Trash2 className="w-4 h-4 text-text-secondary hover:text-loss" />
           )}
         </button>
       </td>
@@ -151,10 +152,6 @@ function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumb
 function WatchlistDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [watchlist, setWatchlist] = useState(null);
-  const [quotes, setQuotes] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [removingSymbol, setRemovingSymbol] = useState(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -165,6 +162,21 @@ function WatchlistDetail() {
   const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [quickAddError, setQuickAddError] = useState(null);
 
+  // Get watchlist data from centralized store
+  const watchlist = useWatchlistStore((state) => state.getWatchlistDetail(id));
+  const loading = useWatchlistStore((state) => state.isLoadingDetail[id] || false);
+  const error = useWatchlistStore((state) => state.error);
+  const fetchWatchlistDetail = useWatchlistStore((state) => state.fetchWatchlistDetail);
+  const removeSymbolFromStore = useWatchlistStore((state) => state.removeSymbol);
+  const addSymbolToStore = useWatchlistStore((state) => state.addSymbol);
+  const reorderItems = useWatchlistStore((state) => state.reorderItems);
+
+  // Get list of symbols for quote subscription
+  const symbols = watchlist?.items?.map(item => item.symbol) || [];
+
+  // Subscribe to real-time quotes via centralized store
+  const { quotes, connected, reconnecting } = useQuotes(symbols);
+
   // Drag and drop sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -173,52 +185,14 @@ function WatchlistDetail() {
     })
   );
 
-  // Fetch watchlist details
+  // Fetch watchlist details from store
   useEffect(() => {
-    fetchWatchlist();
-  }, [id]);
-
-  const fetchWatchlist = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`http://localhost:3001/api/watchlists/${id}`, {
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setWatchlist(data);
-        setError(null);
-      } else if (response.status === 404) {
-        setError('Watchlist not found');
-      } else {
-        setError('Failed to load watchlist');
-      }
-    } catch (err) {
-      console.error('Error fetching watchlist:', err);
-      setError('Failed to load watchlist');
-    } finally {
-      setLoading(false);
+    if (id) {
+      fetchWatchlistDetail(id);
     }
-  };
+  }, [id, fetchWatchlistDetail]);
 
-  // Get list of symbols for SSE subscription
-  const symbols = watchlist?.items?.map(item => item.symbol) || [];
-
-  // Handle quote updates from SSE
-  const handleQuoteUpdate = useCallback((data) => {
-    if (data.type === 'quote_update' && data.quotes) {
-      setQuotes(prev => ({
-        ...prev,
-        ...data.quotes,
-      }));
-    }
-  }, []);
-
-  // Subscribe to real-time quotes
-  const { connected, reconnecting } = useSSE(symbols, handleQuoteUpdate);
-
-  // Remove symbol from watchlist
+  // Remove symbol from watchlist using store
   const handleRemoveSymbol = async (symbol) => {
     if (!confirm(`Remove ${symbol} from this watchlist?`)) {
       return;
@@ -226,31 +200,7 @@ function WatchlistDetail() {
 
     try {
       setRemovingSymbol(symbol);
-      const response = await fetch(
-        `http://localhost:3001/api/watchlists/${id}/items/${symbol}`,
-        {
-          method: 'DELETE',
-          credentials: 'include',
-        }
-      );
-
-      if (response.ok) {
-        // Update local state
-        setWatchlist(prev => ({
-          ...prev,
-          items: prev.items.filter(item => item.symbol !== symbol),
-        }));
-
-        // Remove quote from state
-        setQuotes(prev => {
-          const newQuotes = { ...prev };
-          delete newQuotes[symbol];
-          return newQuotes;
-        });
-      } else {
-        const data = await response.json();
-        alert(data.error || 'Failed to remove symbol');
-      }
+      await removeSymbolFromStore(id, symbol);
     } catch (err) {
       console.error('Error removing symbol:', err);
       alert('Failed to remove symbol');
@@ -259,24 +209,15 @@ function WatchlistDetail() {
     }
   };
 
-  // Handle rename success
-  const handleRenameSuccess = (updatedWatchlist) => {
-    setWatchlist(prev => ({
-      ...prev,
-      name: updatedWatchlist.name,
-      color: updatedWatchlist.color,
-      icon: updatedWatchlist.icon,
-    }));
-    // Trigger a page refresh event for sidebar to update
-    window.dispatchEvent(new Event('watchlist-updated'));
+  // Handle rename success - store handles reactivity automatically
+  const handleRenameSuccess = () => {
+    // Re-fetch to ensure UI is updated (store will be updated by modal)
+    fetchWatchlistDetail(id, true);
   };
 
-  // Handle delete success
+  // Handle delete success - navigate away after deletion
   const handleDeleteSuccess = () => {
-    // Navigate back to dashboard after deletion
     navigate('/dashboard');
-    // Trigger a page refresh event for sidebar to update
-    window.dispatchEvent(new Event('watchlist-updated'));
   };
 
   // Handle column sort
@@ -347,14 +288,14 @@ function WatchlistDetail() {
   // Render sort icon for column header
   const renderSortIcon = (column) => {
     if (sortColumn !== column) {
-      return <ArrowUpDown className="w-4 h-4 text-gray-400" />;
+      return <ArrowUpDown className="w-4 h-4 text-text-secondary" />;
     }
     return sortDirection === 'asc'
-      ? <ArrowUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-      : <ArrowDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
+      ? <ArrowUp className="w-4 h-4 text-mint" />
+      : <ArrowDown className="w-4 h-4 text-mint" />;
   };
 
-  // Handle quick-add symbol
+  // Handle quick-add symbol using store
   const handleQuickAddSymbol = async (e) => {
     e.preventDefault();
 
@@ -365,7 +306,7 @@ function WatchlistDetail() {
     }
 
     // Check if symbol already in watchlist
-    if (watchlist.items.some(item => item.symbol === symbol)) {
+    if (watchlist?.items?.some(item => item.symbol === symbol)) {
       setQuickAddError('Symbol already in watchlist');
       return;
     }
@@ -374,45 +315,19 @@ function WatchlistDetail() {
       setQuickAddLoading(true);
       setQuickAddError(null);
 
-      // Validate symbol exists by checking quote
-      const quoteResponse = await fetch(`http://localhost:3001/api/market/quote/${symbol}`, {
-        credentials: 'include',
-      });
+      // Add to watchlist using store (store handles validation)
+      const result = await addSymbolToStore(id, symbol);
 
-      if (!quoteResponse.ok) {
-        setQuickAddError('Invalid symbol or unable to fetch quote');
-        return;
-      }
-
-      // Add to watchlist
-      const response = await fetch(`http://localhost:3001/api/watchlists/${id}/items`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ symbol }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Update local state
-        setWatchlist(prev => ({
-          ...prev,
-          items: [...(prev.items || []), data],
-        }));
-
-        // Clear input
+      if (result?.alreadyExists) {
+        setQuickAddError('Symbol already in watchlist');
+      } else {
+        // Clear input on success
         setQuickAddSymbol('');
         setQuickAddError(null);
-      } else {
-        const data = await response.json();
-        setQuickAddError(data.error || 'Failed to add symbol');
       }
     } catch (err) {
       console.error('Error adding symbol:', err);
-      setQuickAddError('Failed to add symbol');
+      setQuickAddError(err.message || 'Failed to add symbol');
     } finally {
       setQuickAddLoading(false);
     }
@@ -464,52 +379,29 @@ function WatchlistDetail() {
     }
   };
 
-  // Handle drag end
+  // Handle drag end using store
   const handleDragEnd = async (event) => {
     const { active, over } = event;
 
-    if (!over || active.id === over.id) {
+    if (!over || active.id === over.id || !watchlist?.items) {
       return;
     }
 
     const oldIndex = watchlist.items.findIndex(item => item.symbol === active.id);
     const newIndex = watchlist.items.findIndex(item => item.symbol === over.id);
 
-    // Optimistically update UI
-    const newItems = arrayMove(watchlist.items, oldIndex, newIndex);
-    setWatchlist(prev => ({
-      ...prev,
-      items: newItems,
-    }));
-
-    // Prepare data for API - send symbol and new position
-    const itemsWithNewPositions = newItems.map((item, index) => ({
-      symbol: item.symbol,
+    // Create new items array with updated positions
+    const newItems = arrayMove(watchlist.items, oldIndex, newIndex).map((item, index) => ({
+      ...item,
       position: index,
     }));
 
-    // Save to backend
     try {
-      const response = await fetch(`http://localhost:3001/api/watchlists/${id}/items/reorder`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ items: itemsWithNewPositions }),
-      });
-
-      if (!response.ok) {
-        // Revert on error
-        const data = await response.json();
-        console.error('Failed to reorder:', data.error);
-        alert('Failed to save new order');
-        fetchWatchlist(); // Reload original order
-      }
+      // Store handles optimistic update and rollback
+      await reorderItems(id, newItems);
     } catch (err) {
       console.error('Error reordering items:', err);
       alert('Failed to save new order');
-      fetchWatchlist(); // Reload original order
     }
   };
 
@@ -535,11 +427,11 @@ function WatchlistDetail() {
     return sign + change.toFixed(2) + '%';
   };
 
-  if (loading) {
+  if (loading || (!watchlist && !error)) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-600 dark:text-gray-400">Loading watchlist...</div>
+          <div className="text-text-muted">Loading watchlist...</div>
         </div>
       </Layout>
     );
@@ -549,10 +441,10 @@ function WatchlistDetail() {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center h-64">
-          <div className="text-red-600 dark:text-red-400 mb-4">{error}</div>
+          <div className="text-loss mb-4">{error}</div>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover"
           >
             Back to Dashboard
           </button>
@@ -577,18 +469,18 @@ function WatchlistDetail() {
               />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-2xl font-bold text-text-primary">
                 {watchlist.name}
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-text-secondary">
                 {watchlist.items?.length || 0} symbols
                 {connected && (
-                  <span className="ml-2 text-green-600 dark:text-green-400">
+                  <span className="ml-2 text-mint">
                     • Live updates
                   </span>
                 )}
                 {reconnecting && (
-                  <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                  <span className="ml-2 text-warning">
                     • Reconnecting...
                   </span>
                 )}
@@ -600,35 +492,35 @@ function WatchlistDetail() {
           <div className="relative">
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-card-hover rounded-lg transition-colors"
             >
-              <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <MoreVertical className="w-5 h-5 text-text-secondary" />
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
+              <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-line py-1 z-10">
                 <button
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                  className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-card-hover flex items-center gap-2"
                   onClick={() => {
                     setShowMenu(false);
                     handleExportCSV();
                   }}
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4 text-brand" />
                   Export to CSV
                 </button>
                 <button
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                  className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-card-hover flex items-center gap-2"
                   onClick={() => {
                     setShowMenu(false);
                     setShowRenameModal(true);
                   }}
                 >
-                  <Edit2 className="w-4 h-4" />
+                  <Edit2 className="w-4 h-4 text-brand" />
                   Rename Watchlist
                 </button>
                 <button
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                  className="w-full px-4 py-2 text-left text-sm text-loss hover:bg-card-hover flex items-center gap-2"
                   onClick={() => {
                     setShowMenu(false);
                     setShowDeleteModal(true);
@@ -644,17 +536,17 @@ function WatchlistDetail() {
 
         {/* Empty state */}
         {(!watchlist.items || watchlist.items.length === 0) && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
-            <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          <div className="bg-card rounded-lg border border-line p-12 text-center">
+            <TrendingUp className="w-12 h-12 text-mint mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-text-primary mb-2">
               No symbols in this watchlist
             </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
+            <p className="text-text-secondary mb-4">
               Search for stocks and add them to your watchlist
             </p>
             <button
               onClick={() => navigate('/dashboard')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover"
             >
               Go to Dashboard
             </button>
@@ -663,20 +555,20 @@ function WatchlistDetail() {
 
         {/* Watchlist table */}
         {watchlist.items && watchlist.items.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="bg-card rounded-lg border border-line overflow-hidden">
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
             >
               <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                <thead className="bg-table-header border-b border-line">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
                       {/* Drag handle column */}
                     </th>
                     <th
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors select-none"
+                      className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                       onClick={() => handleSort('symbol')}
                     >
                       <div className="flex items-center gap-2">
@@ -684,11 +576,11 @@ function WatchlistDetail() {
                         {renderSortIcon('symbol')}
                       </div>
                     </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
                     Name
                   </th>
                   <th
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors select-none"
+                    className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('price')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -697,7 +589,7 @@ function WatchlistDetail() {
                     </div>
                   </th>
                   <th
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors select-none"
+                    className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('change')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -706,7 +598,7 @@ function WatchlistDetail() {
                     </div>
                   </th>
                   <th
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors select-none"
+                    className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('percentChange')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -715,7 +607,7 @@ function WatchlistDetail() {
                     </div>
                   </th>
                   <th
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors select-none"
+                    className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('volume')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -723,7 +615,7 @@ function WatchlistDetail() {
                       {renderSortIcon('volume')}
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -732,7 +624,7 @@ function WatchlistDetail() {
                 items={getSortedItems().map(item => item.symbol)}
                 strategy={verticalListSortingStrategy}
               >
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="divide-y divide-line">
                   {getSortedItems().map((item) => {
                     const quote = quotes[item.symbol];
                     return (
@@ -755,7 +647,7 @@ function WatchlistDetail() {
             </DndContext>
 
             {/* Quick-add symbol form */}
-            <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900">
+            <div className="border-t border-line p-4 bg-table-header">
               <form onSubmit={handleQuickAddSymbol} className="flex items-center gap-3">
                 <div className="flex-1">
                   <input
@@ -766,11 +658,11 @@ function WatchlistDetail() {
                       setQuickAddError(null);
                     }}
                     placeholder="Enter symbol (e.g., TSLA, MSFT)"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-line rounded-lg bg-page-bg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
                     disabled={quickAddLoading}
                   />
                   {quickAddError && (
-                    <div className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    <div className="mt-1 text-sm text-loss">
                       {quickAddError}
                     </div>
                   )}
@@ -778,7 +670,7 @@ function WatchlistDetail() {
                 <button
                   type="submit"
                   disabled={quickAddLoading || !quickAddSymbol.trim()}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                  className="px-6 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {quickAddLoading ? 'Adding...' : 'Add Symbol'}
                 </button>

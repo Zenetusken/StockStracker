@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import useSSE from '../hooks/useSSE';
+import { useQuote } from '../stores/quoteStore';
+import { useAuthStore } from '../stores/authStore';
+import { useProfileStore } from '../stores/profileStore';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import AddToWatchlistModal from '../components/AddToWatchlistModal';
 import StockChart from '../components/StockChart';
@@ -9,92 +11,37 @@ import StockChart from '../components/StockChart';
 function StockDetail() {
   const { symbol } = useParams();
   const navigate = useNavigate();
-  const [quote, setQuote] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [lastUpdate, setLastUpdate] = useState(null);
   const [isPulsing, setIsPulsing] = useState(false);
-  const [user, setUser] = useState(null);
   const [isAddToWatchlistModalOpen, setIsAddToWatchlistModalOpen] = useState(false);
 
-  // SSE connection for real-time updates
-  const { connected, reconnecting } = useSSE(
-    symbol ? [symbol] : [],
-    (data) => {
-      // Handle quote update
-      if (data.type === 'quote_update' && data.quotes && data.quotes.length > 0) {
-        const quoteData = data.quotes.find((q) => q.symbol === symbol);
-        if (quoteData && quoteData.quote) {
-          setQuote(quoteData.quote);
-          setLastUpdate(new Date());
+  // Auth from centralized store
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
 
-          // Trigger pulse animation
-          setIsPulsing(true);
-          setTimeout(() => setIsPulsing(false), 300);
-        }
-      }
-    },
-    (err) => {
-      console.error('SSE error:', err);
-    }
-  );
+  // Profile from centralized store
+  const profile = useProfileStore((state) => state.getProfile(symbol));
+  const loading = useProfileStore((state) => state.isProfileLoading(symbol));
+  const error = useProfileStore((state) => state.getProfileError(symbol));
+  const fetchProfile = useProfileStore((state) => state.fetchProfile);
 
+  // Subscribe to real-time quote via centralized store
+  const { quote, connected, reconnecting } = useQuote(symbol);
+
+  // Fetch profile on mount
   useEffect(() => {
-    // Get user from sessionStorage
-    const userStr = sessionStorage.getItem('user');
-    if (userStr) {
-      setUser(JSON.parse(userStr));
-    }
-  }, []);
-
-  // Fetch quote and profile
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Fetch quote
-        const quoteResponse = await fetch(
-          `http://localhost:3001/api/quotes/${symbol}`,
-          {
-            credentials: 'include',
-          }
-        );
-
-        if (!quoteResponse.ok) {
-          throw new Error('Failed to fetch quote data');
-        }
-
-        const quoteData = await quoteResponse.json();
-        setQuote(quoteData);
-        setLastUpdate(new Date());
-
-        // Fetch profile
-        const profileResponse = await fetch(
-          `http://localhost:3001/api/quotes/${symbol}/profile`,
-          {
-            credentials: 'include',
-          }
-        );
-
-        if (profileResponse.ok) {
-          const profileData = await profileResponse.json();
-          setProfile(profileData);
-        }
-      } catch (err) {
-        console.error('Error fetching stock data:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (symbol) {
-      fetchData();
+      fetchProfile(symbol);
     }
-  }, [symbol]);
+  }, [symbol, fetchProfile]);
+
+  // Trigger pulse animation when quote updates
+  useEffect(() => {
+    if (quote?.lastUpdate) {
+      setIsPulsing(true);
+      const timeout = setTimeout(() => setIsPulsing(false), 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [quote?.lastUpdate]);
 
   // Format number with K/M/B
   const formatLargeNumber = (num) => {
@@ -120,27 +67,23 @@ function StockDetail() {
 
   // Get color class based on change
   const getChangeColor = (change) => {
-    if (!change && change !== 0) return 'text-gray-600 dark:text-gray-400';
-    if (change > 0) return 'text-green-600 dark:text-green-400';
-    if (change < 0) return 'text-red-600 dark:text-red-400';
-    return 'text-gray-600 dark:text-gray-400';
+    if (!change && change !== 0) return 'text-text-secondary';
+    if (change > 0) return 'text-gain';
+    if (change < 0) return 'text-loss';
+    return 'text-text-secondary';
   };
 
   // Get background pulse color
   const getPulseColor = (change) => {
     if (!change && change !== 0) return '';
-    if (change > 0) return 'bg-green-100 dark:bg-green-900';
-    if (change < 0) return 'bg-red-100 dark:bg-red-900';
+    if (change > 0) return 'bg-gain/10';
+    if (change < 0) return 'bg-loss/10';
     return '';
   };
 
   const handleLogout = async () => {
     try {
-      await fetch('http://localhost:3001/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      sessionStorage.removeItem('user');
+      await logout();
       navigate('/login');
     } catch (err) {
       console.error('Logout error:', err);
@@ -149,17 +92,17 @@ function StockDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-light-bg dark:bg-dark-bg">
-        <header className="bg-white dark:bg-gray-800 shadow">
+      <div className="min-h-screen bg-page-bg">
+        <header className="bg-card shadow">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <Link to="/dashboard" className="text-2xl font-bold text-gray-900 dark:text-white">
-              StockTracker Pro
+            <Link to="/dashboard" className="text-2xl font-bold text-text-primary">
+              StockTracker
             </Link>
           </div>
         </header>
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin h-12 w-12 border-4 border-light-primary dark:border-dark-primary border-t-transparent rounded-full"></div>
+            <div className="animate-spin h-12 w-12 border-4 border-brand border-t-transparent rounded-full"></div>
           </div>
         </main>
       </div>
@@ -168,16 +111,16 @@ function StockDetail() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-light-bg dark:bg-dark-bg">
-        <header className="bg-white dark:bg-gray-800 shadow">
+      <div className="min-h-screen bg-page-bg">
+        <header className="bg-card shadow">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <Link to="/dashboard" className="text-2xl font-bold text-gray-900 dark:text-white">
-              StockTracker Pro
+            <Link to="/dashboard" className="text-2xl font-bold text-text-primary">
+              StockTracker
             </Link>
           </div>
         </header>
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             <p className="font-bold">Error</p>
             <p>{error}</p>
           </div>
@@ -187,12 +130,12 @@ function StockDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-light-bg dark:bg-dark-bg">
+    <div className="min-h-screen bg-page-bg">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow">
+      <header className="bg-card shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <Link to="/dashboard" className="text-2xl font-bold text-gray-900 dark:text-white">
-            StockTracker Pro
+          <Link to="/dashboard" className="text-2xl font-bold text-text-primary">
+            StockTracker
           </Link>
           <div className="flex items-center gap-4">
             {/* Market Status */}
@@ -200,25 +143,25 @@ function StockDetail() {
 
             {/* Connection Status Indicator */}
             {reconnecting && (
-              <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
+              <div className="flex items-center gap-2 text-sm text-warning">
                 <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
                 <span>Reconnecting...</span>
               </div>
             )}
             {!connected && !reconnecting && symbol && (
-              <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+              <div className="flex items-center gap-2 text-sm text-loss">
                 <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                 <span>Disconnected</span>
               </div>
             )}
             {user && (
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-text-muted">
                 {user.email}
               </span>
             )}
             <button
               onClick={handleLogout}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary"
             >
               Logout
             </button>
@@ -230,33 +173,33 @@ function StockDetail() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="mb-4 text-sm">
-          <Link to="/dashboard" className="text-light-primary dark:text-dark-primary hover:underline">
+          <Link to="/dashboard" className="text-brand hover:underline">
             Dashboard
           </Link>
-          <span className="mx-2 text-gray-500">/</span>
-          <span className="text-gray-900 dark:text-white">{symbol}</span>
+          <span className="mx-2 text-text-muted">/</span>
+          <span className="text-text-primary">{symbol}</span>
         </nav>
 
         {/* Quote Card */}
         <div
-          className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6 transition-colors duration-300 ${
+          className={`bg-card rounded-lg shadow-lg p-6 mb-6 transition-colors duration-300 ${
             isPulsing ? getPulseColor(quote?.change) : ''
           }`}
         >
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
+              <h1 className="text-3xl font-bold text-text-primary mb-1">
                 {symbol}
               </h1>
               {profile?.name && (
-                <p className="text-lg text-gray-600 dark:text-gray-400">
+                <p className="text-lg text-text-muted">
                   {profile.name}
                 </p>
               )}
             </div>
             <button
               onClick={() => setIsAddToWatchlistModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors mt-4 md:mt-0"
+              className="flex items-center gap-2 px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-lg transition-colors mt-4 md:mt-0"
             >
               <Plus className="w-5 h-5" />
               Add to Watchlist
@@ -266,8 +209,8 @@ function StockDetail() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Current Price */}
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Current Price</p>
-              <p className="text-4xl font-bold font-mono text-gray-900 dark:text-white">
+              <p className="text-sm text-text-muted mb-1">Current Price</p>
+              <p className="text-4xl font-bold font-mono text-text-primary">
                 {formatPrice(quote?.current)}
               </p>
               <div className={`flex items-center gap-2 mt-2 ${getChangeColor(quote?.change)}`}>
@@ -289,29 +232,29 @@ function StockDetail() {
 
             {/* Day Range */}
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Day Range</p>
+              <p className="text-sm text-text-muted mb-2">Day Range</p>
               <div className="space-y-1.5">
                 <div className="flex items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">High</span>
-                  <span className="font-mono text-gray-900 dark:text-white font-semibold">
+                  <span className="text-sm text-text-muted w-24">High</span>
+                  <span className="font-mono text-text-primary font-semibold">
                     {formatPrice(quote?.high)}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Low</span>
-                  <span className="font-mono text-gray-900 dark:text-white font-semibold">
+                  <span className="text-sm text-text-muted w-24">Low</span>
+                  <span className="font-mono text-text-primary font-semibold">
                     {formatPrice(quote?.low)}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Open</span>
-                  <span className="font-mono text-gray-900 dark:text-white font-semibold">
+                  <span className="text-sm text-text-muted w-24">Open</span>
+                  <span className="font-mono text-text-primary font-semibold">
                     {formatPrice(quote?.open)}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Prev Close</span>
-                  <span className="font-mono text-gray-900 dark:text-white font-semibold">
+                  <span className="text-sm text-text-muted w-24">Prev Close</span>
+                  <span className="font-mono text-text-primary font-semibold">
                     {formatPrice(quote?.previousClose)}
                   </span>
                 </div>
@@ -320,18 +263,18 @@ function StockDetail() {
 
             {/* Trading Info */}
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Trading Info</p>
+              <p className="text-sm text-text-muted mb-2">Trading Info</p>
               <div className="space-y-1.5">
                 <div className="flex items-center">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Volume</span>
-                  <span className="font-mono text-gray-900 dark:text-white font-semibold">
+                  <span className="text-sm text-text-muted w-24">Volume</span>
+                  <span className="font-mono text-text-primary font-semibold">
                     {formatLargeNumber(quote?.volume)}
                   </span>
                 </div>
               </div>
-              {lastUpdate && (
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-3">
-                  Last updated: {lastUpdate.toLocaleTimeString()}
+              {quote?.lastUpdate && (
+                <p className="text-xs text-text-muted mt-3">
+                  Last updated: {new Date(quote.lastUpdate).toLocaleTimeString()}
                 </p>
               )}
             </div>
@@ -345,43 +288,43 @@ function StockDetail() {
 
         {/* Company Profile */}
         {profile && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+          <div className="bg-card rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold text-text-primary mb-4">
               Company Information
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Exchange</p>
-                <p className="text-lg text-gray-900 dark:text-white font-semibold">
+                <p className="text-sm text-text-muted mb-1">Exchange</p>
+                <p className="text-lg text-text-primary font-semibold">
                   {profile.exchange || '—'}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Currency</p>
-                <p className="text-lg text-gray-900 dark:text-white font-semibold">
+                <p className="text-sm text-text-muted mb-1">Currency</p>
+                <p className="text-lg text-text-primary font-semibold">
                   {profile.currency || '—'}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Market Cap</p>
-                <p className="text-lg text-gray-900 dark:text-white font-semibold">
+                <p className="text-sm text-text-muted mb-1">Market Cap</p>
+                <p className="text-lg text-text-primary font-semibold">
                   {profile.marketCapitalization ? formatLargeNumber(profile.marketCapitalization * 1e6) : '—'}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Industry</p>
-                <p className="text-lg text-gray-900 dark:text-white font-semibold">
+                <p className="text-sm text-text-muted mb-1">Industry</p>
+                <p className="text-lg text-text-primary font-semibold">
                   {profile.finnhubIndustry || '—'}
                 </p>
               </div>
               {profile.weburl && (
                 <div className="md:col-span-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Website</p>
+                  <p className="text-sm text-text-muted mb-1">Website</p>
                   <a
                     href={profile.weburl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-lg text-light-primary dark:text-dark-primary hover:underline"
+                    className="text-lg text-brand hover:underline"
                   >
                     {profile.weburl}
                   </a>
