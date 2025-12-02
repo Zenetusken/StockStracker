@@ -35,6 +35,7 @@ export default function useKeyboardNavigation({
   // Reset active index when items change or list closes
   useEffect(() => {
     if (!isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset state when dropdown closes
       setActiveIndex(-1);
       setPreviewOpen(false);
     }
@@ -42,6 +43,7 @@ export default function useKeyboardNavigation({
 
   // Reset when items change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset state when items change
     setActiveIndex(-1);
   }, [items]);
 

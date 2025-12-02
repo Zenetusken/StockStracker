@@ -37,6 +37,7 @@ function StockDetail() {
   // Trigger pulse animation when quote updates
   useEffect(() => {
     if (quote?.lastUpdate) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Animation trigger on quote update
       setIsPulsing(true);
       const timeout = setTimeout(() => setIsPulsing(false), 300);
       return () => clearTimeout(timeout);

@@ -26,7 +26,7 @@ function MiniChart({ symbol, height = 80 }) {
   const chartRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [priceDirection, setPriceDirection] = useState('positive');
+  const [, setPriceDirection] = useState('positive');
 
   // Get fetchCandles from chartStore
   const fetchCandles = useChartStore((state) => state.fetchCandles);

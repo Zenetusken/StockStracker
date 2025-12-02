@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Context file exports both Provider and hook */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getTheme, getStoredTheme, applyTheme, getAllThemes, defaultTheme } from '../themes';
 
@@ -22,6 +23,7 @@ export function ThemeProvider({ children }) {
     // But isDarkMode state might not be ready if we rely on the lazy init above?
     // Actually, the lazy init runs synchronously during render, so isDarkMode is ready.
     applyTheme(storedTheme, isDarkMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run once on mount
   }, []);
 
   // Change theme

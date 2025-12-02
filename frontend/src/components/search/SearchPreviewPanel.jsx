@@ -27,12 +27,12 @@ const formatChange = (change, percentChange) => {
 };
 
 function SearchPreviewPanel({ symbol, description, quote, onAddToWatchlist }) {
-  const { profile, loading, formatMarketCap, formatVolume } = useSearchPreview(symbol, true);
+  const { profile, loading, formatMarketCap } = useSearchPreview(symbol, true);
   const [watchlists, setWatchlists] = useState([]);
   const [showWatchlistDropdown, setShowWatchlistDropdown] = useState(false);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
   const [addedToWatchlists, setAddedToWatchlists] = useState(new Set()); // Track which watchlists contain this symbol
-  const [lastAddedName, setLastAddedName] = useState('');
+  const [, setLastAddedName] = useState('');
 
   // Fetch user's watchlists and check which ones contain this symbol
   useEffect(() => {
@@ -59,7 +59,7 @@ function SearchPreviewPanel({ symbol, description, quote, onAddToWatchlist }) {
                   containingSymbol.add(watchlist.id);
                 }
               }
-            } catch (err) {
+            } catch {
               // Ignore errors for individual watchlist checks
             }
           }

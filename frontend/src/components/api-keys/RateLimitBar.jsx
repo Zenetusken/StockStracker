@@ -73,6 +73,7 @@ export default function RateLimitBar({
   const nextExpirySeconds = useMemo(() => {
     if (calls.length === 0) return null;
 
+    // eslint-disable-next-line react-hooks/purity -- Date.now() is intentional for countdown calculation
     const now = Date.now();
     // Find the call that will expire soonest
     const sortedCalls = [...calls].sort((a, b) => a.expiresAt - b.expiresAt);

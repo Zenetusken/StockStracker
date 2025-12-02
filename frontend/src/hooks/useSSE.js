@@ -156,6 +156,7 @@ function useSSE(symbols, onQuoteUpdate, onError) {
       setReconnecting(false);
       reconnectAttemptsRef.current = 0;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onQuoteUpdate and onError are stable callbacks
   }, [symbolsKey]); // Re-connect if symbols change
 
   return {

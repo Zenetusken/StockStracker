@@ -131,6 +131,7 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
               Icon
             </label>
             <div className="flex flex-wrap gap-2">
+              {/* eslint-disable-next-line no-unused-vars -- Icon IS used in JSX below */}
               {WATCHLIST_ICON_OPTIONS.map(({ name, Icon }) => (
                 <button
                   key={name}

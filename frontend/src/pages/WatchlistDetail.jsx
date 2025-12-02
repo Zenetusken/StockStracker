@@ -24,21 +24,21 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 // Sortable row component
-function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumber, navigate, handleRemoveSymbol, removingSymbol, isDragging }) {
+function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumber, navigate, handleRemoveSymbol, removingSymbol }) {
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     transition,
-    isDragging: isSortableDragging,
+    isDragging,
   } = useSortable({ id: item.symbol });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isSortableDragging ? 0.5 : 1,
-    cursor: isSortableDragging ? 'grabbing' : 'default',
+    opacity: isDragging ? 0.5 : 1,
+    cursor: isDragging ? 'grabbing' : 'default',
   };
 
   const isPositive = quote?.dp > 0;

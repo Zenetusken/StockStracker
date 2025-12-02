@@ -30,8 +30,8 @@ const STATUS_CONFIG = {
 };
 
 export default function ApiKeyStatusIndicator({ onClick }) {
-  const { fetchServices, getOverallStatus, services } = useApiKeysStore();
-  const [isInitialized, setIsInitialized] = useState(false);
+  const { fetchServices, getOverallStatus } = useApiKeysStore();
+  const [, setIsInitialized] = useState(false);
 
   useEffect(() => {
     fetchServices()

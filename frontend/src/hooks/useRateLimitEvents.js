@@ -40,7 +40,7 @@ function useRateLimitEvents() {
           reconnectAttemptsRef.current = 0;
         };
 
-        eventSource.addEventListener('connected', (event) => {
+        eventSource.addEventListener('connected', () => {
           console.log('[RateLimitSSE] Server confirmed connection');
         });
 

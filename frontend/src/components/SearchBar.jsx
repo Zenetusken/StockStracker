@@ -103,10 +103,8 @@ const SearchBar = forwardRef(function SearchBar(props, ref) {
     activeIndex,
     activeItem,
     isItemActive,
-    setActiveItem,
     handleKeyDown: handleNavKeyDown,
     previewOpen: keyboardPreviewOpen,
-    setPreviewOpen: setKeyboardPreviewOpen,
   } = useKeyboardNavigation({
     items: results,
     isOpen: isOpen && results.length > 0,

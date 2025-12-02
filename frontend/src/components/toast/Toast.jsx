@@ -32,6 +32,7 @@ export default function Toast({ toast, onDismiss }) {
   const [progress, setProgress] = useState(100);
   const [isExiting, setIsExiting] = useState(false);
   const progressRef = useRef(null);
+  // eslint-disable-next-line react-hooks/purity -- Initial timestamp for progress calculation
   const startTimeRef = useRef(Date.now());
 
   const style = TOAST_STYLES[toast.type] || TOAST_STYLES.info;

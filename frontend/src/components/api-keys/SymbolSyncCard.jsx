@@ -24,7 +24,7 @@ export default function SymbolSyncCard() {
   const handleSync = async () => {
     try {
       await triggerSync(false);
-    } catch (err) {
+    } catch {
       // Error is already handled in the hook
     }
   };
@@ -32,7 +32,7 @@ export default function SymbolSyncCard() {
   const handleRefreshSync = async () => {
     try {
       await triggerSync(true);
-    } catch (err) {
+    } catch {
       // Error is already handled in the hook
     }
   };
@@ -42,9 +42,6 @@ export default function SymbolSyncCard() {
   const etfCount = status?.countsByType?.['ETP'] || 0;
   const lastSync = status?.syncInfo ? formatLastSync(status.syncInfo) : 'Never';
   const hasSyncedData = status?.hasSyncedData || false;
-
-  // Determine sync status
-  const syncStatus = status?.syncInfo?.find(s => s.exchange === 'US')?.sync_status || 'pending';
 
   return (
     <div className="bg-panel dark:!bg-white/5 dark:backdrop-blur-md rounded-lg border border-line overflow-hidden">

@@ -36,6 +36,7 @@ function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
     if (isOpen && watchlists.length === 0) {
       fetchWatchlists();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only fetch when opening if empty
   }, [isOpen]);
 
   // Reset success state after delay

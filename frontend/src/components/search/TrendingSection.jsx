@@ -26,7 +26,7 @@ const formatPercent = (percent) => {
 };
 
 // Stock item component
-function StockItem({ stock, onClick, isGainer }) {
+function StockItem({ stock, onClick }) {
   const isPositive = stock.percentChange >= 0;
 
   return (

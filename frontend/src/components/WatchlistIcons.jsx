@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Icon library exports both components and constants intentionally */
 import { Star, Heart, TrendingUp, Zap, Target, Flame } from 'lucide-react';
 
 // Custom Alien icon (lucide-style: 24x24, stroke-based)
