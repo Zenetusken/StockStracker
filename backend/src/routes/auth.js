@@ -85,6 +85,7 @@ router.post('/register', async (req, res) => {
  * Authenticate user and create session
  */
 router.post('/login', async (req, res) => {
+  console.log('[Auth] Login attempt for:', req.body.email);
   try {
     const { email, password } = req.body;
 
