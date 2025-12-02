@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
+import { useChartStore } from '../stores/chartStore';
 
 /**
  * StockChart Component
@@ -11,8 +12,8 @@ import { createChart } from 'lightweight-charts';
  */
 
 // Chart background color - MUST be solid, not transparent
-// Using #f9fafb (gray-50) - very light, close to white but slightly grey
-const CHART_BACKGROUND_COLOR = '#f9fafb';
+// Warm cream intermediate - between page-bg (#E8E0D5) and card (#D6C7AE)
+const CHART_BACKGROUND_COLOR = '#DDD3C5';
 
 // Helper function to calculate Simple Moving Average
 function calculateSMA(data, period) {
@@ -40,35 +41,53 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const smaSeriesRef = useRef(null); // Reference for SMA line series
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [chartType, setChartType] = useState(initialChartType);
-  const [timeframe, setTimeframe] = useState(() => {
-    // Load saved timeframe from localStorage for this symbol
-    const savedTimeframe = localStorage.getItem(`chart_timeframe_${symbol}`);
-    return savedTimeframe || initialTimeframe;
-  });
   const [tooltipData, setTooltipData] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [showIndicators, setShowIndicators] = useState(false);
-  const [smaEnabled, setSmaEnabled] = useState(false);
-  const [smaPeriod, setSmaPeriod] = useState(20);
 
-  // Load saved timeframe when symbol changes
-  useEffect(() => {
-    const savedTimeframe = localStorage.getItem(`chart_timeframe_${symbol}`);
-    if (savedTimeframe) {
-      setTimeframe(savedTimeframe);
-    } else {
-      setTimeframe(initialTimeframe);
-    }
-  }, [symbol, initialTimeframe]);
+  // Get preferences and actions from chartStore
+  const getPreferences = useChartStore((state) => state.getPreferences);
+  const setStoreTimeframe = useChartStore((state) => state.setTimeframe);
+  const setStoreChartType = useChartStore((state) => state.setChartType);
+  const setStoreSmaEnabled = useChartStore((state) => state.setSmaEnabled);
+  const setStoreSmaPeriod = useChartStore((state) => state.setSmaPeriod);
+  const fetchCandles = useChartStore((state) => state.fetchCandles);
 
-  // Save timeframe to localStorage whenever it changes
+  // Get preferences from store (handles localStorage internally)
+  const preferences = getPreferences(symbol);
+  const [chartType, setChartType] = useState(preferences.chartType || initialChartType);
+  const [timeframe, setTimeframe] = useState(preferences.timeframe || initialTimeframe);
+  const [smaEnabled, setSmaEnabled] = useState(preferences.smaEnabled || false);
+  const [smaPeriod, setSmaPeriod] = useState(preferences.smaPeriod || 20);
+
+  // Sync preferences from store when symbol changes
   useEffect(() => {
-    localStorage.setItem(`chart_timeframe_${symbol}`, timeframe);
-  }, [timeframe, symbol]);
+    const prefs = getPreferences(symbol);
+    setTimeframe(prefs.timeframe || initialTimeframe);
+    setChartType(prefs.chartType || initialChartType);
+    setSmaEnabled(prefs.smaEnabled || false);
+    setSmaPeriod(prefs.smaPeriod || 20);
+  }, [symbol, initialTimeframe, initialChartType, getPreferences]);
+
+  // Sync preferences to store when they change
+  useEffect(() => {
+    setStoreTimeframe(symbol, timeframe);
+  }, [symbol, timeframe, setStoreTimeframe]);
+
+  useEffect(() => {
+    setStoreChartType(symbol, chartType);
+  }, [symbol, chartType, setStoreChartType]);
+
+  useEffect(() => {
+    setStoreSmaEnabled(symbol, smaEnabled);
+  }, [symbol, smaEnabled, setStoreSmaEnabled]);
+
+  useEffect(() => {
+    setStoreSmaPeriod(symbol, smaPeriod);
+  }, [symbol, smaPeriod, setStoreSmaPeriod]);
 
   // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {
@@ -133,41 +152,43 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             case '5D': days = 5; resolution = '60'; break;
             case '1M': days = 30; resolution = 'D'; break;
             case '6M': days = 180; resolution = 'D'; break;
-            case '1Y': days = 365; resolution = 'D'; break;
-            case '5Y': days = 1825; resolution = 'D'; break; // 5 years
-            case 'Max': days = 7300; resolution = 'W'; break; // ~20 years, weekly candles
+            case '1Y': days = 365; resolution = 'W'; break;    // Weekly for 1Y (daily only covers ~5 months)
+            case '5Y': days = 1825; resolution = 'W'; break;   // Weekly for 5Y
+            case 'Max': days = 7300; resolution = 'W'; break;  // Weekly for Max (~20 years)
             default: days = 180; resolution = 'D';
           }
           from = now - (days * dayInSeconds);
           to = now;
         }
 
-        // Fetch candle data
-        const response = await fetch(
-          `http://localhost:3001/api/quotes/${symbol}/candles?resolution=${resolution}&from=${from}&to=${to}`,
-          { credentials: 'include' }
-        );
+        // Fetch candle data using chartStore (with LRU caching)
+        const result = await fetchCandles(symbol, resolution, from, to);
 
         if (!isActive) return;
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch chart data');
-        }
-
-        const data = await response.json();
+        const data = result?.data;
 
         if (!data || data.s !== 'ok' || !data.t || data.t.length === 0) {
           throw new Error('No chart data available');
         }
 
-        // Transform data
-        const chartData = data.t.map((timestamp, i) => ({
-          time: timestamp,
-          open: data.o[i],
-          high: data.h[i],
-          low: data.l[i],
-          close: data.c[i],
-        }));
+        // Transform data - don't filter by from/to since Yahoo Finance
+        // returns data based on its own range parameter (1d, 5d, etc.)
+        // which may not exactly match our calculated timestamps
+        const chartData = data.t
+          .map((timestamp, i) => ({
+            time: timestamp,
+            open: data.o[i],
+            high: data.h[i],
+            low: data.l[i],
+            close: data.c[i],
+          }))
+          .filter(d => d.open != null && d.close != null); // Only filter out null values
+
+        // Handle case where no valid data points exist
+        if (chartData.length === 0) {
+          throw new Error('No data available for selected time range');
+        }
 
         if (!isActive || !container) return;
 
@@ -326,7 +347,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       seriesRef.current = null;
       smaSeriesRef.current = null;
     };
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, smaEnabled, smaPeriod]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, smaEnabled, smaPeriod, fetchCandles]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -393,20 +414,23 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   }, [isFullscreen]);
 
   const chartContent = (
-    <div className={`bg-gray-50 rounded-lg shadow-lg p-4 relative ${isFullscreen ? 'h-full' : ''}`}>
+    <div
+      className={`rounded-lg shadow-lg p-4 relative ${isFullscreen ? 'h-full' : ''}`}
+      style={{ backgroundColor: '#DDD3C5' }}
+    >
       {/* Loading Overlay */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-lg z-10">
-          <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+        <div className="absolute inset-0 flex items-center justify-center bg-page-bg bg-opacity-90 rounded-lg z-10">
+          <div className="animate-spin h-12 w-12 border-4 border-brand border-t-transparent rounded-full"></div>
         </div>
       )}
 
       {/* Error Overlay */}
       {error && !loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-lg z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-page-bg bg-opacity-90 rounded-lg z-10">
           <div className="text-center">
-            <p className="text-red-600 mb-2">Failed to load chart</p>
-            <p className="text-sm text-gray-600">{error}</p>
+            <p className="text-loss mb-2">Failed to load chart</p>
+            <p className="text-sm text-text-secondary">{error}</p>
           </div>
         </div>
       )}
@@ -415,16 +439,16 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
         {/* Chart Type Selector */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700 font-medium">Chart Type:</span>
-          <div className="flex gap-1 bg-gray-300 rounded-lg p-1">
+          <span className="text-sm text-text-primary font-medium">Chart Type:</span>
+          <div className="flex gap-1 bg-line rounded-lg p-1">
             {['candlestick', 'line', 'area'].map(type => (
               <button
                 key={type}
                 onClick={() => setChartType(type)}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   chartType === type
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-card text-text-primary shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
                 {type.charAt(0).toUpperCase() + type.slice(1)}
@@ -435,16 +459,16 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
         {/* Timeframe Selector */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700 font-medium">Timeframe:</span>
-          <div className="flex gap-1 bg-gray-300 rounded-lg p-1">
+          <span className="text-sm text-text-primary font-medium">Timeframe:</span>
+          <div className="flex gap-1 bg-line rounded-lg p-1">
             {['1D', '5D', '1M', '6M', '1Y', '5Y', 'Max'].map(tf => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   timeframe === tf
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-card text-text-primary shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
                 {tf}
@@ -454,8 +478,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
               onClick={() => setShowDatePicker(!showDatePicker)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 timeframe === 'custom'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-card text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
               }`}
               title="Custom date range"
             >
@@ -470,8 +494,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             onClick={() => setShowIndicators(!showIndicators)}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
               showIndicators || smaEnabled
-                ? 'bg-blue-500 text-white hover:bg-blue-600'
-                : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                ? 'bg-brand text-white hover:bg-brand-hover'
+                : 'bg-line text-text-primary hover:bg-line-light'
             }`}
             title="Technical Indicators"
           >
@@ -482,13 +506,13 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           </button>
           <button
             onClick={handleResetZoom}
-            className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-gray-300 hover:bg-gray-400 rounded-lg transition-colors"
+            className="px-4 py-1.5 text-sm font-medium text-text-primary bg-line hover:bg-line-light rounded-lg transition-colors"
           >
             Reset Zoom
           </button>
           <button
             onClick={handleExportPNG}
-            className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-gray-300 hover:bg-gray-400 rounded-lg transition-colors flex items-center gap-2"
+            className="px-4 py-1.5 text-sm font-medium text-text-primary bg-line hover:bg-line-light rounded-lg transition-colors flex items-center gap-2"
             title="Export as PNG"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -498,7 +522,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           </button>
           <button
             onClick={handleToggleFullscreen}
-            className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-gray-300 hover:bg-gray-400 rounded-lg transition-colors"
+            className="px-4 py-1.5 text-sm font-medium text-text-primary bg-line hover:bg-line-light rounded-lg transition-colors"
             title="Toggle fullscreen"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -514,10 +538,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
       {/* Custom Date Range Picker Modal */}
       {showDatePicker && (
-        <div className="mb-4 p-4 bg-white border border-gray-300 rounded-lg shadow-lg">
+        <div className="mb-4 p-4 bg-card border border-line rounded-lg shadow-lg">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
-              <label htmlFor="start-date" className="text-sm font-medium text-gray-700">
+              <label htmlFor="start-date" className="text-sm font-medium text-text-primary">
                 Start Date:
               </label>
               <input
@@ -525,11 +549,11 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                 type="date"
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand bg-page-bg text-text-primary"
               />
             </div>
             <div className="flex items-center gap-2">
-              <label htmlFor="end-date" className="text-sm font-medium text-gray-700">
+              <label htmlFor="end-date" className="text-sm font-medium text-text-primary">
                 End Date:
               </label>
               <input
@@ -537,19 +561,19 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                 type="date"
                 value={customEndDate}
                 onChange={(e) => setCustomEndDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand bg-page-bg text-text-primary"
               />
             </div>
             <div className="flex gap-2">
               <button
                 onClick={handleApplyCustomRange}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white bg-brand hover:bg-brand-hover rounded-md transition-colors"
               >
                 Apply
               </button>
               <button
                 onClick={() => setShowDatePicker(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+                className="px-4 py-2 text-sm font-medium text-text-primary bg-table-header hover:bg-line rounded-md transition-colors"
               >
                 Cancel
               </button>
@@ -560,8 +584,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
       {/* Indicators Panel */}
       {showIndicators && (
-        <div className="mb-4 p-4 bg-white border border-gray-300 rounded-lg shadow-lg">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Technical Indicators</h3>
+        <div className="mb-4 p-4 bg-card border border-line rounded-lg shadow-lg">
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Technical Indicators</h3>
 
           {/* SMA Indicator */}
           <div className="space-y-3">
@@ -572,22 +596,22 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                   id="sma-enabled"
                   checked={smaEnabled}
                   onChange={(e) => setSmaEnabled(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-4 h-4 text-brand rounded focus:ring-2 focus:ring-brand"
                 />
-                <label htmlFor="sma-enabled" className="text-sm font-medium text-gray-700">
+                <label htmlFor="sma-enabled" className="text-sm font-medium text-text-primary">
                   Simple Moving Average (SMA)
                 </label>
               </div>
               {smaEnabled && (
                 <div className="flex items-center gap-2">
-                  <label htmlFor="sma-period" className="text-sm text-gray-600">
+                  <label htmlFor="sma-period" className="text-sm text-text-secondary">
                     Period:
                   </label>
                   <select
                     id="sma-period"
                     value={smaPeriod}
                     onChange={(e) => setSmaPeriod(parseInt(e.target.value))}
-                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-3 py-1.5 border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand bg-page-bg text-text-primary"
                   >
                     <option value={10}>10</option>
                     <option value={20}>20</option>
@@ -598,17 +622,17 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
               )}
             </div>
             {smaEnabled && (
-              <div className="text-xs text-gray-500 pl-7">
+              <div className="text-xs text-text-muted pl-7">
                 Displays a {smaPeriod}-period moving average line on the chart (orange line)
               </div>
             )}
           </div>
 
           {/* Close button */}
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-line">
             <button
               onClick={() => setShowIndicators(false)}
-              className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+              className="w-full px-4 py-2 text-sm font-medium text-text-primary bg-table-header hover:bg-line rounded-md transition-colors"
             >
               Close
             </button>
@@ -618,9 +642,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
       {/* Crosshair Tooltip */}
       {tooltipData && (
-        <div className="absolute top-20 left-4 bg-white border border-gray-300 rounded-lg p-3 shadow-lg z-20 pointer-events-none">
+        <div className="absolute top-20 left-4 bg-card border border-line rounded-lg p-3 shadow-lg z-20 pointer-events-none">
           <div className="text-xs space-y-1">
-            <div className="font-semibold text-gray-900 mb-2">
+            <div className="font-semibold text-text-primary mb-2">
               {new Date(typeof tooltipData.time === 'number' ? tooltipData.time * 1000 : tooltipData.time).toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -632,27 +656,27 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             {tooltipData.open !== undefined && (
               <>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-500">Open:</span>
-                  <span className="font-medium text-gray-900">${tooltipData.open.toFixed(2)}</span>
+                  <span className="text-text-muted">Open:</span>
+                  <span className="font-medium text-text-primary">${tooltipData.open.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-500">High:</span>
-                  <span className="font-medium text-green-600">${tooltipData.high.toFixed(2)}</span>
+                  <span className="text-text-muted">High:</span>
+                  <span className="font-medium text-gain">${tooltipData.high.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-500">Low:</span>
-                  <span className="font-medium text-red-600">${tooltipData.low.toFixed(2)}</span>
+                  <span className="text-text-muted">Low:</span>
+                  <span className="font-medium text-loss">${tooltipData.low.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-500">Close:</span>
-                  <span className="font-medium text-gray-900">${tooltipData.close.toFixed(2)}</span>
+                  <span className="text-text-muted">Close:</span>
+                  <span className="font-medium text-text-primary">${tooltipData.close.toFixed(2)}</span>
                 </div>
               </>
             )}
             {tooltipData.value !== undefined && (
               <div className="flex justify-between gap-4">
-                <span className="text-gray-500">Price:</span>
-                <span className="font-medium text-gray-900">${tooltipData.value.toFixed(2)}</span>
+                <span className="text-text-muted">Price:</span>
+                <span className="font-medium text-text-primary">${tooltipData.value.toFixed(2)}</span>
               </div>
             )}
           </div>

@@ -1,14 +1,7 @@
 import { useState } from 'react';
-import { X, Star, Heart, TrendingUp, Zap, Target, Flame } from 'lucide-react';
-
-const ICON_OPTIONS = [
-  { name: 'star', Icon: Star },
-  { name: 'heart', Icon: Heart },
-  { name: 'trending', Icon: TrendingUp },
-  { name: 'zap', Icon: Zap },
-  { name: 'target', Icon: Target },
-  { name: 'flame', Icon: Flame },
-];
+import { X, Star } from 'lucide-react';
+import { useWatchlistStore } from '../stores/watchlistStore';
+import { WATCHLIST_ICON_OPTIONS } from './WatchlistIcons';
 
 const COLOR_OPTIONS = [
   '#3B82F6', // blue
@@ -28,6 +21,8 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const createWatchlist = useWatchlistStore((state) => state.createWatchlist);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -40,33 +35,15 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('http://localhost:3001/api/watchlists', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: name.trim(),
-          color: selectedColor,
-          icon: selectedIcon,
-        }),
-      });
-
-      if (response.ok) {
-        const watchlist = await response.json();
-        setName('');
-        setSelectedColor(COLOR_OPTIONS[0]);
-        setSelectedIcon('star');
-        onSuccess(watchlist);
-        onClose();
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to create watchlist');
-      }
+      const watchlist = await createWatchlist(name.trim(), selectedColor, selectedIcon);
+      setName('');
+      setSelectedColor(COLOR_OPTIONS[0]);
+      setSelectedIcon('star');
+      onSuccess(watchlist);
+      onClose();
     } catch (err) {
       console.error('Error creating watchlist:', err);
-      setError('Failed to create watchlist. Please try again.');
+      setError(err.message || 'Failed to create watchlist. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -84,25 +61,25 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-md">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+        <div className="flex items-center justify-between p-6 border-b border-line">
+          <h2 className="text-xl font-semibold text-text-primary">
             Create New Watchlist
           </h2>
           <button
             onClick={handleClose}
-            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+            className="p-1 hover:bg-card-hover rounded transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <X className="w-5 h-5 text-text-secondary dark:text-gray-400" />
           </button>
         </div>
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="p-3 bg-loss/10 border border-loss/30 rounded-lg">
+              <p className="text-sm text-loss">{error}</p>
             </div>
           )}
 
@@ -110,7 +87,7 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
           <div>
             <label
               htmlFor="watchlist-name"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              className="block text-sm font-medium text-text-primary dark:text-gray-300 mb-2"
             >
               Watchlist Name
             </label>
@@ -120,14 +97,14 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Tech Stocks"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-line rounded-lg bg-page-bg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
               autoFocus
             />
           </div>
 
           {/* Color Picker */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-text-primary mb-2">
               Color
             </label>
             <div className="flex flex-wrap gap-2">
@@ -138,7 +115,7 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
                   onClick={() => setSelectedColor(color)}
                   className={`w-10 h-10 rounded-lg transition-all ${
                     selectedColor === color
-                      ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-800'
+                      ? 'ring-2 ring-offset-2 ring-brand'
                       : 'hover:scale-110'
                   }`}
                   style={{ backgroundColor: color }}
@@ -150,19 +127,19 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
 
           {/* Icon Picker */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-text-primary mb-2">
               Icon
             </label>
             <div className="flex flex-wrap gap-2">
-              {ICON_OPTIONS.map(({ name, Icon }) => (
+              {WATCHLIST_ICON_OPTIONS.map(({ name, Icon }) => (
                 <button
                   key={name}
                   type="button"
                   onClick={() => setSelectedIcon(name)}
                   className={`p-3 rounded-lg border-2 transition-all ${
                     selectedIcon === name
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                      ? 'border-brand bg-mint-light'
+                      : 'border-line hover:border-text-secondary'
                   }`}
                   title={name}
                 >
@@ -176,13 +153,13 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
           </div>
 
           {/* Preview */}
-          <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+          <div className="p-4 bg-table-header rounded-lg">
+            <p className="text-xs font-medium text-text-secondary mb-2">
               Preview
             </p>
             <div className="flex items-center gap-3">
               {(() => {
-                const IconComponent = ICON_OPTIONS.find((opt) => opt.name === selectedIcon)?.Icon || Star;
+                const IconComponent = WATCHLIST_ICON_OPTIONS.find((opt) => opt.name === selectedIcon)?.Icon || Star;
                 return (
                   <IconComponent
                     className="w-5 h-5"
@@ -190,7 +167,7 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
                   />
                 );
               })()}
-              <span className="text-gray-900 dark:text-white font-medium">
+              <span className="text-text-primary font-medium">
                 {name || 'Watchlist Name'}
               </span>
             </div>
@@ -201,14 +178,14 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              className="flex-1 px-4 py-2 text-sm font-medium text-text-primary bg-page-bg border border-line rounded-lg hover:bg-table-header transition-colors"
               disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Creating...' : 'Create Watchlist'}

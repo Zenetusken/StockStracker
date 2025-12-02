@@ -1,30 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import SearchBar from './SearchBar';
 import NewWatchlistModal from './NewWatchlistModal';
+import { ApiKeyStatusIndicator, ApiKeysModal } from './api-keys';
+import ThemeSwitcher from './ThemeSwitcher';
+import { LogoFull } from './Logo';
+import { useAuthStore } from '../stores/authStore';
 
 function Layout({ children }) {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
   const [isNewWatchlistModalOpen, setIsNewWatchlistModalOpen] = useState(false);
+  const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
   const [sidebarKey, setSidebarKey] = useState(0);
+  const searchBarRef = useRef(null);
 
-  useEffect(() => {
-    // Get user from sessionStorage
-    const userStr = sessionStorage.getItem('user');
-    if (userStr) {
-      setUser(JSON.parse(userStr));
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
+
+  // Global Cmd+K / Ctrl+K shortcut to focus search
+  const handleGlobalKeyDown = useCallback((event) => {
+    // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+    if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+      event.preventDefault();
+      searchBarRef.current?.focus();
     }
   }, []);
 
+  useEffect(() => {
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [handleGlobalKeyDown]);
+
   const handleLogout = async () => {
     try {
-      await fetch('http://localhost:3001/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      sessionStorage.removeItem('user');
+      await logout();
       navigate('/login');
     } catch (err) {
       console.error('Logout error:', err);
@@ -37,7 +49,7 @@ function Layout({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-light-bg dark:bg-dark-bg flex">
+    <div className="min-h-screen bg-page-bg flex">
       {/* Sidebar */}
       <Sidebar
         key={sidebarKey}
@@ -47,29 +59,29 @@ function Layout({ children }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <header className="bg-panel shadow-sm border-b-2 border-line">
           <div className="px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                StockTracker Pro
-              </h1>
+              <LogoFull size="md" />
               <div className="flex items-center gap-4">
                 {user && (
-                  <span className="text-sm text-gray-600 dark:text-gray-400" id="user-email">
+                  <span className="text-sm text-text-muted" id="user-email">
                     {user.email}
                   </span>
                 )}
+                <ThemeSwitcher />
+                <ApiKeyStatusIndicator onClick={() => setIsApiKeysModalOpen(true)} />
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-panel-hover hover:text-text-primary transition-colors"
                 >
                   Logout
                 </button>
               </div>
             </div>
-            {/* Search Bar */}
+            {/* Search Bar - Cmd+K / Ctrl+K to focus */}
             <div className="flex justify-center">
-              <SearchBar />
+              <SearchBar ref={searchBarRef} />
             </div>
           </div>
         </header>
@@ -85,6 +97,12 @@ function Layout({ children }) {
         isOpen={isNewWatchlistModalOpen}
         onClose={() => setIsNewWatchlistModalOpen(false)}
         onSuccess={handleWatchlistCreated}
+      />
+
+      {/* API Keys Modal */}
+      <ApiKeysModal
+        isOpen={isApiKeysModalOpen}
+        onClose={() => setIsApiKeysModalOpen(false)}
       />
     </div>
   );

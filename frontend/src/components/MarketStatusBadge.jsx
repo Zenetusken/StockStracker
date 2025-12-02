@@ -7,11 +7,11 @@ export default function MarketStatusBadge() {
   const status = getMarketStatus();
 
   const colorClasses = {
-    green: 'text-green-600 dark:text-green-400',
+    green: 'text-gain',
     yellow: 'text-yellow-600 dark:text-yellow-400',
     orange: 'text-orange-600 dark:text-orange-400',
-    red: 'text-red-600 dark:text-red-400',
-    gray: 'text-gray-600 dark:text-gray-400',
+    red: 'text-loss',
+    gray: 'text-text-muted',
   };
 
   return (
