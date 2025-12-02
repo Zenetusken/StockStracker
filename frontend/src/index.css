@@ -2,13 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    /* Theme color variables - Default: Slovakia Villa */
+    /* These are overridden at runtime by the theme system */
+
+    /* Page background */
+    --color-page-bg: #E8E0D5;
+
+    /* Panel backgrounds (sidebar, header) */
+    --color-panel: #E0D6CA;
+    --color-panel-hover: #D8CEC0;
+
+    /* Card/surface backgrounds (main containers) */
+    --color-card: #D6C7AE;
+    --color-card-hover: #E0D4BF;
+
+    /* Text colors */
+    --color-text-primary: #222601;
+    --color-text-secondary: #555A32;
+    --color-text-muted: #645F50;
+
+    /* Brand/Primary colors */
+    --color-brand: #224E02;
+    --color-brand-hover: #1A3B01;
+    --color-brand-light: #2D6803;
+    --color-brand-tint: #E8F0E4;
+
+    /* Accent colors */
+    --color-accent: #93CE89;
+    --color-accent-light: #C8E6C3;
+
+    /* Muted/Table backgrounds */
+    --color-table-header: #E1DACD;
+
+    /* Border colors */
+    --color-line: #C0B29C;
+    --color-line-light: #D2C8B4;
+
+    /* Stock indicator colors */
+    --color-gain: #2E9E6B;
+    --color-loss: #C45C4A;
+  }
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
+  color-scheme: light;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -24,11 +68,23 @@
 
 body {
   min-height: 100vh;
+  background-color: var(--color-page-bg);
+  color: var(--color-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
   min-height: 100vh;
+  background-color: var(--color-page-bg);
+  transition: background-color 0.3s ease;
 }
+
+/* Dark mode overrides - REMOVED to allow theme variables to control dark mode colors */
+/* .dark body,
+.dark #root {
+  background-color: #262625;
+  color: #BFBDB8;
+} */
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -41,23 +97,46 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--color-line);
   border-radius: 4px;
+  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+.dark ::-webkit-scrollbar-thumb {
   background: #555;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #777;
 }
 
 /* Price flash animations */
 @keyframes flash-green {
-  0%, 100% { background-color: transparent; }
-  50% { background-color: rgba(46, 158, 107, 0.2); }
+
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: rgba(46, 158, 107, 0.2);
+  }
 }
 
 @keyframes flash-red {
-  0%, 100% { background-color: transparent; }
-  50% { background-color: rgba(196, 92, 74, 0.2); }
+
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: rgba(196, 92, 74, 0.2);
+  }
 }
 
 .flash-green {
@@ -66,4 +145,197 @@ body {
 
 .flash-red {
   animation: flash-red 0.5s ease-in-out;
+}
+
+/* Toast slide-in animation */
+@keyframes slide-in {
+  0% {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+
+/* Smooth transitions for theme changes */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease !important;
+}
+
+/*
+ * Custom utility classes for theme colors
+ * These bypass Tailwind's color opacity processing which doesn't work with hex CSS variables
+ */
+
+/* Background colors - placed outside @layer for higher specificity */
+
+/* Panel colors (sidebar, header) */
+.bg-panel {
+  background-color: var(--color-panel);
+}
+
+.bg-panel-hover {
+  background-color: var(--color-panel-hover);
+}
+
+.hover\:bg-panel-hover:hover {
+  background-color: var(--color-panel-hover);
+}
+
+/* Card colors (main containers) */
+.bg-card,
+input.bg-card,
+textarea.bg-card,
+select.bg-card {
+  background-color: var(--color-card);
+}
+
+.bg-card-hover {
+  background-color: var(--color-card-hover);
+}
+
+.bg-page-bg {
+  background-color: var(--color-page-bg);
+}
+
+.bg-table-header {
+  background-color: var(--color-table-header);
+}
+
+.bg-mint {
+  background-color: var(--color-accent);
+}
+
+.bg-mint-light {
+  background-color: var(--color-accent-light);
+}
+
+.bg-accent-light {
+  background-color: var(--color-accent-light);
+}
+
+.text-accent {
+  color: var(--color-accent);
+}
+
+.bg-brand {
+  background-color: var(--color-brand);
+}
+
+.bg-brand-hover {
+  background-color: var(--color-brand-hover);
+}
+
+.bg-brand-light {
+  background-color: var(--color-brand-light);
+}
+
+.bg-brand-tint {
+  background-color: var(--color-brand-tint);
+}
+
+.bg-gain {
+  background-color: var(--color-gain);
+}
+
+.bg-loss {
+  background-color: var(--color-loss);
+}
+
+/* Hover background variants */
+.hover\:bg-card-hover:hover {
+  background-color: var(--color-card-hover);
+}
+
+.hover\:bg-brand-hover:hover {
+  background-color: var(--color-brand-hover);
+}
+
+.hover\:bg-mint-light:hover {
+  background-color: var(--color-accent-light);
+}
+
+.hover\:bg-page-bg:hover {
+  background-color: var(--color-page-bg);
+}
+
+/* Text colors */
+.text-text-primary {
+  color: var(--color-text-primary);
+}
+
+.text-text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.text-text-muted {
+  color: var(--color-text-muted);
+}
+
+.text-brand {
+  color: var(--color-brand);
+}
+
+.text-gain {
+  color: var(--color-gain);
+}
+
+.text-loss {
+  color: var(--color-loss);
+}
+
+/* Placeholder colors for inputs */
+.placeholder-text-muted::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Hover text variants */
+.hover\:text-text-primary:hover {
+  color: var(--color-text-primary);
+}
+
+.hover\:text-brand:hover {
+  color: var(--color-brand);
+}
+
+/* Border colors */
+.border-line {
+  border-color: var(--color-line);
+}
+
+.border-line-light {
+  border-color: var(--color-line-light);
+}
+
+.border-brand {
+  border-color: var(--color-brand);
+}
+
+/* Divide colors */
+.divide-line> :not([hidden])~ :not([hidden]) {
+  border-color: var(--color-line);
+}
+
+/* Focus ring colors */
+.focus\:ring-brand:focus {
+  --tw-ring-color: var(--color-brand);
+}
+
+.focus\:border-brand:focus {
+  border-color: var(--color-brand);
+}
+
+/* Ring colors */
+.ring-brand {
+  --tw-ring-color: var(--color-brand);
 }
