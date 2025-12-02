@@ -2,9 +2,153 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend-temp</title>
+    <title>StockTracker</title>
+    <script>
+      // Initialize theme before React loads to prevent flash
+      (function() {
+        // One-time migration: reset dark mode to light if this is the first theme system load
+        const themeVersion = localStorage.getItem('stocktracker-theme-version');
+        if (themeVersion !== '5') {
+          // Reset to light mode and default theme for new theme system
+          localStorage.setItem('stocktracker-dark-mode', 'false');
+          localStorage.setItem('stocktracker-theme', 'forestDawn');
+          localStorage.setItem('stocktracker-theme-version', '5');
+        }
+
+        // Apply dark mode class based on stored preference (default: light)
+        const darkMode = localStorage.getItem('stocktracker-dark-mode') === 'true';
+        if (darkMode) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+
+        // Apply stored theme colors
+        const themes = {
+          forestDawn: {
+            pageBg: '#C8E6C9', panel: '#A5D6A7', panelHover: '#81C784', card: '#66BB6A', cardHover: '#57A05B',
+            textPrimary: '#022C22', textSecondary: '#064E3B', textMuted: '#065F46',
+            brand: '#064E3B', brandHover: '#022C22', brandLight: '#1B5E20', brandTint: '#E8F5E9',
+            accent: '#1B5E20', accentLight: '#81C784', tableHeader: '#81C784',
+            line: '#43A047', lineLight: '#81C784', gain: '#022C22', loss: '#7F1D1D',
+            colorsDark: {
+              pageBg: '#0E1719', panel: '#3B4A38', panelHover: '#4A5C47', card: '#1C2D2A', cardHover: '#263C39',
+              textPrimary: '#F1F8E9', textSecondary: '#C8E6C9', textMuted: '#A5D6A7',
+              brand: '#C8E6C9', brandHover: '#F1F8E9', brandLight: '#A5D6A7', brandTint: '#1C2D2A',
+              accent: '#6B765C', accentLight: '#3B4A38', tableHeader: '#263C39',
+              line: '#263C39', lineLight: '#3B4A38', gain: '#4CAF50', loss: '#EF5350'
+            }
+          },
+          oceanBreeze: {
+            pageBg: '#E3F2FD', card: '#90CAF9', cardHover: '#64B5F6',
+            textPrimary: '#0D47A1', textSecondary: '#1565C0', textMuted: '#1976D2',
+            brand: '#0277BD', brandHover: '#01579B', brandLight: '#4FC3F7',
+            accent: '#29B6F6', accentLight: '#B3E5FC', tableHeader: '#BBDEFB',
+            line: '#90CAF9', lineLight: '#E3F2FD', gain: '#2E7D32', loss: '#C62828',
+            colorsDark: {
+              pageBg: '#0B1121', panel: '#2D4059', panelHover: '#3B5270', card: '#1B263B', cardHover: '#24324D',
+              textPrimary: '#E1F5FE', textSecondary: '#B3E5FC', textMuted: '#81D4FA',
+              brand: '#81D4FA', brandHover: '#E1F5FE', brandLight: '#4FC3F7', brandTint: '#1B263B',
+              accent: '#4FC3F7', accentLight: '#1B263B', tableHeader: '#24324D',
+              line: '#24324D', lineLight: '#2D4059', gain: '#4CAF50', loss: '#EF5350'
+            }
+          },
+          midnightPurple: {
+            pageBg: '#F3E0F7', panel: '#E1BEE7', panelHover: '#D6A6E3', card: '#D6A6E3', cardHover: '#BA68C8',
+            textPrimary: '#2E1A36', textSecondary: '#4A148C', textMuted: '#5E2C6D',
+            brand: '#5E2C6D', brandHover: '#3D1C4A', brandLight: '#9D5FB3',
+            accent: '#7B3F8F', accentLight: '#E1BEE7', tableHeader: '#E1BEE7',
+            line: '#BA68C8', lineLight: '#F3E0F7', gain: '#2E7D32', loss: '#C62828',
+            colorsDark: {
+              pageBg: '#120616', panel: '#3D1C4A', panelHover: '#4A235A', card: '#24102B', cardHover: '#2E1437',
+              textPrimary: '#F3E0F7', textSecondary: '#D6A6E3', textMuted: '#BF82D1',
+              brand: '#D6A6E3', brandHover: '#F3E0F7', brandLight: '#9D5FB3', brandTint: '#2E1437',
+              accent: '#9D5FB3', accentLight: '#361840', tableHeader: '#2E1437',
+              line: '#3D1C4A', lineLight: '#24102B', gain: '#4CAF50', loss: '#EF5350'
+            }
+          },
+          sunsetGlow: {
+            pageBg: '#FFF8E1', panel: '#FFECB3', panelHover: '#FFE082', card: '#FCDC91', cardHover: '#FDE6A8',
+            textPrimary: '#78350F', textSecondary: '#92400E', textMuted: '#B45309',
+            brand: '#F57C00', brandHover: '#E65100', brandLight: '#FFB74D', brandTint: '#FFF8E1',
+            accent: '#FFC107', accentLight: '#FFECB3', tableHeader: '#FFECB3',
+            line: '#FFE0B2', lineLight: '#FFF8E1', gain: '#2E7D32', loss: '#C62828',
+            colorsDark: {
+              pageBg: '#180802', panel: '#402005', panelHover: '#542A08', card: '#2A1204', cardHover: '#3D1A06',
+              textPrimary: '#FFF9C4', textSecondary: '#FFE0B2', textMuted: '#FFCC80',
+              brand: '#FFB74D', brandHover: '#FFF9C4', brandLight: '#FFCC80', brandTint: '#2A1204',
+              accent: '#FFD54F', accentLight: '#FF6F00', tableHeader: '#3D1A06',
+              line: '#3D1A06', lineLight: '#402005', gain: '#4CAF50', loss: '#EF5350'
+            }
+          },
+          roseGarden: {
+            pageBg: '#F7DAE7', card: '#D38C9D', cardHover: '#E2B4C1',
+            textPrimary: '#360D1B', textSecondary: '#631932', textMuted: '#880E4F',
+            brand: '#A55166', brandHover: '#880E4F', brandLight: '#E2B4C1',
+            accent: '#E2B4C1', accentLight: '#F7DAE7', tableHeader: '#E2B4C1',
+            line: '#E2B4C1', lineLight: '#F7DAE7', gain: '#2E7D32', loss: '#C62828',
+            colorsDark: {
+              pageBg: '#14050A', panel: '#631932', panelHover: '#962F56', card: '#360D1B', cardHover: '#631932',
+              textPrimary: '#FFF5F8', textSecondary: '#FFCCDE', textMuted: '#FF99BB',
+              brand: '#FF80AB', brandHover: '#FFF5F8', brandLight: '#FF4081', brandTint: '#360D1B',
+              accent: '#962F56', accentLight: '#631932', tableHeader: '#631932',
+              line: '#631932', lineLight: '#631932', gain: '#4CAF50', loss: '#EF5350'
+            }
+          },
+          slateModern: {
+            pageBg: '#F8FAFC', card: '#FFFFFF', cardHover: '#F1F5F9',
+            textPrimary: '#0F172A', textSecondary: '#334155', textMuted: '#64748B',
+            brand: '#475569', brandHover: '#334155', brandLight: '#64748B',
+            accent: '#94A3B8', accentLight: '#CBD5E1', tableHeader: '#F1F5F9',
+            line: '#CBD5E1', lineLight: '#E2E8F0', gain: '#16A34A', loss: '#DC2626',
+            colorsDark: {
+              pageBg: '#090F15', panel: '#37474F', panelHover: '#455A64', card: '#262E36', cardHover: '#6C6D74',
+              textPrimary: '#FFFFFF', textSecondary: '#E2E8F0', textMuted: '#CBD5E1',
+              brand: '#83878A', brandHover: '#D3D1CE', brandLight: '#6C6D74', brandTint: '#262E36',
+              accent: '#6C6D74', accentLight: '#262E36', tableHeader: '#6C6D74',
+              line: '#6C6D74', lineLight: '#262E36', gain: '#4CAF50', loss: '#EF5350'
+            }
+          },
+          espresso: {
+            pageBg: '#D7CCC8', panel: '#BCAAA4', panelHover: '#D7CCC8', card: '#A1887F', cardHover: '#BCAAA4',
+            textPrimary: '#1B0F0A', textSecondary: '#2C1810', textMuted: '#4E342E',
+            brand: '#2C1810', brandHover: '#1B0F0A', brandLight: '#4E342E', brandTint: '#D7CCC8',
+            accent: '#4E342E', accentLight: '#EFEBE9', tableHeader: '#EFEBE9',
+            line: '#D7CCC8', lineLight: '#EFEBE9', gain: '#1B5E20', loss: '#B71C1C',
+            colorsDark: {
+              pageBg: '#25140C', panel: '#4E342E', panelHover: '#5D4037', card: '#492617', cardHover: '#5D3320',
+              textPrimary: '#EFEBE9', textSecondary: '#D7CCC8', textMuted: '#A1887F',
+              brand: '#D7CCC8', brandHover: '#EFEBE9', brandLight: '#A1887F', brandTint: '#492617',
+              accent: '#A1887F', accentLight: '#492617', tableHeader: '#5D3320',
+              line: '#5D3320', lineLight: '#492617', gain: '#4CAF50', loss: '#EF5350'
+            }
+          }
+        };
+        let storedTheme = localStorage.getItem('stocktracker-theme') || 'forestDawn';
+        if (storedTheme === 'slovakiaVilla') storedTheme = 'forestDawn';
+        
+        // Check for dark mode
+        const isDark = localStorage.getItem('stocktracker-dark-mode') === 'true';
+        
+        const theme = themes[storedTheme] || themes.forestDawn;
+        // Handle both nested (src/themes) and flat (index.html) theme structures
+        const colors = (isDark && theme.colorsDark) ? theme.colorsDark : (theme.colors || theme);
+        
+        const root = document.documentElement;
+        if (isDark) root.classList.add('dark');
+        
+        Object.entries(colors).forEach(function(entry) {
+          var key = entry[0], value = entry[1];
+          // Skip nested objects like colorsDark if we're using the flat structure
+          if (typeof value === 'object') return;
+          
+          var cssVar = '--color-' + key.replace(/([A-Z])/g, '-$1').toLowerCase();
+          root.style.setProperty(cssVar, value);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

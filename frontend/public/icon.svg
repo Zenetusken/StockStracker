@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="cL1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A3038"/>
+      <stop offset="100%" style="stop-color:#2A4548"/>
+    </linearGradient>
+    <linearGradient id="cL2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2A4548"/>
+      <stop offset="100%" style="stop-color:#3A5858"/>
+    </linearGradient>
+    <linearGradient id="cL3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3A5858"/>
+      <stop offset="100%" style="stop-color:#4A6868"/>
+    </linearGradient>
+    <linearGradient id="cR1" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3A5858"/>
+      <stop offset="100%" style="stop-color:#58B8B0"/>
+    </linearGradient>
+    <linearGradient id="cR2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A6868"/>
+      <stop offset="100%" style="stop-color:#70D0C8"/>
+    </linearGradient>
+    <linearGradient id="cR3" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#58B8B0"/>
+      <stop offset="100%" style="stop-color:#90E8E0"/>
+    </linearGradient>
+    <linearGradient id="cT" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#70D0C8"/>
+      <stop offset="100%" style="stop-color:#A0F0E8"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(32, 38)">
+    <!-- Crystal 1 (Left - shortest) - 3D PERSPECTIVE -->
+    <g transform="translate(-6, -4)">
+      <polygon points="0,-12 -4,0 -4,15 0,17" fill="url(#cL1)"/>
+      <polygon points="0,-12 4,0 4,15 0,17" fill="url(#cR1)"/>
+      <polygon points="0,-12 -4,0 0,-2 4,0" fill="url(#cT)" opacity="0.8"/>
+    </g>
+
+    <!-- Crystal 2 (Center - TALLEST) - FOREGROUND -->
+    <g transform="translate(0, 0)">
+      <polygon points="0,-25 -5,-8 -5,15 0,18" fill="url(#cL2)"/>
+      <polygon points="0,-25 5,-8 5,15 0,18" fill="url(#cR2)"/>
+      <polygon points="0,-25 -5,-8 0,-10 5,-8" fill="url(#cT)"/>
+    </g>
+
+    <!-- Crystal 3 (Right - medium) - extended down for visual base alignment -->
+    <g transform="translate(6, 2)">
+      <polygon points="0,-17 -4,-4 -4,15 0,17" fill="url(#cL3)"/>
+      <polygon points="0,-17 4,-4 4,15 0,17" fill="url(#cR3)"/>
+      <polygon points="0,-17 -4,-4 0,-6 4,-4" fill="url(#cT)" opacity="0.9"/>
+    </g>
+
+    <!-- Fluid swirly line - TRUE GREEN, SHORTER -->
+    <path
+      d="M -12,14 C -8,6 -4,10 0,2 C 4,-6 8,0 11,-6 C 13,-10 15,-8 16,-11"
+      stroke="#22C55E"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      fill="none"
+    />
+    <path
+      d="M -12,14 C -8,6 -4,10 0,2 C 4,-6 8,0 11,-6 C 13,-10 15,-8 16,-11"
+      stroke="#4ADE80"
+      stroke-width="1"
+      stroke-linecap="round"
+      fill="none"
+    />
+    <!-- TRIANGULAR ARROWHEAD - extends from curve end -->
+    <polygon points="19,-16 19,-9 14,-12" fill="#22C55E"/>
+    <polygon points="18,-15 18,-11 15,-12" fill="#4ADE80"/>
+  </g>
+</svg>

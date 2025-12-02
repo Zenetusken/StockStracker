@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <!-- Crystal gradients - left facets (darker) -->
+    <linearGradient id="crystalLeft1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A3038"/>
+      <stop offset="100%" style="stop-color:#2A4548"/>
+    </linearGradient>
+    <linearGradient id="crystalLeft2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2A4548"/>
+      <stop offset="100%" style="stop-color:#3A5858"/>
+    </linearGradient>
+    <linearGradient id="crystalLeft3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3A5858"/>
+      <stop offset="100%" style="stop-color:#4A6868"/>
+    </linearGradient>
+
+    <!-- Crystal gradients - right facets (lighter) -->
+    <linearGradient id="crystalRight1" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3A5858"/>
+      <stop offset="100%" style="stop-color:#58B8B0"/>
+    </linearGradient>
+    <linearGradient id="crystalRight2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A6868"/>
+      <stop offset="100%" style="stop-color:#70D0C8"/>
+    </linearGradient>
+    <linearGradient id="crystalRight3" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#58B8B0"/>
+      <stop offset="100%" style="stop-color:#90E8E0"/>
+    </linearGradient>
+
+    <!-- Top facet gradient -->
+    <linearGradient id="crystalTop" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#70D0C8"/>
+      <stop offset="100%" style="stop-color:#A0F0E8"/>
+    </linearGradient>
+
+    <!-- Glow filter - TRUE GREEN pulse -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#22C55E" flood-opacity="0.7" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Crystal shimmer -->
+    <filter id="shimmer" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="0.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(100, 115)">
+    <!-- CRYSTAL 1 (Left - shortest) - 3D PERSPECTIVE: pushed inward and back -->
+    <!-- Moved from (-28,0) to (-18,-12) for V-formation depth -->
+    <g transform="translate(-18, -12)" filter="url(#shimmer)">
+      <polygon points="0,-35 -12,0 -12,45 0,50" fill="url(#crystalLeft1)"/>
+      <polygon points="0,-35 12,0 12,45 0,50" fill="url(#crystalRight1)"/>
+      <polygon points="0,-35 -12,0 0,-5 12,0" fill="url(#crystalTop)" opacity="0.8"/>
+      <line x1="0" y1="-35" x2="0" y2="50" stroke="#A0F0E8" stroke-width="0.5" opacity="0.4"/>
+    </g>
+
+    <!-- CRYSTAL 2 (Center - TALLEST) - FOREGROUND -->
+    <g transform="translate(0, 0)" filter="url(#shimmer)">
+      <polygon points="0,-75 -14,-20 -14,45 0,52" fill="url(#crystalLeft2)"/>
+      <polygon points="0,-75 14,-20 14,45 0,52" fill="url(#crystalRight2)"/>
+      <polygon points="0,-75 -14,-20 0,-28 14,-20" fill="url(#crystalTop)"/>
+      <line x1="0" y1="-75" x2="0" y2="52" stroke="#A0F0E8" stroke-width="0.5" opacity="0.5"/>
+      <polygon points="0,-65 -8,-25 -8,40 0,46 8,40 8,-25" fill="#70D0C8" opacity="0.1"/>
+    </g>
+
+    <!-- CRYSTAL 3 (Right - medium) - extended down for visual base alignment -->
+    <g transform="translate(18, 6)" filter="url(#shimmer)">
+      <polygon points="0,-50 -12,-10 -12,45 0,50" fill="url(#crystalLeft3)"/>
+      <polygon points="0,-50 12,-10 12,45 0,50" fill="url(#crystalRight3)"/>
+      <polygon points="0,-50 -12,-10 0,-15 12,-10" fill="url(#crystalTop)" opacity="0.9"/>
+      <line x1="0" y1="-50" x2="0" y2="50" stroke="#A0F0E8" stroke-width="0.5" opacity="0.4"/>
+    </g>
+
+    <!-- FLUID SWIRLY UPWARD LINE - TRUE GREEN, SHORTER -->
+    <!-- Curve ends at (34,-24), direction (2,-6), arrow extends outward from endpoint -->
+    <g filter="url(#glow)">
+      <path
+        d="M -38,42
+           C -28,22 -15,35 -5,12
+           C 5,-10 15,2 22,-12
+           C 28,-20 32,-18 34,-24"
+        stroke="#22C55E"
+        stroke-width="6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"
+      />
+      <!-- Brighter inner glow -->
+      <path
+        d="M -38,42
+           C -28,22 -15,35 -5,12
+           C 5,-10 15,2 22,-12
+           C 28,-20 32,-18 34,-24"
+        stroke="#4ADE80"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"
+      />
+      <!-- TRIANGULAR ARROWHEAD - base at curve end (34,-24), tip extends outward -->
+      <!-- Direction (2,-6) normalized, tip at (38,-36), base corners perpendicular -->
+      <polygon
+        points="38,-36 39,-22 29,-26"
+        fill="#22C55E"
+      />
+      <polygon
+        points="37,-34 38,-24 31,-27"
+        fill="#4ADE80"
+      />
+    </g>
+
+    <!-- Small sparkle accents on crystals -->
+    <circle cx="-28" cy="-30" r="1.5" fill="#FFFFFF" opacity="0.6"/>
+    <circle cx="0" cy="-65" r="2" fill="#FFFFFF" opacity="0.7"/>
+    <circle cx="28" cy="-42" r="1.5" fill="#FFFFFF" opacity="0.6"/>
+  </g>
+</svg>

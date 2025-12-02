@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100">
+  <defs>
+    <linearGradient id="fcL1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A3038"/>
+      <stop offset="100%" style="stop-color:#2A4548"/>
+    </linearGradient>
+    <linearGradient id="fcL2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2A4548"/>
+      <stop offset="100%" style="stop-color:#3A5858"/>
+    </linearGradient>
+    <linearGradient id="fcL3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3A5858"/>
+      <stop offset="100%" style="stop-color:#4A6868"/>
+    </linearGradient>
+    <linearGradient id="fcR1" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3A5858"/>
+      <stop offset="100%" style="stop-color:#58B8B0"/>
+    </linearGradient>
+    <linearGradient id="fcR2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A6868"/>
+      <stop offset="100%" style="stop-color:#70D0C8"/>
+    </linearGradient>
+    <linearGradient id="fcR3" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#58B8B0"/>
+      <stop offset="100%" style="stop-color:#90E8E0"/>
+    </linearGradient>
+    <linearGradient id="fcT" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#70D0C8"/>
+      <stop offset="100%" style="stop-color:#A0F0E8"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#58B8B0"/>
+      <stop offset="100%" style="stop-color:#70D0C8"/>
+    </linearGradient>
+    <!-- Glow filter - TRUE GREEN pulse -->
+    <filter id="fGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#22C55E" flood-opacity="0.6" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Icon -->
+  <g transform="translate(45, 55)">
+    <!-- Crystal 1 (Left - shortest) - 3D PERSPECTIVE -->
+    <g transform="translate(-9, -6)">
+      <polygon points="0,-15 -5,0 -5,25 0,28" fill="url(#fcL1)"/>
+      <polygon points="0,-15 5,0 5,25 0,28" fill="url(#fcR1)"/>
+      <polygon points="0,-15 -5,0 0,-3 5,0" fill="url(#fcT)" opacity="0.8"/>
+    </g>
+
+    <!-- Crystal 2 (Center - TALLEST) - FOREGROUND -->
+    <g transform="translate(0, 0)">
+      <polygon points="0,-38 -6,-12 -6,25 0,30" fill="url(#fcL2)"/>
+      <polygon points="0,-38 6,-12 6,25 0,30" fill="url(#fcR2)"/>
+      <polygon points="0,-38 -6,-12 0,-15 6,-12" fill="url(#fcT)"/>
+      <line x1="0" y1="-38" x2="0" y2="30" stroke="#A0F0E8" stroke-width="0.3" opacity="0.5"/>
+    </g>
+
+    <!-- Crystal 3 (Right - medium) - extended down for visual base alignment -->
+    <g transform="translate(9, 3)">
+      <polygon points="0,-25 -5,-5 -5,25 0,28" fill="url(#fcL3)"/>
+      <polygon points="0,-25 5,-5 5,25 0,28" fill="url(#fcR3)"/>
+      <polygon points="0,-25 -5,-5 0,-8 5,-5" fill="url(#fcT)" opacity="0.9"/>
+    </g>
+
+    <!-- Fluid swirly line - TRUE GREEN, SHORTER -->
+    <g filter="url(#fGlow)">
+      <path
+        d="M -14,18 C -8,8 -2,14 6,2 C 12,-8 18,-2 22,-10"
+        stroke="#22C55E"
+        stroke-width="3"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"
+      />
+      <path
+        d="M -14,18 C -8,8 -2,14 6,2 C 12,-8 18,-2 22,-10"
+        stroke="#4ADE80"
+        stroke-width="1.2"
+        stroke-linecap="round"
+        fill="none"
+      />
+      <!-- TRIANGULAR ARROWHEAD -->
+      <polygon points="26,-16 25,-8 20,-12" fill="#22C55E"/>
+      <polygon points="25,-15 24,-10 21,-12" fill="#4ADE80"/>
+    </g>
+
+    <!-- Sparkles -->
+    <circle cx="0" cy="-32" r="1.5" fill="#FFFFFF" opacity="0.7"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="95" y="58" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="600" letter-spacing="-0.02em">
+    <tspan fill="url(#textGrad)">Stock</tspan><tspan fill="#E8F2F2">Tracker</tspan>
+  </text>
+</svg>
