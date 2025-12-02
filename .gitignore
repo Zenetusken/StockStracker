@@ -78,3 +78,11 @@ test-screenshots/
 
 # MCP logs
 logs/
+
+# Development artifacts
+.claude_settings.json
+claude-progress.txt
+SESSION-*.md
+*-VERIFICATION.md
+app_spec.txt
+frontend-temp/
