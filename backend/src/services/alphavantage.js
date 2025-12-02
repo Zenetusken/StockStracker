@@ -1,4 +1,3 @@
-import fs from 'fs';
 import { getKeyProvider } from './api-keys/index.js';
 
 /**
@@ -50,22 +49,10 @@ class AlphaVantageService {
   }
 
   _loadKeyFromEnvOrFile() {
-    // Priority 2: Environment variable (set by dotenv from .env file)
+    // Environment variable (set by dotenv from .env file)
     if (process.env.ALPHAVANTAGE_API_KEY) {
       console.log('✓ Alpha Vantage API key loaded from environment variable');
       return process.env.ALPHAVANTAGE_API_KEY;
-    }
-
-    // Priority 3: File-based key (legacy support)
-    try {
-      const apiKeyPath = '/tmp/api-key/alphavantage.key';
-      if (fs.existsSync(apiKeyPath)) {
-        const key = fs.readFileSync(apiKeyPath, 'utf8').trim();
-        console.log('✓ Alpha Vantage API key loaded from /tmp/api-key/alphavantage.key');
-        return key;
-      }
-    } catch (error) {
-      console.warn('Could not load API key from /tmp/api-key/alphavantage.key:', error.message);
     }
 
     console.warn('⚠ No Alpha Vantage API key found - historical chart data will use mock data');

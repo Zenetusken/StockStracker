@@ -79,6 +79,9 @@ test-screenshots/
 # MCP logs
 logs/
 
+# Security docs archive (internal only)
+docs/archive/
+
 # Development artifacts
 .claude_settings.json
 claude-progress.txt

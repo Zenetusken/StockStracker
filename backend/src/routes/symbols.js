@@ -1,5 +1,7 @@
 import express from 'express';
 import symbolService from '../services/symbols.js';
+import { requireAuth } from '../middleware/auth.js';
+import { symbolValidators } from '../middleware/validation.js';
 
 const router = express.Router();
 
@@ -29,11 +31,12 @@ router.get('/status', async (req, res) => {
 /**
  * POST /api/symbols/sync
  * Trigger a symbol sync from Finnhub API
+ * Requires authentication (admin operation)
  * Query params:
  *   - exchange: Exchange code (default: 'US')
  *   - refresh: If 'true', clear existing data before sync
  */
-router.post('/sync', async (req, res) => {
+router.post('/sync', requireAuth, symbolValidators.sync, async (req, res) => {
   try {
     const { exchange = 'US', refresh } = req.query;
     const shouldRefresh = refresh === 'true' || refresh === '1';
@@ -71,7 +74,7 @@ router.post('/sync', async (req, res) => {
  * GET /api/symbols/lookup/:symbol
  * Look up a specific symbol
  */
-router.get('/lookup/:symbol', async (req, res) => {
+router.get('/lookup/:symbol', symbolValidators.lookup, async (req, res) => {
   try {
     const { symbol } = req.params;
     const result = symbolService.getBySymbol(symbol.toUpperCase());
@@ -99,9 +102,10 @@ router.get('/lookup/:symbol', async (req, res) => {
 /**
  * POST /api/symbols/rebuild-fts
  * Rebuild the FTS5 full-text search index
+ * Requires authentication (admin operation)
  * Use this if the FTS index gets out of sync with the main symbols table
  */
-router.post('/rebuild-fts', async (req, res) => {
+router.post('/rebuild-fts', requireAuth, async (req, res) => {
   try {
     console.log('[Symbols API] Rebuilding FTS index...');
     const count = symbolService.rebuildFTSIndex();

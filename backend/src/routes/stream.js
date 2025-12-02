@@ -1,10 +1,15 @@
 import express from 'express';
+import crypto from 'crypto';
 import finnhubService from '../services/finnhub.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Store active connections
 const connections = new Map();
+
+// Store SSE tokens (in production, use Redis)
+const sseTokens = new Map();
 
 /**
  * Check if US stock market is currently open
@@ -51,9 +56,59 @@ const sseCorsMw = (req, res, next) => {
 // Apply CORS to all routes in this router
 router.use(sseCorsMw);
 
-// SSE endpoint for streaming quotes
-// NOTE: Auth disabled for SSE because EventSource doesn't send cookies reliably cross-origin
-router.get('/quotes', async (req, res) => {
+/**
+ * POST /api/stream/token
+ * Generate a single-use SSE token (valid for 5 minutes)
+ * Requires authentication
+ */
+router.post('/token', requireAuth, (req, res) => {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiry = Date.now() + 5 * 60 * 1000;  // 5 minutes
+
+  sseTokens.set(token, {
+    userId: req.session.userId,
+    expiry,
+  });
+
+  // Clean up expired tokens
+  for (const [t, data] of sseTokens.entries()) {
+    if (data.expiry < Date.now()) {
+      sseTokens.delete(t);
+    }
+  }
+
+  res.json({ token, expiresIn: 300 });
+});
+
+/**
+ * Validate SSE token middleware
+ * Token must be provided as query parameter
+ */
+function validateSseToken(req, res, next) {
+  const token = req.query.token;
+
+  if (!token) {
+    return res.status(401).json({ error: 'SSE token required' });
+  }
+
+  const tokenData = sseTokens.get(token);
+
+  if (!tokenData || tokenData.expiry < Date.now()) {
+    sseTokens.delete(token);
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  req.userId = tokenData.userId;
+  sseTokens.delete(token);  // Single-use token
+  next();
+}
+
+/**
+ * GET /api/stream/quotes
+ * SSE endpoint for streaming stock quotes
+ * Requires valid SSE token
+ */
+router.get('/quotes', validateSseToken, async (req, res) => {
   // Parse symbols from query parameter
   const symbolsParam = req.query.symbols || '';
   const symbols = symbolsParam
@@ -76,14 +131,14 @@ router.get('/quotes', async (req, res) => {
   // Send initial connection event
   res.write(`data: ${JSON.stringify({ type: 'connected', symbols })}\n\n`);
 
-  // Create connection ID (use IP + timestamp since auth is disabled)
-  const connectionId = `${req.ip}_${Date.now()}`;
+  // Create connection ID using userId (now authenticated)
+  const connectionId = `${req.userId}_${Date.now()}`;
 
-  // Store connection
+  // Store connection with user info
   connections.set(connectionId, {
     res,
     symbols,
-    ip: req.ip,
+    userId: req.userId,
   });
 
   // Function to send quote updates
@@ -150,13 +205,17 @@ router.get('/quotes', async (req, res) => {
   });
 });
 
-// Endpoint to get active connections (for debugging)
-router.get('/status', (req, res) => {
+/**
+ * GET /api/stream/status
+ * Get active SSE connections (for debugging/admin)
+ * Requires authentication
+ */
+router.get('/status', requireAuth, (req, res) => {
   const activeConnections = Array.from(connections.entries()).map(
     ([id, conn]) => ({
-      id,
+      id: id.substring(0, 8) + '...',  // Mask full ID for security
       symbols: conn.symbols,
-      ip: conn.ip,
+      symbolCount: conn.symbols.length,
     })
   );
 

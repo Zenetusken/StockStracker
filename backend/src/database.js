@@ -29,9 +29,41 @@ export function initializeDatabase() {
       name TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_login_at DATETIME,
-      is_active INTEGER DEFAULT 1
+      is_active INTEGER DEFAULT 1,
+      failed_login_attempts INTEGER DEFAULT 0,
+      locked_until DATETIME DEFAULT NULL,
+      last_failed_login DATETIME DEFAULT NULL,
+      password_changed_at DATETIME DEFAULT NULL
     );
   `);
+
+  // Add account lockout columns to existing users table if they don't exist
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0`);
+  } catch (e) { /* Column already exists */ }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN locked_until DATETIME DEFAULT NULL`);
+  } catch (e) { /* Column already exists */ }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN last_failed_login DATETIME DEFAULT NULL`);
+  } catch (e) { /* Column already exists */ }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN password_changed_at DATETIME DEFAULT NULL`);
+  } catch (e) { /* Column already exists */ }
+
+  // MFA columns
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0`);
+  } catch (e) { /* Column already exists */ }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN mfa_secret TEXT DEFAULT NULL`);
+  } catch (e) { /* Column already exists */ }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT DEFAULT NULL`);
+  } catch (e) { /* Column already exists */ }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN mfa_enabled_at DATETIME DEFAULT NULL`);
+  } catch (e) { /* Column already exists */ }
 
   // Sessions table
   db.exec(`

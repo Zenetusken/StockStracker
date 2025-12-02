@@ -1,5 +1,6 @@
 import express from 'express';
 import { getKeyProvider } from '../services/api-keys/index.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const router = express.Router();
  * GET /services
  * List all API services with their status
  */
-router.get('/services', (req, res) => {
+router.get('/services', requireAuth, (req, res) => {
   try {
     const keyProvider = getKeyProvider();
     const services = keyProvider.getAllServices();
@@ -27,7 +28,7 @@ router.get('/services', (req, res) => {
  * GET /services/:name
  * Get details for a specific service
  */
-router.get('/services/:name', (req, res) => {
+router.get('/services/:name', requireAuth, (req, res) => {
   try {
     const keyProvider = getKeyProvider();
     const service = keyProvider.getService(req.params.name);
@@ -48,7 +49,7 @@ router.get('/services/:name', (req, res) => {
  * Get detailed usage for a service with individual call timestamps
  * Returns per-call expiration times for real-time sliding window UI
  */
-router.get('/services/:service/usage', (req, res) => {
+router.get('/services/:service/usage', requireAuth, (req, res) => {
   try {
     const keyProvider = getKeyProvider();
     const usage = keyProvider.getDetailedUsage(req.params.service);
@@ -69,7 +70,7 @@ router.get('/services/:service/usage', (req, res) => {
  * Get burst limit hit counts for today
  * Tracks how many times per-second rate limits have been hit
  */
-router.get('/services/:service/burst-events', (req, res) => {
+router.get('/services/:service/burst-events', requireAuth, (req, res) => {
   try {
     const keyProvider = getKeyProvider();
     const events = keyProvider.getBurstEvents(req.params.service);
@@ -84,7 +85,7 @@ router.get('/services/:service/burst-events', (req, res) => {
  * GET /status
  * Get overall health status
  */
-router.get('/status', (req, res) => {
+router.get('/status', requireAuth, (req, res) => {
   try {
     const keyProvider = getKeyProvider();
     const status = keyProvider.getOverallStatus();
@@ -99,7 +100,7 @@ router.get('/status', (req, res) => {
  * POST /keys
  * Add a new API key
  */
-router.post('/keys', (req, res) => {
+router.post('/keys', requireAuth, (req, res) => {
   try {
     const { serviceName, keyValue, keyName } = req.body;
 
@@ -121,7 +122,7 @@ router.post('/keys', (req, res) => {
  * PUT /keys/:id
  * Update an API key
  */
-router.put('/keys/:id', (req, res) => {
+router.put('/keys/:id', requireAuth, (req, res) => {
   try {
     const keyId = parseInt(req.params.id, 10);
     const updates = req.body;
@@ -144,7 +145,7 @@ router.put('/keys/:id', (req, res) => {
  * DELETE /keys/:id
  * Delete an API key
  */
-router.delete('/keys/:id', (req, res) => {
+router.delete('/keys/:id', requireAuth, (req, res) => {
   try {
     const keyId = parseInt(req.params.id, 10);
 
@@ -170,7 +171,7 @@ router.delete('/keys/:id', (req, res) => {
  * POST /keys/:id/test
  * Test/validate an API key
  */
-router.post('/keys/:id/test', async (req, res) => {
+router.post('/keys/:id/test', requireAuth, async (req, res) => {
   try {
     const keyId = parseInt(req.params.id, 10);
 
@@ -192,7 +193,7 @@ router.post('/keys/:id/test', async (req, res) => {
  * GET /usage
  * Get usage statistics
  */
-router.get('/usage', (req, res) => {
+router.get('/usage', requireAuth, (req, res) => {
   try {
     const keyProvider = getKeyProvider();
     const services = keyProvider.getAllServices();
@@ -216,7 +217,7 @@ router.get('/usage', (req, res) => {
  * GET /usage/:serviceName/history
  * Get usage history for charts
  */
-router.get('/usage/:serviceName/history', (req, res) => {
+router.get('/usage/:serviceName/history', requireAuth, (req, res) => {
   try {
     const hours = parseInt(req.query.hours, 10) || 24;
     const keyProvider = getKeyProvider();

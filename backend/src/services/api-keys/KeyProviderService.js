@@ -2,6 +2,7 @@ import db from '../../database.js';
 import KeyRotator from './KeyRotator.js';
 import RateLimiter from './RateLimiter.js';
 import UsageTracker from './UsageTracker.js';
+import { encrypt, decrypt, isEncrypted, isEncryptionEnabled } from '../../utils/encryption.js';
 
 /**
  * KeyProviderService - Singleton service for managing API keys
@@ -51,7 +52,8 @@ class KeyProviderService {
       // Try to get key from database with rotation
       const key = this.keyRotator.getNextKey(serviceName, options.endpoint);
       if (key) {
-        return key.key_value;
+        // Decrypt the key value (handles both encrypted and plaintext)
+        return decrypt(key.key_value);
       }
     } catch (error) {
       console.log(`[KeyProvider] No keys available for ${serviceName}: ${error.message}`);
@@ -162,14 +164,21 @@ class KeyProviderService {
 
   /**
    * Mask an API key for display
+   * Handles both encrypted and plaintext keys
    */
   maskKey(key) {
     if (!key || key.length < 8) return '****';
-    return key.substring(0, 4) + '****' + key.substring(key.length - 4);
+
+    // Decrypt if encrypted, then mask
+    const plainKey = decrypt(key);
+    if (!plainKey || plainKey.length < 8) return '****';
+
+    return plainKey.substring(0, 4) + '****' + plainKey.substring(plainKey.length - 4);
   }
 
   /**
    * Add a new API key
+   * Keys are encrypted at rest if DB_ENCRYPTION_KEY is configured
    */
   addKey(serviceName, keyValue, keyName = null) {
     const service = db.prepare('SELECT id FROM api_services WHERE name = ?').get(serviceName);
@@ -177,13 +186,20 @@ class KeyProviderService {
       throw new Error(`Service not found: ${serviceName}`);
     }
 
+    // Encrypt the key value before storing
+    const encryptedKeyValue = encrypt(keyValue);
+
     try {
       const result = db.prepare(`
         INSERT INTO api_keys (service_id, key_value, key_name, source)
         VALUES (?, ?, ?, 'manual')
-      `).run(service.id, keyValue, keyName);
+      `).run(service.id, encryptedKeyValue, keyName);
 
-      return { id: result.lastInsertRowid, success: true };
+      return {
+        id: result.lastInsertRowid,
+        success: true,
+        encrypted: isEncryptionEnabled()
+      };
     } catch (error) {
       if (error.message.includes('UNIQUE constraint')) {
         throw new Error('This API key already exists for this service');
@@ -244,17 +260,20 @@ class KeyProviderService {
       throw new Error('Key not found');
     }
 
+    // Decrypt the key value for testing
+    const decryptedKeyValue = decrypt(key.key_value);
+
     try {
       let testUrl;
       let response;
 
       switch (key.service_name) {
         case 'finnhub':
-          testUrl = `${key.base_url}/stock/symbol?exchange=US&token=${key.key_value}`;
+          testUrl = `${key.base_url}/stock/symbol?exchange=US&token=${decryptedKeyValue}`;
           response = await fetch(testUrl);
           break;
         case 'alphavantage':
-          testUrl = `${key.base_url}?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=${key.key_value}`;
+          testUrl = `${key.base_url}?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=${decryptedKeyValue}`;
           response = await fetch(testUrl);
           break;
         default:

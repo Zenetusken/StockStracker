@@ -1,6 +1,7 @@
 import express from 'express';
 import db from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
+import { watchlistValidators } from '../middleware/validation.js';
 
 const router = express.Router();
 
@@ -70,7 +71,7 @@ router.get('/:id', (req, res) => {
  * POST /api/watchlists
  * Create a new watchlist
  */
-router.post('/', (req, res) => {
+router.post('/', watchlistValidators.create, (req, res) => {
   try {
     const { name, color, icon } = req.body;
 
@@ -111,7 +112,7 @@ router.post('/', (req, res) => {
  * PUT /api/watchlists/:id
  * Update a watchlist
  */
-router.put('/:id', (req, res) => {
+router.put('/:id', watchlistValidators.update, (req, res) => {
   try {
     const { id } = req.params;
     const { name, color, icon } = req.body;
@@ -185,7 +186,7 @@ router.delete('/:id', (req, res) => {
  * POST /api/watchlists/:id/items
  * Add a symbol to a watchlist
  */
-router.post('/:id/items', (req, res) => {
+router.post('/:id/items', watchlistValidators.addSymbol, (req, res) => {
   try {
     const { id } = req.params;
     const { symbol, notes } = req.body;
@@ -241,7 +242,7 @@ router.post('/:id/items', (req, res) => {
  * DELETE /api/watchlists/:id/items/:symbol
  * Remove a symbol from a watchlist
  */
-router.delete('/:id/items/:symbol', (req, res) => {
+router.delete('/:id/items/:symbol', watchlistValidators.removeSymbol, (req, res) => {
   try {
     const { id, symbol } = req.params;
 
@@ -275,7 +276,7 @@ router.delete('/:id/items/:symbol', (req, res) => {
  * PUT /api/watchlists/:id/items/reorder
  * Reorder items in a watchlist
  */
-router.put('/:id/items/reorder', (req, res) => {
+router.put('/:id/items/reorder', watchlistValidators.reorder, (req, res) => {
   try {
     const { id } = req.params;
     const { items } = req.body; // Array of { symbol, position }

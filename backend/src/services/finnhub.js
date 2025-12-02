@@ -1,4 +1,3 @@
-import fs from 'fs';
 import alphaVantageService from './alphavantage.js';
 import yahooFinanceService from './yahoo.js';
 import { getKeyProvider } from './api-keys/index.js';
@@ -51,24 +50,10 @@ class FinnhubService {
   }
 
   _loadKeyFromEnvOrFile() {
-    // Priority 2: Environment variable (from .env file via dotenv)
+    // Environment variable (from .env file via dotenv)
     if (process.env.FINNHUB_API_KEY && process.env.FINNHUB_API_KEY.trim()) {
       console.log('✓ Finnhub API key loaded from environment variable (FINNHUB_API_KEY)');
       return process.env.FINNHUB_API_KEY.trim();
-    }
-
-    // Priority 3: File-based key (legacy support)
-    try {
-      const apiKeyPath = '/tmp/api-key/finnhub.io.key';
-      if (fs.existsSync(apiKeyPath)) {
-        const key = fs.readFileSync(apiKeyPath, 'utf8').trim();
-        if (key) {
-          console.log('✓ Finnhub API key loaded from /tmp/api-key/finnhub.io.key');
-          return key;
-        }
-      }
-    } catch (error) {
-      console.warn('Could not load API key from /tmp/api-key/finnhub.io.key:', error.message);
     }
 
     // No API key found - warn user
