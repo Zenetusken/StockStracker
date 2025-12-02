@@ -3,28 +3,28 @@ import { AlertTriangle, AlertCircle, CheckCircle, X, Info } from 'lucide-react';
 
 const TOAST_STYLES = {
   warning: {
-    bg: 'bg-gradient-to-r from-amber-500/10 to-card',
+    bg: 'bg-gradient-to-r from-amber-500/10 to-stone-100',
     border: 'border-l-4 border-amber-500',
     icon: AlertTriangle,
     iconColor: 'text-amber-500'
   },
   error: {
-    bg: 'bg-gradient-to-r from-loss/10 to-card',
-    border: 'border-l-4 border-loss',
+    bg: 'bg-gradient-to-r from-red-500/10 to-stone-100',
+    border: 'border-l-4 border-red-500',
     icon: AlertCircle,
-    iconColor: 'text-loss'
+    iconColor: 'text-red-500'
   },
   success: {
-    bg: 'bg-gradient-to-r from-gain/10 to-card',
-    border: 'border-l-4 border-gain',
+    bg: 'bg-gradient-to-r from-emerald-500/10 to-stone-100',
+    border: 'border-l-4 border-emerald-500',
     icon: CheckCircle,
-    iconColor: 'text-gain'
+    iconColor: 'text-emerald-500'
   },
   info: {
-    bg: 'bg-gradient-to-r from-brand/10 to-card',
-    border: 'border-l-4 border-brand',
+    bg: 'bg-gradient-to-r from-blue-500/10 to-stone-100',
+    border: 'border-l-4 border-blue-500',
     icon: Info,
-    iconColor: 'text-brand'
+    iconColor: 'text-blue-500'
   }
 };
 
@@ -106,9 +106,9 @@ export default function Toast({ toast, onDismiss }) {
           <div
             className={`h-full transition-none ${
               toast.type === 'warning' ? 'bg-amber-500' :
-              toast.type === 'error' ? 'bg-loss' :
-              toast.type === 'success' ? 'bg-gain' :
-              'bg-brand'
+              toast.type === 'error' ? 'bg-red-500' :
+              toast.type === 'success' ? 'bg-emerald-500' :
+              'bg-blue-500'
             }`}
             style={{ width: `${progress}%` }}
           />
