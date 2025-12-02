@@ -49,11 +49,19 @@ api-key
 
 # Test scripts and debug files
 test-*.mjs
+test-*.js
 test-*.py
 debug-*.mjs
+debug-*.js
 get-*.mjs
 check-*.mjs
+check-*.js
 setup-*.mjs
+setup-*.js
+create-*.js
+verify-*.js
+verify-*.md
+backend/test-*.mjs
 
 # Test screenshots
 test-screenshots/
