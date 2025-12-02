@@ -19,6 +19,7 @@
  * - tableHeader: Table header background
  * - line: Border color
  * - lineLight: Light border
+ * - input: Input field background (should contrast with card)
  * - gain: Positive stock change
  * - loss: Negative stock change
  */
@@ -49,6 +50,7 @@ export const themes = {
       tableHeader: '#98C8A8',
       line: '#78A890',        // Border between panel and cards
       lineLight: '#B8D8C0',   // Subtle border on lighter elements
+      input: '#B8D8C0',       // Light mint for input fields (contrasts with card)
       gain: '#2E7D32',
       loss: '#8C162C',
     },
@@ -71,6 +73,7 @@ export const themes = {
       tableHeader: '#152028',
       line: '#3A5858',        // Lighter border for visibility
       lineLight: '#2A4548',   // Subtle border
+      input: '#1E2D38',       // Slightly lighter than card for input fields
       gain: '#4CAF50',
       loss: '#8C162C',
     },
@@ -101,6 +104,7 @@ export const themes = {
       tableHeader: '#DDD4C8',
       line: '#C9BBAA',
       lineLight: '#DDD4C8',
+      input: '#EAE3DB',       // Page background color for better contrast
       gain: '#2E7D32',
       loss: '#C62828',
     },
@@ -123,6 +127,7 @@ export const themes = {
       tableHeader: '#353535',
       line: '#454240',
       lineLight: '#353535',
+      input: '#353535',       // Panel color for input contrast
       gain: '#4CAF50',
       loss: '#EF5350',
     },
@@ -150,6 +155,7 @@ export const themes = {
       tableHeader: '#81C784',
       line: '#43A047',
       lineLight: '#81C784',
+      input: '#C8E6C9',       // Light green for input contrast
       gain: '#022C22',
       loss: '#7F1D1D',
     },
@@ -171,6 +177,7 @@ export const themes = {
       tableHeader: '#263C39',
       line: '#263C39',
       lineLight: '#3B4A38',
+      input: '#263C39',       // Slightly lighter than card
       gain: '#4CAF50',
       loss: '#EF5350',
     },
@@ -198,6 +205,7 @@ export const themes = {
       tableHeader: '#BBDEFB',
       line: '#90CAF9',
       lineLight: '#E3F2FD',
+      input: '#E3F2FD',       // Lightest blue for input contrast
       gain: '#2E7D32',
       loss: '#C62828',
     },
@@ -219,6 +227,7 @@ export const themes = {
       tableHeader: '#24324D',
       line: '#24324D',
       lineLight: '#2D4059',
+      input: '#24324D',       // Slightly lighter than card
       gain: '#4CAF50',
       loss: '#EF5350',
     },
@@ -246,6 +255,7 @@ export const themes = {
       tableHeader: '#E1BEE7',
       line: '#BA68C8',
       lineLight: '#F3E0F7',
+      input: '#F3E0F7',       // Lightest purple for input contrast
       gain: '#2E7D32',
       loss: '#C62828',
     },
@@ -267,6 +277,7 @@ export const themes = {
       tableHeader: '#2E1437',
       line: '#3D1C4A',
       lineLight: '#24102B',
+      input: '#2E1437',       // Slightly lighter than card
       gain: '#4CAF50',
       loss: '#EF5350',
     },
@@ -294,6 +305,7 @@ export const themes = {
       tableHeader: '#FFECB3',
       line: '#FFE0B2',
       lineLight: '#FFF8E1',
+      input: '#FFF8E1',       // Lightest cream for input contrast
       gain: '#2E7D32',
       loss: '#C62828',
     },
@@ -315,6 +327,7 @@ export const themes = {
       tableHeader: '#3D1A06',
       line: '#3D1A06',
       lineLight: '#402005',
+      input: '#3D1A06',       // Slightly lighter than card
       gain: '#4CAF50',
       loss: '#EF5350',
     },
@@ -342,6 +355,7 @@ export const themes = {
       tableHeader: '#E2B4C1',
       line: '#E2B4C1',
       lineLight: '#F7DAE7',
+      input: '#F7DAE7',       // Lightest pink for input contrast
       gain: '#2E7D32',
       loss: '#C62828',
     },
@@ -363,6 +377,7 @@ export const themes = {
       tableHeader: '#631932',
       line: '#631932',
       lineLight: '#631932',
+      input: '#4A1527',       // Slightly lighter than card
       gain: '#4CAF50',
       loss: '#EF5350',
     },
@@ -390,6 +405,7 @@ export const themes = {
       tableHeader: '#CFD8DC',
       line: '#B0BEC5',
       lineLight: '#ECEFF1',
+      input: '#ECEFF1',       // Lightest gray for input contrast
       gain: '#2E7D32',
       loss: '#C62828',
     },
@@ -411,6 +427,7 @@ export const themes = {
       tableHeader: '#6C6D74',
       line: '#6C6D74',
       lineLight: '#262E36',
+      input: '#37474F',       // Panel color for better contrast
       gain: '#4CAF50',
       loss: '#EF5350',
     },
@@ -438,6 +455,7 @@ export const themes = {
       tableHeader: '#EFEBE9',
       line: '#D7CCC8',
       lineLight: '#EFEBE9',
+      input: '#D7CCC8',       // Light cream for input contrast
       gain: '#1B5E20',
       loss: '#B71C1C',
     },
@@ -459,6 +477,7 @@ export const themes = {
       tableHeader: '#5D3320',
       line: '#5D3320',
       lineLight: '#492617',
+      input: '#5D3320',       // Slightly lighter than card
       gain: '#4CAF50',
       loss: '#EF5350',
     },

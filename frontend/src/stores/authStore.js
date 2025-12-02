@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import api from '../api/client';
+import { useToastStore } from './toastStore';
 
 export const useAuthStore = create(
   persist(
@@ -23,6 +24,12 @@ export const useAuthStore = create(
             isLoading: false,
             error: null,
           });
+          // Show success toast
+          useToastStore.getState().addToast({
+            type: 'success',
+            title: 'Welcome back!',
+            message: 'You have successfully signed in.',
+          });
           return { success: true };
         } catch (error) {
           set({
@@ -30,6 +37,12 @@ export const useAuthStore = create(
             isAuthenticated: false,
             isLoading: false,
             error: error.message || 'Login failed',
+          });
+          // Show error toast
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Login failed',
+            message: error.message || 'Please check your credentials.',
           });
           return { success: false, error: error.message };
         }
@@ -45,6 +58,12 @@ export const useAuthStore = create(
             isLoading: false,
             error: null,
           });
+          // Show success toast
+          useToastStore.getState().addToast({
+            type: 'success',
+            title: 'Account created!',
+            message: 'Welcome to StockTracker.',
+          });
           return { success: true };
         } catch (error) {
           set({
@@ -52,6 +71,12 @@ export const useAuthStore = create(
             isAuthenticated: false,
             isLoading: false,
             error: error.message || 'Registration failed',
+          });
+          // Show error toast
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'Registration failed',
+            message: error.message || 'Please try again.',
           });
           return { success: false, error: error.message };
         }

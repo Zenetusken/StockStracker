@@ -8,6 +8,7 @@ import WatchlistDetail from './pages/WatchlistDetail';
 import ToastContainer from './components/toast/ToastContainer';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
 import { useAuthStore } from './stores/authStore';
+import { api } from './api/client';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }) {
@@ -34,7 +35,10 @@ function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
 
   useEffect(() => {
-    checkAuth();
+    // Fetch CSRF token first, then check auth
+    api.fetchCsrfToken().then(() => {
+      checkAuth();
+    });
   }, [checkAuth]);
 
   return (

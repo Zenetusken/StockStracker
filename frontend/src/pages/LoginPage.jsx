@@ -60,7 +60,7 @@ function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-line rounded-md bg-card text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-3 py-2 border border-line rounded-md bg-input text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder="you@example.com"
             />
           </div>
@@ -76,7 +76,7 @@ function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 border border-line rounded-md bg-card text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full px-3 py-2 border border-line rounded-md bg-input text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder="••••••••"
             />
           </div>

@@ -40,6 +40,9 @@
     --color-line: #C0B29C;
     --color-line-light: #D2C8B4;
 
+    /* Input field background (for contrast against card backgrounds) */
+    --color-input: #E8F0E4;
+
     /* Stock indicator colors */
     --color-gain: #2E9E6B;
     --color-loss: #C45C4A;
@@ -250,6 +253,14 @@ select.bg-card {
 
 .bg-loss {
   background-color: var(--color-loss);
+}
+
+/* Input background (for form fields with proper contrast) */
+.bg-input,
+input.bg-input,
+textarea.bg-input,
+select.bg-input {
+  background-color: var(--color-input);
 }
 
 /* Hover background variants */
