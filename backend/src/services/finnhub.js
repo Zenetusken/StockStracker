@@ -60,14 +60,14 @@ class FinnhubService {
     console.warn('⚠ No Finnhub API key found - real-time quotes will not work');
     console.warn('  Add to .env as: FINNHUB_API_KEY=your_key_here');
     console.warn('  Get a free key at: https://finnhub.io/register');
-    return 'demo';
+    return null;
   }
 
   /**
-   * Check if we have a valid API key (not demo mode)
+   * Check if we have a valid API key
    */
   hasApiKey() {
-    return this.apiKey !== null && this.apiKey !== 'demo';
+    return this.apiKey !== null;
   }
 
   /**
@@ -88,9 +88,9 @@ class FinnhubService {
    * Make API request to Finnhub
    */
   async request(endpoint, params = {}) {
-    // If using demo key, don't make real API calls (they will fail)
-    if (this.apiKey === 'demo') {
-      throw new Error('Using demo mode - API calls not available');
+    // API key is required for real API calls
+    if (!this.apiKey) {
+      throw new Error('Finnhub API key not configured - API calls not available');
     }
 
     const keyValue = this.apiKey; // Store for tracking

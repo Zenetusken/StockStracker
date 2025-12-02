@@ -82,13 +82,12 @@ logs/
 # Security docs archive (internal only)
 docs/archive/
 
-# Development artifacts
+# Development artifacts (local only)
+.dev/
+.claude/
+tests/
 .claude_settings.json
 claude-progress.txt
-SESSION-*.md
-*-VERIFICATION.md
 app_spec.txt
 frontend-temp/
-CLAUDE.md
 feature_list.json
-verify-*.mjs

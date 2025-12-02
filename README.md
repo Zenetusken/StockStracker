@@ -72,7 +72,7 @@ Most stock apps hit API rate limits within minutes. **StockTracker solves this**
 
 ```bash
 git clone <repository-url>
-cd autonomous_demo_project
+cd StockTracker
 ./init.sh
 ```
 
@@ -109,7 +109,7 @@ ALPHAVANTAGE_API_KEY=xyz789your_alphavantage_key_here
 SESSION_SECRET=any-random-string-for-sessions
 ```
 
-> **Note:** Without API keys, the app runs in demo mode with limited functionality.
+> **Note:** Without API keys, the app will have limited functionality. Configure at least Finnhub for real-time quotes.
 
 ### 3. Start Development
 
@@ -144,14 +144,6 @@ SESSION_SECRET=any-random-string-for-sessions
 
 ## License
 
-MIT License
+MIT License - Copyright (c) 2025
 
-Copyright (c) 2024
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-Built with [Claude Code](https://claude.com/claude-code)
+See the [LICENSE](LICENSE) file for details.

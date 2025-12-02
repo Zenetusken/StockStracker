@@ -14,7 +14,6 @@
     "trading",
     "finance"
   ],
-  "author": "",
   "license": "MIT",
   "dependencies": {
     "bcrypt": "^5.1.1",

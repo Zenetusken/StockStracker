@@ -65,7 +65,7 @@ class AlphaVantageService {
    * Check if we have a valid API key
    */
   hasApiKey() {
-    return this.apiKey !== null && this.apiKey !== 'demo';
+    return this.apiKey !== null;
   }
 
   /**
