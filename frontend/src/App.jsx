@@ -5,6 +5,7 @@ import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import StockDetail from './pages/StockDetail';
 import WatchlistDetail from './pages/WatchlistDetail';
+import PortfolioDetail from './pages/PortfolioDetail';
 import ToastContainer from './components/toast/ToastContainer';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
 import { useAuthStore } from './stores/authStore';
@@ -77,6 +78,14 @@ function App() {
           element={
             <ProtectedRoute>
               <WatchlistDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portfolio/:id"
+          element={
+            <ProtectedRoute>
+              <PortfolioDetail />
             </ProtectedRoute>
           }
         />
