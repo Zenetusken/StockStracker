@@ -254,6 +254,31 @@ export const usePortfolioStore = create((set, get) => ({
     }
   },
 
+  fetchLotSales: async (portfolioId, year = null, symbol = null) => {
+    try {
+      let url = `/portfolios/${portfolioId}/lot-sales`;
+      const params = new URLSearchParams();
+      if (year) params.append('year', year);
+      if (symbol) params.append('symbol', symbol);
+      if (params.toString()) url += `?${params.toString()}`;
+      const data = await api.get(url);
+      return data;
+    } catch (error) {
+      console.error('Error fetching lot sales:', error);
+      throw error;
+    }
+  },
+
+  fetchValueHistory: async (portfolioId, period = '1M') => {
+    try {
+      const data = await api.get(`/portfolios/${portfolioId}/value-history?period=${period}`);
+      return data;
+    } catch (error) {
+      console.error('Error fetching value history:', error);
+      throw error;
+    }
+  },
+
   invalidateCache: () => {
     set({ lastFetch: null, portfolioDetails: {} });
   },
