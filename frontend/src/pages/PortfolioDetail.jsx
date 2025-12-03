@@ -1,12 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download, Upload, ChevronUp, ChevronDown, Layers } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download, Upload, ChevronUp, ChevronDown, Layers, Receipt } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
 import AddTransactionModal from '../components/AddTransactionModal';
 import EditTransactionModal from '../components/EditTransactionModal';
 import TaxLotsModal from '../components/TaxLotsModal';
+import LotSalesModal from '../components/LotSalesModal';
+import PortfolioValueChart from '../components/PortfolioValueChart';
+import AllocationPieChart from '../components/AllocationPieChart';
+import BenchmarkComparison from '../components/BenchmarkComparison';
 
 function PortfolioDetail() {
   const { id } = useParams();
@@ -29,6 +33,7 @@ function PortfolioDetail() {
   const [holdingsSort, setHoldingsSort] = useState({ field: null, direction: 'desc' });
   const [holdingsFilter, setHoldingsFilter] = useState('all'); // 'all' | 'gainers' | 'losers'
   const [viewingTaxLots, setViewingTaxLots] = useState(null); // symbol string or null
+  const [showLotSalesModal, setShowLotSalesModal] = useState(false);
   const fileInputRef = useRef(null);
 
   // Get holdings symbols for quote subscription
@@ -375,6 +380,14 @@ function PortfolioDetail() {
               )}
             </div>
             <button
+              onClick={() => setShowLotSalesModal(true)}
+              data-testid="realized-gains-button"
+              className="flex items-center gap-2 px-4 py-2 bg-card border border-line text-text-primary rounded-lg hover:bg-card-hover transition-colors"
+            >
+              <Receipt className="w-4 h-4" />
+              Realized Gains
+            </button>
+            <button
               onClick={() => setShowAddTransactionModal(true)}
               data-testid="add-transaction-button"
               className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover transition-colors"
@@ -453,6 +466,28 @@ function PortfolioDetail() {
               {((metrics.cashBalance / metrics.totalValue) * 100).toFixed(1)}% of portfolio
             </div>
           </div>
+        </div>
+
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Portfolio Value Chart */}
+          <PortfolioValueChart portfolioId={id} />
+
+          {/* Allocation Pie Chart */}
+          <AllocationPieChart
+            holdings={sortedHoldings}
+            totalValue={metrics.totalValue}
+            cashBalance={metrics.cashBalance}
+          />
+        </div>
+
+        {/* Benchmark Comparison */}
+        <div className="mb-8">
+          <BenchmarkComparison
+            portfolioReturn={metrics.totalGainLoss}
+            portfolioValue={metrics.totalValue}
+            portfolioCostBasis={metrics.totalValue - metrics.totalGainLoss}
+          />
         </div>
 
         {/* Holdings Table */}
@@ -871,6 +906,13 @@ function PortfolioDetail() {
           onClose={() => setViewingTaxLots(null)}
           portfolioId={id}
           symbol={viewingTaxLots}
+        />
+
+        {/* Lot Sales / Realized Gains Modal */}
+        <LotSalesModal
+          isOpen={showLotSalesModal}
+          onClose={() => setShowLotSalesModal(false)}
+          portfolioId={id}
         />
       </div>
     </Layout>
