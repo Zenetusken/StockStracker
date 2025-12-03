@@ -264,6 +264,226 @@ router.get('/:id/holdings/:symbol/tax-lots', (req, res) => {
 });
 
 /**
+ * GET /api/portfolios/:id/value-history
+ * Get portfolio value history over time for charting
+ */
+router.get('/:id/value-history', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { period = '1M' } = req.query; // 1W, 1M, 3M, 6M, 1Y, ALL
+
+    // Verify ownership
+    const portfolio = db.prepare(`
+      SELECT * FROM portfolios
+      WHERE id = ? AND user_id = ?
+    `).get(id, req.session.userId);
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    // Get all transactions ordered by date
+    const transactions = db.prepare(`
+      SELECT * FROM transactions
+      WHERE portfolio_id = ?
+      ORDER BY executed_at ASC
+    `).all(id);
+
+    // Calculate value history based on transactions
+    // This is a simplified approach that tracks cash + cost basis over time
+    const history = [];
+    let runningCash = portfolio.cash_balance;
+    let holdingsValue = 0;
+
+    // Get current holdings and their values
+    const holdings = db.prepare(`
+      SELECT * FROM portfolio_holdings WHERE portfolio_id = ?
+    `).all(id);
+
+    // Calculate current total cost basis
+    const totalCostBasis = holdings.reduce((sum, h) => sum + (h.total_shares * h.average_cost), 0);
+
+    // Determine date range based on period
+    const now = new Date();
+    let startDate = new Date();
+    switch (period) {
+      case '1W': startDate.setDate(now.getDate() - 7); break;
+      case '1M': startDate.setMonth(now.getMonth() - 1); break;
+      case '3M': startDate.setMonth(now.getMonth() - 3); break;
+      case '6M': startDate.setMonth(now.getMonth() - 6); break;
+      case '1Y': startDate.setFullYear(now.getFullYear() - 1); break;
+      case 'ALL': startDate = new Date(0); break;
+      default: startDate.setMonth(now.getMonth() - 1);
+    }
+
+    // Group transactions by date and calculate cumulative value
+    const txByDate = {};
+    let cumulativeCash = 0;
+    let cumulativeHoldings = {};
+
+    transactions.forEach(tx => {
+      const date = tx.executed_at.split('T')[0];
+      if (!txByDate[date]) {
+        txByDate[date] = { cash: 0, holdings: {} };
+      }
+
+      const txValue = tx.shares * tx.price;
+      if (tx.type === 'buy') {
+        txByDate[date].cash -= txValue;
+        txByDate[date].holdings[tx.symbol] = (txByDate[date].holdings[tx.symbol] || 0) + tx.shares;
+      } else if (tx.type === 'sell') {
+        txByDate[date].cash += txValue;
+        txByDate[date].holdings[tx.symbol] = (txByDate[date].holdings[tx.symbol] || 0) - tx.shares;
+      } else if (tx.type === 'dividend') {
+        txByDate[date].cash += txValue;
+      }
+    });
+
+    // Build daily value series
+    const dates = Object.keys(txByDate).sort();
+
+    if (dates.length === 0) {
+      // No transactions - return current value as single point
+      history.push({
+        time: now.toISOString().split('T')[0],
+        value: portfolio.cash_balance
+      });
+    } else {
+      // Track cumulative state
+      let runningCashBalance = portfolio.cash_balance;
+      let runningHoldingsValue = 0;
+
+      // Work backwards from current state
+      // For simplicity, show value at each transaction date
+      const sortedDates = dates.filter(d => new Date(d) >= startDate);
+
+      // Add transaction dates with estimated value
+      sortedDates.forEach(date => {
+        const dayTx = txByDate[date];
+        // Estimate value change based on transaction (this is simplified)
+        history.push({
+          time: date,
+          value: runningCashBalance + totalCostBasis // Simplified: use current cost basis
+        });
+      });
+
+      // Add current date
+      const today = now.toISOString().split('T')[0];
+      if (!sortedDates.includes(today)) {
+        history.push({
+          time: today,
+          value: portfolio.cash_balance + totalCostBasis
+        });
+      }
+    }
+
+    // Sort by date
+    history.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    res.json({
+      history,
+      period,
+      currentValue: portfolio.cash_balance + totalCostBasis
+    });
+  } catch (error) {
+    console.error('[Portfolios] Error fetching value history:', error);
+    res.status(500).json({ error: 'Failed to fetch value history' });
+  }
+});
+
+/**
+ * GET /api/portfolios/:id/lot-sales
+ * Get all realized gains (lot sales) for a portfolio with short-term/long-term classification
+ */
+router.get('/:id/lot-sales', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { year, symbol } = req.query;
+
+    // Verify ownership
+    const portfolio = db.prepare(`
+      SELECT * FROM portfolios
+      WHERE id = ? AND user_id = ?
+    `).get(id, req.session.userId);
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    // Build query with optional filters
+    let query = `
+      SELECT
+        ls.*,
+        tl.symbol,
+        tl.cost_per_share,
+        tl.purchase_date as lot_purchase_date,
+        t.executed_at as sale_executed_at,
+        t.notes as sale_notes
+      FROM lot_sales ls
+      JOIN tax_lots tl ON ls.tax_lot_id = tl.id
+      JOIN transactions t ON ls.sell_transaction_id = t.id
+      WHERE tl.portfolio_id = ?
+    `;
+    const params = [id];
+
+    // Filter by year if provided
+    if (year) {
+      query += ` AND strftime('%Y', ls.sale_date) = ?`;
+      params.push(year);
+    }
+
+    // Filter by symbol if provided
+    if (symbol) {
+      query += ` AND tl.symbol = ?`;
+      params.push(symbol.toUpperCase());
+    }
+
+    query += ` ORDER BY ls.sale_date DESC, tl.symbol ASC`;
+
+    const lotSales = db.prepare(query).all(...params);
+
+    // Calculate summary statistics
+    const summary = {
+      totalRealizedGain: 0,
+      shortTermGain: 0,
+      longTermGain: 0,
+      shortTermLoss: 0,
+      longTermLoss: 0,
+      totalShortTerm: 0,
+      totalLongTerm: 0
+    };
+
+    lotSales.forEach(sale => {
+      summary.totalRealizedGain += sale.realized_gain;
+      if (sale.is_short_term) {
+        summary.totalShortTerm += sale.realized_gain;
+        if (sale.realized_gain >= 0) {
+          summary.shortTermGain += sale.realized_gain;
+        } else {
+          summary.shortTermLoss += sale.realized_gain;
+        }
+      } else {
+        summary.totalLongTerm += sale.realized_gain;
+        if (sale.realized_gain >= 0) {
+          summary.longTermGain += sale.realized_gain;
+        } else {
+          summary.longTermLoss += sale.realized_gain;
+        }
+      }
+    });
+
+    res.json({
+      lotSales,
+      summary,
+      filters: { year, symbol }
+    });
+  } catch (error) {
+    console.error('[Portfolios] Error fetching lot sales:', error);
+    res.status(500).json({ error: 'Failed to fetch lot sales' });
+  }
+});
+
+/**
  * GET /api/portfolios/:id/transactions
  * Get all transactions for a portfolio
  */
