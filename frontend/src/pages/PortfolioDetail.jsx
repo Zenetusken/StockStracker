@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
+import AddTransactionModal from '../components/AddTransactionModal';
 
 function PortfolioDetail() {
   const { id } = useParams();
@@ -15,6 +16,7 @@ function PortfolioDetail() {
   const [portfolio, setPortfolio] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
 
   // Get holdings symbols for quote subscription
   const holdingSymbols = useMemo(() => {
@@ -138,14 +140,24 @@ function PortfolioDetail() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Briefcase className="w-8 h-8 text-brand" />
-            <h1 className="text-2xl font-bold text-text-primary">{portfolio.name}</h1>
-            {portfolio.is_paper_trading === 1 && (
-              <span className="px-2 py-1 text-xs font-medium bg-amber-500/10 text-amber-500 rounded">
-                Paper Trading
-              </span>
-            )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 mb-2">
+              <Briefcase className="w-8 h-8 text-brand" />
+              <h1 className="text-2xl font-bold text-text-primary">{portfolio.name}</h1>
+              {portfolio.is_paper_trading === 1 && (
+                <span className="px-2 py-1 text-xs font-medium bg-amber-500/10 text-amber-500 rounded">
+                  Paper Trading
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowAddTransactionModal(true)}
+              data-testid="add-transaction-button"
+              className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Transaction
+            </button>
           </div>
           {portfolio.description && (
             <p className="text-text-secondary ml-11">{portfolio.description}</p>
@@ -333,6 +345,19 @@ function PortfolioDetail() {
             </div>
           </div>
         )}
+
+        {/* Add Transaction Modal */}
+        <AddTransactionModal
+          isOpen={showAddTransactionModal}
+          onClose={() => setShowAddTransactionModal(false)}
+          portfolioId={id}
+          portfolioCash={metrics?.cashBalance || 0}
+          onSuccess={async () => {
+            // Refresh portfolio data
+            const data = await fetchPortfolioDetail(id, true);
+            setPortfolio(data);
+          }}
+        />
       </div>
     </Layout>
   );

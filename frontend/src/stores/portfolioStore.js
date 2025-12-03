@@ -176,6 +176,36 @@ export const usePortfolioStore = create((set, get) => ({
     }
   },
 
+  addTransaction: async (portfolioId, transaction) => {
+    set({ error: null });
+    try {
+      const data = await api.post(`/portfolios/${portfolioId}/transactions`, transaction);
+
+      // Invalidate the portfolio detail cache to force refresh
+      set((state) => {
+        const newDetails = { ...state.portfolioDetails };
+        delete newDetails[portfolioId];
+        return { portfolioDetails: newDetails };
+      });
+
+      // Update portfolio cash balance in the list
+      if (data.portfolio) {
+        set((state) => ({
+          portfolios: state.portfolios.map((p) =>
+            p.id === parseInt(portfolioId)
+              ? { ...p, cash_balance: data.portfolio.cash_balance }
+              : p
+          ),
+        }));
+      }
+
+      return data;
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   invalidateCache: () => {
     set({ lastFetch: null, portfolioDetails: {} });
   },

@@ -273,6 +273,210 @@ router.get('/:id/transactions', (req, res) => {
 });
 
 /**
+ * POST /api/portfolios/:id/transactions
+ * Add a transaction to a portfolio (buy, sell, dividend, split)
+ */
+router.post('/:id/transactions', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { symbol, type, shares, price, fees = 0, notes, executed_at } = req.body;
+
+    // Validation
+    if (!symbol || !type || !shares || !price) {
+      return res.status(400).json({ error: 'Symbol, type, shares, and price are required' });
+    }
+
+    if (!['buy', 'sell', 'dividend', 'split'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid transaction type' });
+    }
+
+    if (shares <= 0) {
+      return res.status(400).json({ error: 'Shares must be greater than 0' });
+    }
+
+    if (price < 0) {
+      return res.status(400).json({ error: 'Price cannot be negative' });
+    }
+
+    // Verify portfolio ownership
+    const portfolio = db.prepare(`
+      SELECT * FROM portfolios
+      WHERE id = ? AND user_id = ?
+    `).get(id, req.session.userId);
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    const upperSymbol = symbol.toUpperCase().trim();
+    const execDate = executed_at || new Date().toISOString();
+    const totalCost = (shares * price) + (fees || 0);
+
+    // For buy transactions, check if sufficient cash
+    if (type === 'buy' && portfolio.cash_balance < totalCost) {
+      return res.status(400).json({
+        error: 'Insufficient cash balance',
+        required: totalCost,
+        available: portfolio.cash_balance
+      });
+    }
+
+    // For sell transactions, check if sufficient shares
+    if (type === 'sell') {
+      const holding = db.prepare(`
+        SELECT * FROM portfolio_holdings
+        WHERE portfolio_id = ? AND symbol = ?
+      `).get(id, upperSymbol);
+
+      if (!holding || holding.total_shares < shares) {
+        return res.status(400).json({
+          error: 'Insufficient shares',
+          required: shares,
+          available: holding?.total_shares || 0
+        });
+      }
+    }
+
+    // Create transaction record
+    const txResult = db.prepare(`
+      INSERT INTO transactions (portfolio_id, symbol, type, shares, price, fees, notes, executed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, upperSymbol, type, shares, price, fees || 0, notes || null, execDate);
+
+    const transactionId = txResult.lastInsertRowid;
+
+    // Update holdings and cash based on transaction type
+    if (type === 'buy') {
+      // Check if holding exists
+      const existingHolding = db.prepare(`
+        SELECT * FROM portfolio_holdings
+        WHERE portfolio_id = ? AND symbol = ?
+      `).get(id, upperSymbol);
+
+      if (existingHolding) {
+        // Update existing holding with weighted average cost
+        const newTotalShares = existingHolding.total_shares + shares;
+        const newTotalCost = (existingHolding.total_shares * existingHolding.average_cost) + (shares * price);
+        const newAverageCost = newTotalCost / newTotalShares;
+
+        db.prepare(`
+          UPDATE portfolio_holdings
+          SET total_shares = ?, average_cost = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(newTotalShares, newAverageCost, existingHolding.id);
+      } else {
+        // Create new holding
+        db.prepare(`
+          INSERT INTO portfolio_holdings (portfolio_id, symbol, total_shares, average_cost, first_purchase_date)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(id, upperSymbol, shares, price, execDate.split('T')[0]);
+      }
+
+      // Create tax lot
+      db.prepare(`
+        INSERT INTO tax_lots (portfolio_id, symbol, purchase_date, shares_remaining, cost_per_share, transaction_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, upperSymbol, execDate.split('T')[0], shares, price, transactionId);
+
+      // Decrease cash balance
+      db.prepare(`
+        UPDATE portfolios
+        SET cash_balance = cash_balance - ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(totalCost, id);
+
+    } else if (type === 'sell') {
+      // Update holding
+      const existingHolding = db.prepare(`
+        SELECT * FROM portfolio_holdings
+        WHERE portfolio_id = ? AND symbol = ?
+      `).get(id, upperSymbol);
+
+      const newTotalShares = existingHolding.total_shares - shares;
+
+      if (newTotalShares <= 0) {
+        // Remove holding entirely
+        db.prepare(`DELETE FROM portfolio_holdings WHERE id = ?`).run(existingHolding.id);
+      } else {
+        // Update shares (average cost stays the same)
+        db.prepare(`
+          UPDATE portfolio_holdings
+          SET total_shares = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(newTotalShares, existingHolding.id);
+      }
+
+      // FIFO lot sales - sell from oldest lots first
+      let sharesToSell = shares;
+      const lots = db.prepare(`
+        SELECT * FROM tax_lots
+        WHERE portfolio_id = ? AND symbol = ? AND shares_remaining > 0
+        ORDER BY purchase_date ASC
+      `).all(id, upperSymbol);
+
+      for (const lot of lots) {
+        if (sharesToSell <= 0) break;
+
+        const sellFromLot = Math.min(lot.shares_remaining, sharesToSell);
+        const realizedGain = sellFromLot * (price - lot.cost_per_share);
+        const purchaseDate = new Date(lot.purchase_date);
+        const saleDate = new Date(execDate);
+        const holdingDays = (saleDate - purchaseDate) / (1000 * 60 * 60 * 24);
+        const isShortTerm = holdingDays < 365 ? 1 : 0;
+
+        // Record lot sale
+        db.prepare(`
+          INSERT INTO lot_sales (tax_lot_id, sell_transaction_id, shares_sold, sale_price, realized_gain, is_short_term, sale_date)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(lot.id, transactionId, sellFromLot, price, realizedGain, isShortTerm, execDate.split('T')[0]);
+
+        // Update lot
+        const newRemaining = lot.shares_remaining - sellFromLot;
+        db.prepare(`
+          UPDATE tax_lots
+          SET shares_remaining = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(newRemaining, lot.id);
+
+        sharesToSell -= sellFromLot;
+      }
+
+      // Increase cash balance (minus fees)
+      const saleProceeds = (shares * price) - (fees || 0);
+      db.prepare(`
+        UPDATE portfolios
+        SET cash_balance = cash_balance + ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(saleProceeds, id);
+    }
+
+    // Fetch the created transaction
+    const transaction = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(transactionId);
+
+    // Fetch updated holding
+    const updatedHolding = db.prepare(`
+      SELECT * FROM portfolio_holdings
+      WHERE portfolio_id = ? AND symbol = ?
+    `).get(id, upperSymbol);
+
+    // Fetch updated portfolio
+    const updatedPortfolio = db.prepare(`SELECT * FROM portfolios WHERE id = ?`).get(id);
+
+    res.status(201).json({
+      transaction,
+      holding: updatedHolding,
+      portfolio: {
+        id: updatedPortfolio.id,
+        cash_balance: updatedPortfolio.cash_balance
+      }
+    });
+  } catch (error) {
+    console.error('[Portfolios] Error adding transaction:', error);
+    res.status(500).json({ error: 'Failed to add transaction' });
+  }
+});
+
+/**
  * Helper function to create default portfolio for a user
  */
 export function createDefaultPortfolio(userId) {
