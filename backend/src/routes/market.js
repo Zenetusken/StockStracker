@@ -405,6 +405,8 @@ router.get('/calendar', (req, res) => {
         importance: 'high',
         previous: '48.7',
         forecast: '49.0',
+        description: 'Measures manufacturing sector activity. Above 50 indicates expansion, below 50 indicates contraction.',
+        relatedSymbols: ['XLI', 'IYJ'],
       },
       {
         id: 2,
@@ -414,6 +416,8 @@ router.get('/calendar', (req, res) => {
         importance: 'high',
         previous: '146K',
         forecast: '150K',
+        description: 'Estimates private sector employment changes. A leading indicator for the official jobs report.',
+        relatedSymbols: ['SPY', 'QQQ'],
       },
       {
         id: 3,
@@ -423,6 +427,8 @@ router.get('/calendar', (req, res) => {
         importance: 'medium',
         previous: '52.1',
         forecast: '52.5',
+        description: 'Measures service sector activity. Services represent about 80% of the US economy.',
+        relatedSymbols: ['XLF', 'IYF'],
       },
       {
         id: 4,
@@ -432,6 +438,8 @@ router.get('/calendar', (req, res) => {
         importance: 'medium',
         previous: '215K',
         forecast: '218K',
+        description: 'Weekly count of new unemployment benefit filings. Lower numbers indicate a stronger labor market.',
+        relatedSymbols: ['TLT', 'IEF'],
       },
       {
         id: 5,
@@ -441,6 +449,8 @@ router.get('/calendar', (req, res) => {
         importance: 'high',
         previous: '254K',
         forecast: '200K',
+        description: 'Monthly jobs added excluding farm workers. One of the most market-moving economic indicators.',
+        relatedSymbols: ['SPY', 'DIA'],
       },
       {
         id: 6,
@@ -450,6 +460,8 @@ router.get('/calendar', (req, res) => {
         importance: 'high',
         previous: '4.1%',
         forecast: '4.1%',
+        description: 'Percentage of the labor force that is unemployed. Key indicator of economic health.',
+        relatedSymbols: ['SPY', 'VTI'],
       },
     ];
 

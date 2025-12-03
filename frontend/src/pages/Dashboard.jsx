@@ -6,6 +6,8 @@ import MarketOverview from '../components/MarketOverview';
 import TopMovers from '../components/TopMovers';
 import MarketStatus from '../components/MarketStatus';
 import EconomicCalendar from '../components/EconomicCalendar';
+import PortfolioSummaryCard from '../components/PortfolioSummaryCard';
+import WatchlistSummaryCard from '../components/WatchlistSummaryCard';
 
 function Dashboard() {
   const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
@@ -24,24 +26,10 @@ function Dashboard() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Portfolio Card */}
-          <div className="bg-card p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-text-primary mb-2">
-              My Portfolio
-            </h3>
-            <p className="text-sm text-text-muted">
-              View and manage your investments
-            </p>
-          </div>
+          <PortfolioSummaryCard />
 
           {/* Watchlist Card */}
-          <div className="bg-card p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-text-primary mb-2">
-              Watchlists
-            </h3>
-            <p className="text-sm text-text-muted">
-              Track your favorite stocks
-            </p>
-          </div>
+          <WatchlistSummaryCard />
 
           {/* API Status Card */}
           <ApiHealthWidget onClick={() => setIsApiKeysModalOpen(true)} />

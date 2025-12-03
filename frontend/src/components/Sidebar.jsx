@@ -32,7 +32,7 @@ function Sidebar({ onCreateWatchlist }) {
 
   return (
     <aside
-      className="w-64 bg-panel border-r-2 border-line h-screen flex flex-col shadow-sm"
+      className="w-64 bg-panel border-r-2 border-line h-screen flex flex-col shadow-sm sticky top-0"
       role="complementary"
       aria-label="Site sidebar"
     >

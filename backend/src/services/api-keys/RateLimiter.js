@@ -111,6 +111,18 @@ class RateLimiter {
   }
 
   /**
+   * Check if a service is completely rate limited (all keys exhausted)
+   * @param {string} serviceName - Service name
+   * @returns {boolean} True if all active keys are rate limited
+   */
+  isServiceFullyRateLimited(serviceName) {
+    const status = this.getRateLimitStatus(serviceName);
+    if (!status || status.length === 0) return false;
+    // Service is fully rate limited if ALL active keys are currently limited
+    return status.every(key => key.isCurrentlyLimited);
+  }
+
+  /**
    * Get rate limit status for a service
    */
   getRateLimitStatus(serviceName) {

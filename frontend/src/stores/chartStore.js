@@ -55,6 +55,9 @@ class LRUCache {
 // Create cache instance
 const candleCache = new LRUCache(20);
 
+// Request deduplication: prevents concurrent duplicate API calls
+const pendingRequests = new Map();
+
 // Helper to get cache TTL based on resolution
 const getCacheTTL = (resolution) => {
   if (['1', '5', '15', '30', '60'].includes(resolution)) {
@@ -153,35 +156,50 @@ export const useChartStore = create((set, get) => ({
       }
     }
 
-    // Set loading
-    set((state) => ({
-      isLoading: { ...state.isLoading, [cacheKey]: true },
-      error: { ...state.error, [cacheKey]: null },
-    }));
-
-    try {
-      const data = await api.get(
-        `/quotes/${upperSymbol}/candles?resolution=${resolution}&from=${from}&to=${to}`
-      );
-
-      // Cache the result
-      candleCache.set(cacheKey, {
-        data,
-        timestamp: Date.now(),
-      });
-
-      set((state) => ({
-        isLoading: { ...state.isLoading, [cacheKey]: false },
-      }));
-
-      return { data, isStale: false };
-    } catch (error) {
-      set((state) => ({
-        isLoading: { ...state.isLoading, [cacheKey]: false },
-        error: { ...state.error, [cacheKey]: error.message },
-      }));
-      throw error;
+    // Request deduplication: if there's already a pending request for this key, wait for it
+    if (pendingRequests.has(cacheKey)) {
+      return pendingRequests.get(cacheKey);
     }
+
+    // Create the request promise
+    const requestPromise = (async () => {
+      // Set loading
+      set((state) => ({
+        isLoading: { ...state.isLoading, [cacheKey]: true },
+        error: { ...state.error, [cacheKey]: null },
+      }));
+
+      try {
+        const data = await api.get(
+          `/quotes/${upperSymbol}/candles?resolution=${resolution}&from=${from}&to=${to}`
+        );
+
+        // Cache the result
+        candleCache.set(cacheKey, {
+          data,
+          timestamp: Date.now(),
+        });
+
+        set((state) => ({
+          isLoading: { ...state.isLoading, [cacheKey]: false },
+        }));
+
+        return { data, isStale: false };
+      } catch (error) {
+        set((state) => ({
+          isLoading: { ...state.isLoading, [cacheKey]: false },
+          error: { ...state.error, [cacheKey]: error.message },
+        }));
+        throw error;
+      } finally {
+        // Clean up pending request
+        pendingRequests.delete(cacheKey);
+      }
+    })();
+
+    // Store the pending request
+    pendingRequests.set(cacheKey, requestPromise);
+    return requestPromise;
   },
 
   // Update current candle with live quote data

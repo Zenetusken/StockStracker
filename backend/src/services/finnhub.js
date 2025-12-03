@@ -73,6 +73,25 @@ class FinnhubService {
   }
 
   /**
+   * Check if a provider is available (has key and not rate-limited)
+   * Use this BEFORE making API calls to avoid wasted requests
+   * @param {string} serviceName - Service name (e.g., 'finnhub', 'yahoo', 'alphavantage')
+   * @returns {boolean} True if provider is available
+   */
+  _isProviderAvailable(serviceName) {
+    try {
+      const keyProvider = getKeyProvider();
+      if (keyProvider.isServiceRateLimited(serviceName)) {
+        console.log(`[Provider] ${serviceName} is rate-limited, skipping`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      return true; // Fail open if check errors
+    }
+  }
+
+  /**
    * Get cached data or fetch from API with request deduplication
    * Prevents multiple concurrent requests for the same data
    */
@@ -159,17 +178,19 @@ class FinnhubService {
    * Returns: { c: current, h: high, l: low, o: open, pc: previous close, t: timestamp }
    *
    * Fallback Order:
-   * 1. Finnhub (if API key available)
-   * 2. Yahoo Finance (free, no API key required)
-   * 3. Alpha Vantage (if API key available) - last resort due to 25 calls/day limit
-   * 4. Error - no mock data
+   * 1. Finnhub (if API key available AND not rate-limited)
+   * 2. Yahoo Finance (free, if not rate-limited)
+   * 3. Error - no mock data
+   *
+   * NOTE: Alpha Vantage removed from quote fallback to protect 25 calls/day limit.
+   * Alpha Vantage is reserved for profiles and search only.
    */
   async getQuote(symbol) {
     const upperSymbol = symbol.toUpperCase();
     const cacheKey = `quote:${upperSymbol}`;
     return this.getCached(cacheKey, async () => {
-      // 1. Try Finnhub first (if we have a valid API key)
-      if (this.hasApiKey()) {
+      // 1. Try Finnhub first (if we have API key AND not rate-limited)
+      if (this.hasApiKey() && this._isProviderAvailable('finnhub')) {
         try {
           const finnhubData = await this.request('/quote', { symbol: upperSymbol });
           if (finnhubData && finnhubData.c !== 0) {
@@ -181,34 +202,29 @@ class FinnhubService {
         }
       }
 
-      // 2. Try Yahoo Finance (free, no API key required)
-      try {
-        console.log(`Trying Yahoo Finance quote for ${upperSymbol}...`);
-        const yahooData = await yahooFinanceService.getQuote(upperSymbol);
-        if (yahooData && yahooData.c) {
-          console.log(`✓ Using Yahoo Finance quote for ${upperSymbol}`);
-          return yahooData;
-        }
-      } catch (yahooError) {
-        console.log(`Yahoo Finance quote error for ${upperSymbol}: ${yahooError.message}`);
-      }
-
-      // 3. Try Alpha Vantage (last resort - only 25 calls/day on free tier)
-      if (alphaVantageService.hasApiKey()) {
+      // 2. Try Yahoo Finance (free, if not rate-limited)
+      if (this._isProviderAvailable('yahoo')) {
         try {
-          console.log(`Trying Alpha Vantage quote for ${upperSymbol}...`);
-          const avData = await alphaVantageService.getQuote(upperSymbol);
-          if (avData && avData.c) {
-            console.log(`✓ Using Alpha Vantage quote for ${upperSymbol}`);
-            return avData;
+          console.log(`Trying Yahoo Finance quote for ${upperSymbol}...`);
+          const yahooData = await yahooFinanceService.getQuote(upperSymbol);
+          if (yahooData && yahooData.c) {
+            console.log(`✓ Using Yahoo Finance quote for ${upperSymbol}`);
+            return yahooData;
           }
-        } catch (avError) {
-          console.log(`Alpha Vantage quote error for ${upperSymbol}: ${avError.message}`);
+        } catch (yahooError) {
+          if (yahooError.isRateLimited) {
+            console.log(`[Fallback] Yahoo Finance rate limited - no more quote providers available`);
+          } else {
+            console.log(`Yahoo Finance quote error for ${upperSymbol}: ${yahooError.message}`);
+          }
         }
+      } else {
+        console.log(`[Fallback] Yahoo Finance unavailable (rate-limited), skipping`);
       }
 
-      // 4. Error - no mock data fallback
-      console.error(`❌ No quote data available for ${upperSymbol} - all providers exhausted`);
+      // 3. Error - no mock data fallback
+      // NOTE: Alpha Vantage intentionally NOT used for quotes (25 calls/day limit)
+      console.error(`❌ No quote data available for ${upperSymbol} - all providers exhausted or rate-limited`);
       throw new Error(`No quote data available for ${upperSymbol}. All API providers exhausted or rate limited.`);
     }, this.cacheTimeout);
   }
@@ -230,20 +246,28 @@ class FinnhubService {
       let baseProfile = null;
       let finnhubProfile = null;
 
-      // 1. Try Yahoo Finance first (has the most complete data)
-      try {
-        console.log(`Trying Yahoo Finance profile for ${upperSymbol}...`);
-        const yahooProfile = await yahooFinanceService.getProfile(upperSymbol);
-        if (yahooProfile && yahooProfile.name) {
-          console.log(`✓ Using Yahoo Finance profile for ${upperSymbol}`);
-          baseProfile = yahooProfile;
+      // 1. Try Yahoo Finance first (has the most complete data, if not rate-limited)
+      if (this._isProviderAvailable('yahoo')) {
+        try {
+          console.log(`Trying Yahoo Finance profile for ${upperSymbol}...`);
+          const yahooProfile = await yahooFinanceService.getProfile(upperSymbol);
+          if (yahooProfile && yahooProfile.name) {
+            console.log(`✓ Using Yahoo Finance profile for ${upperSymbol}`);
+            baseProfile = yahooProfile;
+          }
+        } catch (yahooError) {
+          if (yahooError.isRateLimited) {
+            console.log(`[Fallback] Yahoo Finance rate limited for profile, trying other providers`);
+          } else {
+            console.log(`Yahoo Finance profile error for ${upperSymbol}: ${yahooError.message}`);
+          }
         }
-      } catch (yahooError) {
-        console.log(`Yahoo Finance profile error for ${upperSymbol}: ${yahooError.message}`);
+      } else {
+        console.log(`[Fallback] Yahoo Finance unavailable for profile (rate-limited), trying Finnhub`);
       }
 
-      // 2. Try Finnhub to get logo (Yahoo doesn't provide logos)
-      if (this.hasApiKey()) {
+      // 2. Try Finnhub to get logo (Yahoo doesn't provide logos, if not rate-limited)
+      if (this.hasApiKey() && this._isProviderAvailable('finnhub')) {
         try {
           finnhubProfile = await this.request('/stock/profile2', { symbol: upperSymbol });
           if (finnhubProfile && finnhubProfile.name) {
@@ -293,23 +317,24 @@ class FinnhubService {
         return baseProfile;
       }
 
-      // 4. Try Alpha Vantage as last resort
-      if (alphaVantageService.hasApiKey()) {
-        try {
-          console.log(`Trying Alpha Vantage profile for ${upperSymbol}...`);
-          const avProfile = await alphaVantageService.getCompanyOverview(upperSymbol);
-          if (avProfile && avProfile.name) {
-            console.log(`✓ Using Alpha Vantage profile for ${upperSymbol}`);
-            return avProfile;
-          }
-        } catch (avError) {
-          console.log(`Alpha Vantage profile error for ${upperSymbol}: ${avError.message}`);
-        }
-      }
-
-      // 5. Error - no mock data fallback
-      console.error(`❌ No profile data available for ${upperSymbol} - all providers exhausted`);
-      throw new Error(`No company profile available for ${upperSymbol}. All API providers exhausted or rate limited.`);
+      // 4. Return minimal profile instead of calling Alpha Vantage
+      // NOTE: Alpha Vantage intentionally REMOVED from profile cascade (25 calls/day limit)
+      // Alpha Vantage is reserved for unique features that Yahoo/Finnhub don't provide
+      console.log(`⚠ No full profile data available for ${upperSymbol}, returning minimal profile`);
+      return {
+        name: upperSymbol,
+        ticker: upperSymbol,
+        exchange: null,
+        country: null,
+        currency: 'USD',
+        sector: null,
+        finnhubIndustry: null,
+        weburl: null,
+        marketCapitalization: null,
+        logo: null,
+        ipo: null,
+        _minimal: true, // Flag to indicate this is a minimal profile
+      };
     }, this.searchCacheTimeout);
   }
 
@@ -325,8 +350,8 @@ class FinnhubService {
   async searchSymbols(query) {
     const cacheKey = `search:${query.toLowerCase()}`;
     return this.getCached(cacheKey, async () => {
-      // 1. Try Finnhub first
-      if (this.hasApiKey()) {
+      // 1. Try Finnhub first (if not rate-limited)
+      if (this.hasApiKey() && this._isProviderAvailable('finnhub')) {
         try {
           const result = await this.request('/search', { q: query });
           if (result && result.count > 0) {
@@ -338,10 +363,11 @@ class FinnhubService {
         }
       }
 
-      // 2. Try Alpha Vantage (if API key available)
-      if (alphaVantageService.hasApiKey()) {
+      // 2. Try Alpha Vantage (if API key available and not rate-limited)
+      // NOTE: Alpha Vantage has 25 calls/day limit - use sparingly!
+      if (alphaVantageService.hasApiKey() && this._isProviderAvailable('alphavantage') && !alphaVantageService.isRateLimited()) {
         try {
-          console.log(`Trying Alpha Vantage search for "${query}"...`);
+          console.log(`Trying Alpha Vantage search for "${query}" (25/day limit)...`);
           const avResult = await alphaVantageService.searchSymbols(query);
           if (avResult && avResult.count > 0) {
             console.log(`✓ Using Alpha Vantage search results for "${query}"`);
@@ -350,6 +376,8 @@ class FinnhubService {
         } catch (avError) {
           console.log(`Alpha Vantage search error for "${query}": ${avError.message}`);
         }
+      } else if (alphaVantageService.hasApiKey() && alphaVantageService.isRateLimited()) {
+        console.log(`[Search] Alpha Vantage rate limited (25/day), skipping for "${query}"`);
       }
 
       // 3. Error - no mock data fallback

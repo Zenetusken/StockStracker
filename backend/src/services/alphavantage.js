@@ -69,6 +69,21 @@ class AlphaVantageService {
   }
 
   /**
+   * Check if Alpha Vantage is currently rate limited
+   * Use this BEFORE making API calls to avoid wasted requests
+   * NOTE: Alpha Vantage has only 25 calls/day - this is CRITICAL to check!
+   * @returns {boolean} True if rate limited
+   */
+  isRateLimited() {
+    try {
+      const keyProvider = getKeyProvider();
+      return keyProvider.isServiceRateLimited('alphavantage');
+    } catch (e) {
+      return false; // Fail open if check errors
+    }
+  }
+
+  /**
    * Get cached data or fetch from API
    */
   async getCached(cacheKey, fetcher) {

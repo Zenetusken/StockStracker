@@ -202,6 +202,20 @@ class YahooFinanceService {
   }
 
   /**
+   * Check if Yahoo Finance is currently rate limited
+   * Use this BEFORE making API calls to avoid wasted requests
+   * @returns {boolean} True if rate limited
+   */
+  isRateLimited() {
+    try {
+      const keyProvider = getKeyProvider();
+      return keyProvider.isServiceRateLimited(this.serviceName);
+    } catch (e) {
+      return false; // Fail open if check errors
+    }
+  }
+
+  /**
    * Rate limit requests
    */
   async throttle() {
@@ -284,12 +298,15 @@ class YahooFinanceService {
       // Track the API call
       this.recordApiCall();
 
-      // Check for rate limiting
+      // Check for rate limiting - throw error so fallback logic works
       if (response.status === 429) {
         console.error(`[Yahoo] Rate limited for ${symbol}`);
         const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
         this.recordRateLimit(retryAfter);
-        return null;
+        const error = new Error('Yahoo Finance rate limited');
+        error.isRateLimited = true;
+        error.provider = 'yahoo';
+        throw error;
       }
 
       if (!response.ok) {
@@ -306,6 +323,10 @@ class YahooFinanceService {
         if (errorDesc.includes('rate') || errorDesc.includes('limit') || errorDesc.includes('too many')) {
           console.error(`[Yahoo] Rate limited (in body) for ${symbol}`);
           this.recordRateLimit(60);
+          const error = new Error('Yahoo Finance rate limited');
+          error.isRateLimited = true;
+          error.provider = 'yahoo';
+          throw error;
         } else {
           console.error(`[Yahoo] API error for ${symbol}:`, data.chart.error.description);
         }
@@ -360,6 +381,15 @@ class YahooFinanceService {
    * @returns {Object|null} Quote data
    */
   async getQuote(symbol) {
+    // Proactive rate limit check - throw error so fallback logic works
+    if (this.isRateLimited()) {
+      console.log(`[Yahoo] Rate limited, skipping quote for ${symbol}`);
+      const error = new Error('Yahoo Finance rate limited');
+      error.isRateLimited = true;
+      error.provider = 'yahoo';
+      throw error;
+    }
+
     try {
       await this.throttle();
 
@@ -377,12 +407,15 @@ class YahooFinanceService {
       // Track the API call
       this.recordApiCall();
 
-      // Check for rate limiting
+      // Check for rate limiting - throw error so fallback logic works
       if (response.status === 429) {
         console.error(`[Yahoo] Quote rate limited for ${symbol}`);
         const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
         this.recordRateLimit(retryAfter);
-        return null;
+        const error = new Error('Yahoo Finance rate limited');
+        error.isRateLimited = true;
+        error.provider = 'yahoo';
+        throw error;
       }
 
       if (!response.ok) {
@@ -426,6 +459,15 @@ class YahooFinanceService {
    * @returns {Object|null} Company profile data
    */
   async getProfile(symbol) {
+    // Proactive rate limit check - throw error so fallback logic works
+    if (this.isRateLimited()) {
+      console.log(`[Yahoo] Rate limited, skipping profile for ${symbol}`);
+      const error = new Error('Yahoo Finance rate limited');
+      error.isRateLimited = true;
+      error.provider = 'yahoo';
+      throw error;
+    }
+
     try {
       await this.throttle();
 
@@ -444,12 +486,15 @@ class YahooFinanceService {
       // Track the API call
       this.recordApiCall();
 
-      // Check for rate limiting
+      // Check for rate limiting - throw error so fallback logic works
       if (response.status === 429) {
         console.error(`[Yahoo] Profile rate limited for ${symbol}`);
         const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
         this.recordRateLimit(retryAfter);
-        return null;
+        const error = new Error('Yahoo Finance rate limited');
+        error.isRateLimited = true;
+        error.provider = 'yahoo';
+        throw error;
       }
 
       if (!response.ok) {

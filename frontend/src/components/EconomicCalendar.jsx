@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Calendar, AlertCircle, Clock } from 'lucide-react';
 import api from '../api/client';
 
@@ -7,14 +8,14 @@ import api from '../api/client';
  * #122: Economic calendar highlights
  */
 
-// Importance color mapping
+// Importance color mapping - solid backgrounds for readability
 const IMPORTANCE_COLORS = {
-  high: 'bg-loss/10 text-loss border-loss/20',
-  medium: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  low: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+  high: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-200 dark:border-red-700',
+  medium: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700',
+  low: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-700',
 };
 
-function EconomicCalendar() {
+function EconomicCalendar({ className = '' }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -63,7 +64,7 @@ function EconomicCalendar() {
 
   if (loading) {
     return (
-      <div className="bg-card rounded-lg shadow p-4">
+      <div className={`bg-card rounded-lg shadow p-4 ${className}`}>
         <div className="flex items-center gap-2 mb-4">
           <Calendar className="w-5 h-5 text-brand" />
           <h3 className="font-semibold text-text-primary">Economic Calendar</h3>
@@ -79,7 +80,7 @@ function EconomicCalendar() {
 
   if (error) {
     return (
-      <div className="bg-card rounded-lg shadow p-4">
+      <div className={`bg-card rounded-lg shadow p-4 ${className}`}>
         <div className="flex items-center gap-2 mb-4">
           <Calendar className="w-5 h-5 text-brand" />
           <h3 className="font-semibold text-text-primary">Economic Calendar</h3>
@@ -90,13 +91,13 @@ function EconomicCalendar() {
   }
 
   return (
-    <div className="bg-card rounded-lg shadow">
+    <div className={`bg-card rounded-lg shadow ${className}`}>
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
         <Calendar className="w-5 h-5 text-brand" />
         <h3 className="font-semibold text-text-primary">Economic Calendar</h3>
       </div>
 
-      <div className="p-4 space-y-4 max-h-80 overflow-y-auto">
+      <div className="p-4 space-y-4">
         {Object.keys(groupedEvents).length === 0 ? (
           <div className="text-center text-text-muted py-4">
             No upcoming events
@@ -111,12 +112,13 @@ function EconomicCalendar() {
                 {dateEvents.map(event => (
                   <div
                     key={event.id}
-                    className={`p-3 rounded-lg border ${IMPORTANCE_COLORS[event.importance] || IMPORTANCE_COLORS.low}`}
+                    className={`p-3 rounded-lg border hover:shadow-sm transition-all ${IMPORTANCE_COLORS[event.importance] || IMPORTANCE_COLORS.low}`}
+                    title={`${event.description || event.event}\n\nImportance: ${event.importance.toUpperCase()}${event.previous ? `\nPrev: ${event.previous}` : ''}${event.forecast ? ` → Forecast: ${event.forecast}` : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <div className="font-medium text-sm">{event.event}</div>
-                        <div className="flex items-center gap-2 mt-1 text-xs opacity-75">
+                        <div className="flex items-center gap-2 mt-1 text-xs">
                           <Clock className="w-3 h-3" />
                           {event.time}
                         </div>
@@ -129,16 +131,31 @@ function EconomicCalendar() {
                       <div className="flex gap-4 mt-2 text-xs">
                         {event.previous && (
                           <div>
-                            <span className="opacity-75">Prev: </span>
+                            <span>Prev: </span>
                             <span className="font-medium">{event.previous}</span>
                           </div>
                         )}
                         {event.forecast && (
                           <div>
-                            <span className="opacity-75">Forecast: </span>
+                            <span>Forecast: </span>
                             <span className="font-medium">{event.forecast}</span>
                           </div>
                         )}
+                      </div>
+                    )}
+                    {event.relatedSymbols && event.relatedSymbols.length > 0 && (
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        {event.relatedSymbols.map(symbol => (
+                          <Link
+                            key={symbol}
+                            to={`/stock/${symbol}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-2 py-0.5 bg-brand/10 text-brand rounded text-xs font-medium hover:bg-brand/20 transition-colors"
+                            title={`View ${symbol} chart`}
+                          >
+                            ${symbol}
+                          </Link>
+                        ))}
                       </div>
                     )}
                   </div>

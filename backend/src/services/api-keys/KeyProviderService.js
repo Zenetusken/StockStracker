@@ -88,6 +88,16 @@ class KeyProviderService {
   }
 
   /**
+   * Check if a service is currently rate limited (all keys exhausted)
+   * Use this BEFORE making API calls to avoid wasted requests
+   * @param {string} serviceName - Service name (e.g., 'finnhub', 'yahoo', 'alphavantage')
+   * @returns {boolean} True if all keys for the service are rate limited
+   */
+  isServiceRateLimited(serviceName) {
+    return this.rateLimiter.isServiceFullyRateLimited(serviceName);
+  }
+
+  /**
    * Get all services with their status
    */
   getAllServices() {

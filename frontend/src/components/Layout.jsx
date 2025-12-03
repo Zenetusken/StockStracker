@@ -60,7 +60,7 @@ function Layout({ children }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-panel shadow-sm border-b-2 border-line" role="banner" aria-label="Site header">
+        <header className="bg-panel shadow-sm border-b-2 border-line sticky top-0 z-10" role="banner" aria-label="Site header">
           <div className="px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between mb-4">
               <LogoFull size="md" />

@@ -48,7 +48,12 @@ export default function useSearchPreview(symbol, enabled = true) {
       return;
     }
 
-    loadProfile(symbol);
+    // Debounce preview loading by 300ms to prevent API explosion on rapid hovers
+    const timeoutId = setTimeout(() => {
+      loadProfile(symbol);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
   }, [symbol, enabled, loadProfile]);
 
   // Format market cap for display

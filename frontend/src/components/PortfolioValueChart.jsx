@@ -56,7 +56,12 @@ function PortfolioValueChart({ portfolioId }) {
       width: chartContainerRef.current.clientWidth,
       height: 300,
       rightPriceScale: {
-        borderVisible: false
+        borderVisible: false,
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1
+        },
+        autoScale: true
       },
       timeScale: {
         borderVisible: false,
@@ -77,14 +82,25 @@ function PortfolioValueChart({ portfolioId }) {
     // Create area series
     const areaSeries = chart.addAreaSeries({
       lineColor: '#3b82f6',
-      topColor: 'rgba(59, 130, 246, 0.3)',
-      bottomColor: 'rgba(59, 130, 246, 0.0)',
+      topColor: 'rgba(59, 130, 246, 0.4)',
+      bottomColor: 'rgba(59, 130, 246, 0.05)',
       lineWidth: 2,
       priceFormat: {
         type: 'price',
         precision: 2,
         minMove: 0.01
-      }
+      },
+      priceScaleId: 'right',
+      baseLineVisible: false
+    });
+
+    // Set scale margins on the series to better fit the chart height
+    areaSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.1,
+        bottom: 0.1
+      },
+      autoScale: true
     });
 
     chartRef.current = chart;

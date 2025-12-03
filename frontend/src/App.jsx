@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
+import Portfolio from './pages/Portfolio';
 import StockDetail from './pages/StockDetail';
 import WatchlistDetail from './pages/WatchlistDetail';
 import PortfolioDetail from './pages/PortfolioDetail';
@@ -71,7 +72,7 @@ function App() {
           path="/portfolio"
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <Portfolio />
             </ProtectedRoute>
           }
         />
