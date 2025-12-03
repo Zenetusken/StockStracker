@@ -14,7 +14,7 @@ class FinnhubService {
     this._apiKeyLoaded = false;
     this.cache = new Map();
     this.cacheTimeout = 10000; // 10 seconds for quote data
-    this.searchCacheTimeout = 300000; // 5 minutes for search/symbol data
+    this.searchCacheTimeout = 900000; // 15 minutes for search/symbol data (increased from 5 min)
     // Request deduplication: prevents concurrent duplicate API calls
     this.pendingRequests = new Map();
   }
@@ -343,9 +343,12 @@ class FinnhubService {
    * Returns: { count, result: [{ description, displaySymbol, symbol, type }] }
    *
    * Fallback Order:
-   * 1. Finnhub (if API key available)
-   * 2. Alpha Vantage (if API key available)
-   * 3. Error - no mock data
+   * 1. Finnhub (if API key available, real-time)
+   * 2. Yahoo Finance (free, no API key needed)
+   * 3. Alpha Vantage (LAST RESORT - 25 calls/day limit, use sparingly!)
+   *
+   * NOTE: Alpha Vantage is intentionally last resort to preserve 25/day limit
+   * for features where it's truly needed (technical indicators).
    */
   async searchSymbols(query) {
     const cacheKey = `search:${query.toLowerCase()}`;
@@ -363,11 +366,29 @@ class FinnhubService {
         }
       }
 
-      // 2. Try Alpha Vantage (if API key available and not rate-limited)
-      // NOTE: Alpha Vantage has 25 calls/day limit - use sparingly!
+      // 2. Try Yahoo Finance (free, no API key needed)
+      if (this._isProviderAvailable('yahoo')) {
+        try {
+          console.log(`Trying Yahoo Finance search for "${query}"...`);
+          const yahooResult = await yahooFinanceService.search(query);
+          if (yahooResult && yahooResult.count > 0) {
+            console.log(`✓ Using Yahoo Finance search results for "${query}"`);
+            return yahooResult;
+          }
+        } catch (yahooError) {
+          if (yahooError.isRateLimited) {
+            console.log(`[Search] Yahoo Finance rate limited, trying next provider...`);
+          } else {
+            console.log(`Yahoo Finance search error for "${query}": ${yahooError.message}`);
+          }
+        }
+      }
+
+      // 3. Try Alpha Vantage as LAST RESORT (25 calls/day limit!)
+      // NOTE: Consider skipping AV entirely for search since Yahoo/Finnhub usually suffice
       if (alphaVantageService.hasApiKey() && this._isProviderAvailable('alphavantage') && !alphaVantageService.isRateLimited()) {
         try {
-          console.log(`Trying Alpha Vantage search for "${query}" (25/day limit)...`);
+          console.log(`⚠ Trying Alpha Vantage search for "${query}" (LAST RESORT - 25/day limit)...`);
           const avResult = await alphaVantageService.searchSymbols(query);
           if (avResult && avResult.count > 0) {
             console.log(`✓ Using Alpha Vantage search results for "${query}"`);
@@ -380,10 +401,52 @@ class FinnhubService {
         console.log(`[Search] Alpha Vantage rate limited (25/day), skipping for "${query}"`);
       }
 
-      // 3. Error - no mock data fallback
-      console.error(`❌ No search results for "${query}" - all providers exhausted`);
-      throw new Error(`No search results for "${query}". All API providers exhausted or rate limited.`);
+      // 4. Return empty results instead of error (graceful degradation)
+      console.warn(`⚠ No search results for "${query}" - all providers exhausted, returning empty`);
+      return { count: 0, result: [] };
     }, this.searchCacheTimeout);
+  }
+
+  /**
+   * Get basic financial metrics for a symbol
+   * Uses Finnhub's /stock/metric endpoint
+   * Returns: { peRatio, pbRatio, eps, beta, dividendYield, 52WeekHigh, 52WeekLow, ... }
+   */
+  async getBasicMetrics(symbol) {
+    const upperSymbol = symbol.toUpperCase();
+    const cacheKey = `metrics:${upperSymbol}`;
+    return this.getCached(cacheKey, async () => {
+      if (!this.hasApiKey() || !this._isProviderAvailable('finnhub')) {
+        return null;
+      }
+
+      try {
+        const data = await this.request('/stock/metric', {
+          symbol: upperSymbol,
+          metric: 'all'
+        });
+
+        if (data && data.metric) {
+          const m = data.metric;
+          return {
+            peRatio: m.peBasicExclExtraTTM || m.peTTM || null,
+            pbRatio: m.pbQuarterly || m.pbAnnual || null,
+            eps: m.epsBasicExclExtraItemsTTM || m.epsTTM || null,
+            beta: m.beta || null,
+            dividendYield: m.dividendYieldIndicatedAnnual || m.currentDividendYieldTTM || null,
+            fiftyTwoWeekHigh: m['52WeekHigh'] || null,
+            fiftyTwoWeekLow: m['52WeekLow'] || null,
+            marketCap: m.marketCapitalization || null,
+            revenuePerShare: m.revenuePerShareTTM || null,
+            bookValuePerShare: m.bookValuePerShareQuarterly || null,
+          };
+        }
+        return null;
+      } catch (error) {
+        console.log(`[Finnhub] Metrics error for ${upperSymbol}: ${error.message}`);
+        return null;
+      }
+    }, this.searchCacheTimeout); // Cache metrics for longer (15 min)
   }
 
   /**

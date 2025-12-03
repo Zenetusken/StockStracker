@@ -1,5 +1,6 @@
 import express from 'express';
 import finnhub from '../services/finnhub.js';
+import yahooFinanceService from '../services/yahoo.js';
 
 const router = express.Router();
 
@@ -34,11 +35,29 @@ const SECTOR_ETFS = [
 ];
 
 // Cache for market data
+// Increased TTL to 90s to reduce API calls while maintaining reasonable freshness
 const marketCache = new Map();
-const CACHE_TTL = 30000; // 30 seconds for market data
+const CACHE_TTL = 90000; // 90 seconds for market data (increased from 60s)
+
+/**
+ * Timeout wrapper to prevent API calls from hanging indefinitely
+ */
+function withTimeout(promise, ms = 5000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), ms)
+    )
+  ]);
+}
+
+// Request deduplication for concurrent requests
+let pendingOverviewRequest = null;
 
 /**
  * Get cached market data or fetch fresh
+ * Uses Yahoo Finance as PRIMARY provider (higher daily limit, no API key)
+ * Falls back to Finnhub if Yahoo fails
  */
 async function getCachedQuote(symbol) {
   const cached = marketCache.get(symbol);
@@ -46,26 +65,43 @@ async function getCachedQuote(symbol) {
     return cached.data;
   }
 
-  try {
-    const quote = await finnhub.getQuote(symbol);
-    if (quote && quote.c !== 0) {
-      const enriched = {
-        symbol,
-        price: quote.c,
-        change: quote.c - quote.pc,
-        changePercent: quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : 0,
-        high: quote.h,
-        low: quote.l,
-        open: quote.o,
-        previousClose: quote.pc,
-        volume: quote.v || 0,
-      };
-      marketCache.set(symbol, { data: enriched, timestamp: Date.now() });
-      return enriched;
+  let quote = null;
+
+  // Try Yahoo Finance FIRST (no API key, higher limits)
+  if (!yahooFinanceService.isRateLimited()) {
+    try {
+      quote = await withTimeout(yahooFinanceService.getQuote(symbol), 5000);
+    } catch (error) {
+      // Yahoo failed or timed out, fall through to Finnhub
     }
-  } catch (error) {
-    console.log(`[Market] Error fetching ${symbol}:`, error.message);
   }
+
+  // Fallback to Finnhub if Yahoo didn't work
+  if (!quote || quote.c === undefined) {
+    try {
+      quote = await withTimeout(finnhub.getQuote(symbol), 5000);
+    } catch (error) {
+      console.log(`[Market] Error fetching ${symbol}:`, error.message);
+      return null;
+    }
+  }
+
+  if (quote && quote.c !== 0) {
+    const enriched = {
+      symbol,
+      price: quote.c,
+      change: quote.c - quote.pc,
+      changePercent: quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : 0,
+      high: quote.h,
+      low: quote.l,
+      open: quote.o,
+      previousClose: quote.pc,
+      volume: quote.v || 0,
+    };
+    marketCache.set(symbol, { data: enriched, timestamp: Date.now() });
+    return enriched;
+  }
+
   return null;
 }
 
@@ -149,52 +185,72 @@ router.get('/sectors', async (req, res) => {
 /**
  * GET /api/market/overview
  * Get combined market overview (indices + sectors)
+ * Uses request deduplication to prevent duplicate API calls during concurrent loads
  */
 router.get('/overview', async (req, res) => {
   try {
+    // If already fetching, wait for pending result (prevents duplicate API calls)
+    if (pendingOverviewRequest) {
+      console.log('[Market] Returning deduplicated overview request');
+      const result = await pendingOverviewRequest;
+      return res.json(result);
+    }
+
     console.log('[Market] Fetching market overview...');
 
-    // Fetch both in parallel
-    const [indices, sectors] = await Promise.all([
-      Promise.all(
-        MAJOR_INDICES.map(async (index) => {
-          const quote = await getCachedQuote(index.symbol);
-          return { ...index, ...quote };
-        })
-      ),
-      Promise.all(
-        SECTOR_ETFS.map(async (sector) => {
-          const quote = await getCachedQuote(sector.symbol);
-          return { ...sector, ...quote };
-        })
-      ),
-    ]);
+    // Start the request and store promise for deduplication
+    pendingOverviewRequest = (async () => {
+      try {
+        // Fetch both in parallel
+        const [indices, sectors] = await Promise.all([
+          Promise.all(
+            MAJOR_INDICES.map(async (index) => {
+              const quote = await getCachedQuote(index.symbol);
+              return { ...index, ...quote };
+            })
+          ),
+          Promise.all(
+            SECTOR_ETFS.map(async (sector) => {
+              const quote = await getCachedQuote(sector.symbol);
+              return { ...sector, ...quote };
+            })
+          ),
+        ]);
 
-    const validIndices = indices.filter(idx => idx.price != null);
-    const validSectors = sectors
-      .filter(s => s.price != null)
-      .sort((a, b) => (b.changePercent || 0) - (a.changePercent || 0));
+        const validIndices = indices.filter(idx => idx.price != null);
+        const validSectors = sectors
+          .filter(s => s.price != null)
+          .sort((a, b) => (b.changePercent || 0) - (a.changePercent || 0));
 
-    // Market sentiment (based on index performance)
-    const spyChange = validIndices.find(i => i.symbol === 'SPY')?.changePercent || 0;
-    let sentiment = 'neutral';
-    if (spyChange > 1) sentiment = 'bullish';
-    else if (spyChange > 0.3) sentiment = 'slightly-bullish';
-    else if (spyChange < -1) sentiment = 'bearish';
-    else if (spyChange < -0.3) sentiment = 'slightly-bearish';
+        // Market sentiment (based on index performance)
+        const spyChange = validIndices.find(i => i.symbol === 'SPY')?.changePercent || 0;
+        let sentiment = 'neutral';
+        if (spyChange > 1) sentiment = 'bullish';
+        else if (spyChange > 0.3) sentiment = 'slightly-bullish';
+        else if (spyChange < -1) sentiment = 'bearish';
+        else if (spyChange < -0.3) sentiment = 'slightly-bearish';
 
-    res.json({
-      timestamp: Date.now(),
-      indices: validIndices,
-      sectors: validSectors,
-      sentiment,
-      breadth: {
-        sectorGainers: validSectors.filter(s => s.changePercent > 0).length,
-        sectorLosers: validSectors.filter(s => s.changePercent < 0).length,
-      },
-    });
+        return {
+          timestamp: Date.now(),
+          indices: validIndices,
+          sectors: validSectors,
+          sentiment,
+          breadth: {
+            sectorGainers: validSectors.filter(s => s.changePercent > 0).length,
+            sectorLosers: validSectors.filter(s => s.changePercent < 0).length,
+          },
+        };
+      } finally {
+        // Clear pending request after completion
+        pendingOverviewRequest = null;
+      }
+    })();
+
+    const result = await pendingOverviewRequest;
+    res.json(result);
   } catch (error) {
     console.error('[Market] Overview error:', error);
+    pendingOverviewRequest = null; // Ensure cleanup on error
     res.status(500).json({ error: 'Failed to fetch market overview' });
   }
 });
@@ -212,9 +268,10 @@ const MOVERS_UNIVERSE = [
 ];
 
 // Movers cache (longer TTL since it's computationally expensive)
+// Increased from 1 minute to 5 minutes to reduce API calls
 let moversCache = null;
 let moversCacheTime = 0;
-const MOVERS_CACHE_TTL = 60000; // 1 minute
+const MOVERS_CACHE_TTL = 300000; // 5 minutes (increased from 1 minute)
 
 /**
  * GET /api/market/movers
@@ -484,5 +541,38 @@ function getDateString(weekStart, dayOffset) {
   date.setDate(weekStart.getDate() + dayOffset);
   return date.toISOString().split('T')[0];
 }
+
+/**
+ * Pre-warm cache on server startup
+ * Fetches market data for all indices and sectors to populate cache
+ * This ensures the first dashboard load has instant data
+ */
+async function prewarmCache() {
+  console.log('[Market] Pre-warming cache...');
+  try {
+    const allSymbols = [
+      ...MAJOR_INDICES.map(i => i.symbol),
+      ...SECTOR_ETFS.map(s => s.symbol),
+    ];
+
+    // Fetch in batches of 5 to avoid overwhelming the API
+    const batchSize = 5;
+    for (let i = 0; i < allSymbols.length; i += batchSize) {
+      const batch = allSymbols.slice(i, i + batchSize);
+      await Promise.all(batch.map(symbol => getCachedQuote(symbol)));
+      // Small delay between batches to be gentle on APIs
+      if (i + batchSize < allSymbols.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    console.log(`[Market] Cache pre-warmed with ${allSymbols.length} symbols`);
+  } catch (error) {
+    console.log('[Market] Cache pre-warm failed:', error.message);
+  }
+}
+
+// Pre-warm cache 5 seconds after server starts
+setTimeout(prewarmCache, 5000);
 
 export default router;

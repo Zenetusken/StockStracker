@@ -1,23 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Settings } from 'lucide-react';
 import Sidebar from './Sidebar';
 import SearchBar from './SearchBar';
 import NewWatchlistModal from './NewWatchlistModal';
-import { ApiKeyStatusIndicator, ApiKeysModal } from './api-keys';
-import ThemeSwitcher from './ThemeSwitcher';
+import { ApiKeysModal } from './api-keys';
 import { LogoFull } from './Logo';
-import { useAuthStore } from '../stores/authStore';
 
 function Layout({ children }) {
-  const navigate = useNavigate();
   const [isNewWatchlistModalOpen, setIsNewWatchlistModalOpen] = useState(false);
   const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
   const [sidebarKey, setSidebarKey] = useState(0);
   const searchBarRef = useRef(null);
-
-  const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
 
   // Global Cmd+K / Ctrl+K shortcut to focus search
   const handleGlobalKeyDown = useCallback((event) => {
@@ -35,15 +27,6 @@ function Layout({ children }) {
     };
   }, [handleGlobalKeyDown]);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
-  };
-
   const handleWatchlistCreated = () => {
     // Refresh the sidebar by updating its key
     setSidebarKey((prev) => prev + 1);
@@ -55,41 +38,22 @@ function Layout({ children }) {
       <Sidebar
         key={sidebarKey}
         onCreateWatchlist={() => setIsNewWatchlistModalOpen(true)}
+        onOpenApiKeysModal={() => setIsApiKeysModalOpen(true)}
       />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
+        {/* Header - Simplified: Logo + Search on one row */}
         <header className="bg-panel shadow-sm border-b-2 border-line sticky top-0 z-10" role="banner" aria-label="Site header">
-          <div className="px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between mb-4">
+          <div className="px-6 lg:px-8 py-4">
+            <div className="flex items-center gap-6">
               <LogoFull size="md" />
-              <div className="flex items-center gap-4">
-                {user && (
-                  <span className="text-sm text-text-muted" id="user-email">
-                    {user.email}
-                  </span>
-                )}
-                <ThemeSwitcher />
-                <ApiKeyStatusIndicator onClick={() => setIsApiKeysModalOpen(true)} />
-                <Link
-                  to="/settings"
-                  className="p-2 rounded-lg text-text-muted hover:bg-panel-hover hover:text-text-primary transition-colors"
-                  title="Settings"
-                >
-                  <Settings className="w-5 h-5" />
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-panel-hover hover:text-text-primary transition-colors"
-                >
-                  Logout
-                </button>
+              {/* Search Bar - Cmd+K / Ctrl+K to focus */}
+              <div className="flex-1">
+                <div className="max-w-xl">
+                  <SearchBar ref={searchBarRef} />
+                </div>
               </div>
-            </div>
-            {/* Search Bar - Cmd+K / Ctrl+K to focus */}
-            <div className="flex justify-center">
-              <SearchBar ref={searchBarRef} />
             </div>
           </div>
         </header>

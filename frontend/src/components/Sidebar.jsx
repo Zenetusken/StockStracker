@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, TrendingUp, List, Settings, Briefcase, Search } from 'lucide-react';
+import { Plus, TrendingUp, List, Briefcase, Search } from 'lucide-react';
 import { useWatchlistStore } from '../stores/watchlistStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { getWatchlistIcon } from './WatchlistIcons';
 import NewPortfolioModal from './NewPortfolioModal';
+import SidebarSettingsMenu from './SidebarSettingsMenu';
 
-function Sidebar({ onCreateWatchlist }) {
+function Sidebar({ onCreateWatchlist, onOpenApiKeysModal }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [showNewPortfolioModal, setShowNewPortfolioModal] = useState(false);
@@ -46,11 +47,10 @@ function Sidebar({ onCreateWatchlist }) {
         <div className="mb-6">
           <button
             onClick={() => navigate('/dashboard')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isActive('/dashboard')
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive('/dashboard')
                 ? 'bg-accent-light text-accent'
                 : 'text-text-primary hover:bg-panel-hover'
-            }`}
+              }`}
           >
             <TrendingUp className="w-5 h-5" />
             Dashboard
@@ -58,11 +58,10 @@ function Sidebar({ onCreateWatchlist }) {
 
           <button
             onClick={() => navigate('/portfolio')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isActive('/portfolio')
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive('/portfolio')
                 ? 'bg-accent-light text-accent'
                 : 'text-text-primary hover:bg-panel-hover'
-            }`}
+              }`}
           >
             <List className="w-5 h-5" />
             Portfolio
@@ -70,11 +69,10 @@ function Sidebar({ onCreateWatchlist }) {
 
           <button
             onClick={() => navigate('/screener')}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isActive('/screener')
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive('/screener')
                 ? 'bg-accent-light text-accent'
                 : 'text-text-primary hover:bg-panel-hover'
-            }`}
+              }`}
           >
             <Search className="w-5 h-5" />
             Stock Screener
@@ -110,11 +108,10 @@ function Sidebar({ onCreateWatchlist }) {
                 <button
                   key={watchlist.id}
                   onClick={() => navigate(`/watchlist/${watchlist.id}`)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === `/watchlist/${watchlist.id}`
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === `/watchlist/${watchlist.id}`
                       ? 'bg-accent-light text-accent'
                       : 'text-text-primary hover:bg-panel-hover'
-                  }`}
+                    }`}
                 >
                   {(() => {
                     const WatchlistIcon = getWatchlistIcon(watchlist.icon);
@@ -122,7 +119,7 @@ function Sidebar({ onCreateWatchlist }) {
                       <WatchlistIcon
                         className="w-4 h-4"
                         style={{ color: watchlist.color }}
-                        fill={watchlist.is_default ? watchlist.color : 'none'}
+                        fill={watchlist.color}
                       />
                     );
                   })()}
@@ -168,11 +165,10 @@ function Sidebar({ onCreateWatchlist }) {
                 <button
                   key={portfolio.id}
                   onClick={() => navigate(`/portfolio/${portfolio.id}`)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === `/portfolio/${portfolio.id}`
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === `/portfolio/${portfolio.id}`
                       ? 'bg-accent-light text-accent'
                       : 'text-text-primary hover:bg-panel-hover'
-                  }`}
+                    }`}
                   data-testid={`portfolio-item-${portfolio.id}`}
                 >
                   <Briefcase
@@ -202,20 +198,8 @@ function Sidebar({ onCreateWatchlist }) {
         }}
       />
 
-      {/* Settings at bottom */}
-      <div className="p-4 border-t-2 border-line">
-        <button
-          onClick={() => navigate('/settings')}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-            isActive('/settings')
-              ? 'bg-accent-light text-accent'
-              : 'text-text-primary hover:bg-panel-hover'
-          }`}
-        >
-          <Settings className="w-5 h-5" />
-          Settings
-        </button>
-      </div>
+      {/* Settings Menu - expands upward with theme, logout, API keys */}
+      <SidebarSettingsMenu onOpenApiKeysModal={onOpenApiKeysModal} />
     </aside>
   );
 }

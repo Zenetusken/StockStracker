@@ -550,6 +550,81 @@ class YahooFinanceService {
   isAvailable() {
     return true;
   }
+
+  /**
+   * Search for symbols using Yahoo Finance
+   * @param {string} query - Search query
+   * @returns {Object} Search results in Finnhub-compatible format
+   */
+  async search(query) {
+    // Proactive rate limit check
+    if (this.isRateLimited()) {
+      console.log(`[Yahoo] Rate limited, skipping search for "${query}"`);
+      const error = new Error('Yahoo Finance rate limited');
+      error.isRateLimited = true;
+      error.provider = 'yahoo';
+      throw error;
+    }
+
+    try {
+      await this.throttle();
+
+      // Yahoo Finance search endpoint
+      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        timeout: 10000,
+      });
+
+      // Track the API call
+      this.recordApiCall();
+
+      // Check for rate limiting
+      if (response.status === 429) {
+        console.error(`[Yahoo] Search rate limited for "${query}"`);
+        const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
+        this.recordRateLimit(retryAfter);
+        const error = new Error('Yahoo Finance rate limited');
+        error.isRateLimited = true;
+        error.provider = 'yahoo';
+        throw error;
+      }
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      const quotes = data.quotes || [];
+
+      if (quotes.length === 0) {
+        return null;
+      }
+
+      // Convert to Finnhub-compatible format
+      const results = quotes
+        .filter(q => q.symbol && (q.quoteType === 'EQUITY' || q.quoteType === 'ETF'))
+        .map(q => ({
+          description: q.longname || q.shortname || q.symbol,
+          displaySymbol: q.symbol,
+          symbol: q.symbol,
+          type: q.quoteType === 'ETF' ? 'ETF' : 'Common Stock',
+        }));
+
+      console.log(`✓ Yahoo search found ${results.length} results for "${query}"`);
+
+      return {
+        count: results.length,
+        result: results,
+      };
+    } catch (error) {
+      console.error(`[Yahoo] Search error for "${query}":`, error.message);
+      return null;
+    }
+  }
 }
 
 // Export singleton

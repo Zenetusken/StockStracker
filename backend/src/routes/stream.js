@@ -1,5 +1,6 @@
 import express from 'express';
 import finnhubService from '../services/finnhub.js';
+import yahooFinanceService from '../services/yahoo.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -91,21 +92,44 @@ router.get('/quotes', requireAuth, async (req, res) => {
   });
 
   // Function to send quote updates
-  // Uses getQuote() directly instead of getEnrichedQuote() to avoid
-  // the extra getVolume() call (which fetches 7 days of candles)
+  // Uses Yahoo Finance as PRIMARY provider (higher daily limit, no API key)
+  // Falls back to Finnhub if Yahoo fails
   const sendQuoteUpdate = async () => {
     const connection = connections.get(connectionId);
     if (!connection) return;
 
     try {
-      // Fetch quotes for all symbols - using getQuote() directly (1 API call each)
-      // instead of getEnrichedQuote() which makes 2 calls (quote + volume)
+      // Fetch quotes for all symbols with Yahoo → Finnhub fallback
       const quotes = await Promise.all(
         connection.symbols.map(async (symbol) => {
           try {
-            const quoteData = await finnhubService.getQuote(symbol);
+            let quoteData = null;
+            let provider = null;
+
+            // Try Yahoo Finance FIRST (no API key, higher limits)
+            if (!yahooFinanceService.isRateLimited()) {
+              try {
+                quoteData = await yahooFinanceService.getQuote(symbol);
+                if (quoteData && quoteData.c !== undefined) {
+                  provider = 'yahoo';
+                }
+              } catch (yahooErr) {
+                // Yahoo failed, fall through to Finnhub
+              }
+            }
+
+            // Fallback to Finnhub if Yahoo didn't work
+            if (!quoteData || quoteData.c === undefined) {
+              try {
+                quoteData = await finnhubService.getQuote(symbol);
+                provider = 'finnhub';
+              } catch (finnhubErr) {
+                return { symbol, quote: null, error: finnhubErr.message };
+              }
+            }
+
             const enriched = finnhubService.enrichQuote(symbol, quoteData);
-            return { symbol, quote: enriched, error: null };
+            return { symbol, quote: enriched, error: null, _provider: provider };
           } catch (err) {
             return { symbol, quote: null, error: err.message };
           }

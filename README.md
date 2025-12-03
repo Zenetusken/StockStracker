@@ -18,35 +18,33 @@ A real-time stock tracking and portfolio management application with interactive
 
 ## Why StockTracker?
 
-### Zero API Costs with Smart Key Rotation
+StockTracker isn't just another API wrapper—it's a **production-ready financial platform** engineered for reliability, security, and data ownership.
 
-Most stock apps hit API rate limits within minutes. **StockTracker solves this** with an enterprise-grade API management system designed for free-tier sustainability:
+### 🛡️ Enterprise-Grade Security
+Unlike typical demo apps, StockTracker implements rigorous security standards:
+- **Multi-Factor Authentication (MFA)**: Full TOTP support (Google Authenticator, Authy) with emergency backup codes.
+- **Security Audit Logging**: Comprehensive tracking of all security events, suspicious activities, and brute-force attempts.
+- **Session Management**: Secure, server-side session handling with rotation and expiry.
 
-| Challenge | StockTracker Solution |
-|-----------|----------------------|
-| Rate limits kill free tiers | **Intelligent key rotation** - automatically cycles through multiple API keys |
-| API calls are wasted | **Smart caching** - reduces redundant calls by 90%+ |
-| One provider goes down | **Multi-provider fallback** - Finnhub → Alpha Vantage → Yahoo Finance |
-| No visibility into usage | **Real-time rate limit tracking** - SSE notifications before you hit limits |
+### 🧠 Advanced Portfolio Intelligence
+Go beyond simple price tracking with professional-grade accounting tools:
+- **Tax Lot Accounting**: FIFO-based cost basis tracking for accurate capital gains calculations.
+- **Dividend Tracking**: Monitor income streams and reinvestments.
+- **Realized Gains Reports**: Generate tax-ready reports for sold positions.
+- **Performance Analytics**: Benchmarking against S&P 500 and sector allocation heatmaps.
 
-### Built for Developers
+### 🚀 Resilient Data Architecture
+Built to survive the "free tier" limitations of financial APIs:
+- **Smart Key Rotation**: Automatically cycles through multiple API keys to bypass rate limits.
+- **Intelligent Caching**: Reduces API calls by 90% while keeping data fresh.
+- **Multi-Provider Fallback**: Seamlessly switches between Finnhub, Alpha Vantage, and Yahoo Finance if one fails.
+- **Offline-First Design**: Graceful degradation when network connectivity is lost.
 
-- **Bring Your Own Keys** - Users can add their own API keys, spreading load across the community
-- **Graceful Degradation** - App remains functional even when rate-limited (cached data, reduced refresh)
-- **Usage Dashboard** - See exactly how many API calls remain per provider
-- **Production Patterns** - Learn real-world API management, caching, and rate limiting strategies
-
-### Modern Full-Stack Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  React 18 + Zustand + TailwindCSS + Lightweight Charts      │
-├─────────────────────────────────────────────────────────────┤
-│  Express API + SQLite (WAL) + SSE Real-time Streaming       │
-├─────────────────────────────────────────────────────────────┤
-│  API Key Rotation │ Multi-Provider │ Smart Cache │ Fallback │
-└─────────────────────────────────────────────────────────────┘
-```
+### 💻 Modern Developer Experience
+A perfect reference architecture for full-stack React applications:
+- **Tech Stack**: React 18, Zustand, TailwindCSS, Node.js, Express, SQLite (WAL mode).
+- **Real-Time Updates**: Server-Sent Events (SSE) for live price streaming.
+- **Local-First**: All data lives in your local SQLite database—you own your financial data.
 
 ## Features
 

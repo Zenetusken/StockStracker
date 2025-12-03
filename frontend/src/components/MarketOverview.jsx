@@ -16,8 +16,8 @@ import api from '../api/client';
  * #117: Sector performance heatmap
  */
 
-// Refresh interval (30 seconds)
-const REFRESH_INTERVAL = 30000;
+// Refresh interval (60 seconds - aligned with backend cache TTL for efficiency)
+const REFRESH_INTERVAL = 60000;
 
 function MarketOverview() {
   const [data, setData] = useState(null);

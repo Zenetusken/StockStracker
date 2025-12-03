@@ -1,28 +1,30 @@
 import express from 'express';
 import finnhub from '../services/finnhub.js';
+import yahooFinanceService from '../services/yahoo.js';
 
 const router = express.Router();
 
-// Popular US stocks for screening (curated list since Finnhub free tier lacks screener API)
+// Optimized stock universe - 50 most liquid stocks (reduced from 90+ for API efficiency)
+// Yahoo Finance is used as primary provider (no API key, 100/day limit vs Finnhub's 60/min)
 const SCREENER_UNIVERSE = [
-  // Mega Cap Tech
-  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AVGO', 'ORCL', 'ADBE',
-  // Large Cap Tech
-  'CRM', 'AMD', 'INTC', 'CSCO', 'IBM', 'QCOM', 'TXN', 'NOW', 'INTU', 'AMAT',
-  // Financials
-  'JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'AXP', 'BLK', 'SCHW', 'USB',
-  // Healthcare
-  'UNH', 'JNJ', 'PFE', 'ABBV', 'MRK', 'LLY', 'TMO', 'ABT', 'DHR', 'BMY',
-  // Consumer
-  'WMT', 'PG', 'KO', 'PEP', 'COST', 'HD', 'MCD', 'NKE', 'SBUX', 'TGT',
-  // Industrial
-  'CAT', 'BA', 'HON', 'UPS', 'GE', 'MMM', 'RTX', 'LMT', 'DE', 'UNP',
-  // Energy
-  'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'PSX', 'VLO', 'OXY', 'HAL',
-  // Communication
-  'DIS', 'NFLX', 'CMCSA', 'VZ', 'T', 'TMUS', 'CHTR', 'EA', 'ATVI', 'TTWO',
-  // REITs & Utilities
-  'AMT', 'PLD', 'CCI', 'EQIX', 'SPG', 'NEE', 'DUK', 'SO', 'D', 'AEP',
+  // Mega Cap Tech (10)
+  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'AVGO', 'ORCL', 'ADBE',
+  // Large Cap Tech (5)
+  'CRM', 'AMD', 'INTC', 'CSCO', 'QCOM',
+  // Financials (7)
+  'JPM', 'BAC', 'WFC', 'GS', 'V', 'MA', 'AXP',
+  // Healthcare (7)
+  'UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'PFE', 'TMO',
+  // Consumer (7)
+  'WMT', 'PG', 'KO', 'PEP', 'COST', 'HD', 'MCD',
+  // Industrial (5)
+  'CAT', 'BA', 'HON', 'UPS', 'RTX',
+  // Energy (4)
+  'XOM', 'CVX', 'COP', 'SLB',
+  // Communication (3)
+  'DIS', 'NFLX', 'CMCSA',
+  // Utilities (2)
+  'NEE', 'DUK',
 ];
 
 // Sector mapping
@@ -40,16 +42,86 @@ const SECTORS = [
   'Basic Materials',
 ];
 
+// Map Finnhub industry to standardized sector
+// Finnhub provides 'finnhubIndustry' but not 'sector', so we map it
+const INDUSTRY_TO_SECTOR = {
+  'Technology': 'Technology',
+  'Software': 'Technology',
+  'Semiconductors': 'Technology',
+  'Computer Hardware': 'Technology',
+  'IT Services': 'Technology',
+  'Electronic Components': 'Technology',
+  'Consumer Electronics': 'Technology',
+  'Internet Content & Information': 'Communication Services',
+  'Communication Equipment': 'Communication Services',
+  'Media': 'Communication Services',
+  'Entertainment': 'Communication Services',
+  'Telecom Services': 'Communication Services',
+  'Banks': 'Financial Services',
+  'Financial Services': 'Financial Services',
+  'Insurance': 'Financial Services',
+  'Capital Markets': 'Financial Services',
+  'Credit Services': 'Financial Services',
+  'Asset Management': 'Financial Services',
+  'Pharmaceuticals': 'Healthcare',
+  'Biotechnology': 'Healthcare',
+  'Medical Devices': 'Healthcare',
+  'Healthcare Plans': 'Healthcare',
+  'Healthcare Services': 'Healthcare',
+  'Diagnostics & Research': 'Healthcare',
+  'Retail': 'Consumer Cyclical',
+  'Auto Manufacturers': 'Consumer Cyclical',
+  'Restaurants': 'Consumer Cyclical',
+  'Travel & Leisure': 'Consumer Cyclical',
+  'Apparel': 'Consumer Cyclical',
+  'Home Improvement': 'Consumer Cyclical',
+  'Specialty Retail': 'Consumer Cyclical',
+  'Consumer Goods': 'Consumer Defensive',
+  'Food & Beverage': 'Consumer Defensive',
+  'Household Products': 'Consumer Defensive',
+  'Tobacco': 'Consumer Defensive',
+  'Discount Stores': 'Consumer Defensive',
+  'Grocery Stores': 'Consumer Defensive',
+  'Aerospace & Defense': 'Industrials',
+  'Industrial Products': 'Industrials',
+  'Machinery': 'Industrials',
+  'Transportation': 'Industrials',
+  'Logistics': 'Industrials',
+  'Construction': 'Industrials',
+  'Oil & Gas': 'Energy',
+  'Oil & Gas E&P': 'Energy',
+  'Oil & Gas Integrated': 'Energy',
+  'Oil & Gas Equipment & Services': 'Energy',
+  'Utilities': 'Utilities',
+  'Utilities - Regulated Electric': 'Utilities',
+  'Utilities - Renewable': 'Utilities',
+  'REITs': 'Real Estate',
+  'Real Estate': 'Real Estate',
+  'Chemicals': 'Basic Materials',
+  'Mining': 'Basic Materials',
+  'Steel': 'Basic Materials',
+};
+
 // Cache for stock profiles to reduce API calls
+// Increased from 4 hours to 24 hours since screener profile data is not time-sensitive
 const profileCache = new Map();
-const CACHE_TTL = 14400000; // 4 hours (profile data rarely changes)
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Separate cache for quotes (shorter TTL since prices change)
+const quoteCache = new Map();
+const QUOTE_CACHE_TTL = 60 * 1000; // 1 minute for quotes
 
 // Request deduplication: prevents concurrent duplicate API calls for same symbol
 const pendingProfileRequests = new Map();
 
 /**
  * Get cached profile or fetch from API with request deduplication
- * Prevents concurrent duplicate API calls for the same symbol
+ *
+ * STRATEGY (updated Dec 2024):
+ * - Finnhub: profiles (has market cap, sector, industry) - use FIRST
+ * - Yahoo: quotes only (profile API now requires crumb authentication)
+ *
+ * NEVER uses Alpha Vantage (reserved for technical indicators only)
  */
 async function getProfile(symbol) {
   // Check cache first
@@ -66,28 +138,84 @@ async function getProfile(symbol) {
   // Create the request promise and store it
   const requestPromise = (async () => {
     try {
-      // Fetch profile and quote in parallel (both are deduplicated at finnhub level)
-      const [profile, quote] = await Promise.all([
-        finnhub.getCompanyProfile(symbol),
-        finnhub.getQuote(symbol),
-      ]);
+      let profile = null;
+      let quote = null;
+      let metrics = null;
+
+      // STEP 1: Get profile from Finnhub (Yahoo profile API is broken - needs crumb)
+      try {
+        profile = await finnhub.getCompanyProfile(symbol);
+        if (profile) {
+          console.log(`[Screener] ✓ Finnhub profile for ${symbol}`);
+        }
+      } catch (e) {
+        console.log(`[Screener] Finnhub profile failed for ${symbol}: ${e.message}`);
+      }
+
+      // STEP 2: Get financial metrics from Finnhub (P/E, beta, dividend yield, 52-week data)
+      try {
+        metrics = await finnhub.getBasicMetrics(symbol);
+        if (metrics) {
+          console.log(`[Screener] ✓ Finnhub metrics for ${symbol}`);
+        }
+      } catch (e) {
+        console.log(`[Screener] Finnhub metrics failed for ${symbol}: ${e.message}`);
+      }
+
+      // STEP 3: Get quote from Yahoo (free, no crumb needed for chart/quote API)
+      try {
+        if (!yahooFinanceService.isRateLimited()) {
+          quote = await yahooFinanceService.getQuote(symbol);
+          if (quote) {
+            console.log(`[Screener] ✓ Yahoo quote for ${symbol}`);
+          }
+        }
+      } catch (e) {
+        // Yahoo quote failed, try Finnhub
+      }
+
+      // STEP 4: Fallback to Finnhub for quote if Yahoo failed
+      if (!quote) {
+        try {
+          quote = await finnhub.getQuote(symbol);
+        } catch (e) {
+          // Both failed for quote
+        }
+      }
+
+      // NOTE: Alpha Vantage is NEVER used for profiles (reserved for technical indicators)
 
       if (profile) {
+        // Get 52-week data from metrics (more reliable) or profile
+        const high52 = metrics?.fiftyTwoWeekHigh || profile.fiftyTwoWeekHigh || profile.weekHigh52 || 0;
+        const low52 = metrics?.fiftyTwoWeekLow || profile.fiftyTwoWeekLow || profile.weekLow52 || 0;
+
         // Calculate 52-week proximity (#109)
         const currentPrice = quote?.c || 0;
-        const high52 = profile.fiftyTwoWeekHigh || profile.weekHigh52 || 0;
-        const low52 = profile.fiftyTwoWeekLow || profile.weekLow52 || 0;
         const range52 = high52 - low52;
         const proximityToHigh = range52 > 0 ? ((high52 - currentPrice) / range52) * 100 : 0;
         const proximityToLow = range52 > 0 ? ((currentPrice - low52) / range52) * 100 : 0;
 
+        // Map finnhubIndustry to sector
+        const industry = profile.finnhubIndustry || null;
+        const sector = industry ? (INDUSTRY_TO_SECTOR[industry] || industry) : null;
+
         const enrichedProfile = {
           ...profile,
           symbol,
+          // Map industry to sector
+          sector,
+          // Add metrics data (P/E, beta, dividend yield, EPS)
+          peRatio: metrics?.peRatio || profile.peRatio || null,
+          eps: metrics?.eps || profile.eps || null,
+          beta: metrics?.beta || profile.beta || null,
+          dividendYield: metrics?.dividendYield || profile.dividendYield || null,
+          // Quote data
           currentPrice: quote?.c || null,
           change: quote ? quote.c - quote.pc : null,
           changePercent: quote && quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : null,
           volume: quote?.v || 0,  // #108
+          // 52-week data
           fiftyTwoWeekHigh: high52,
           fiftyTwoWeekLow: low52,
           proximityToHigh,  // #109
@@ -96,10 +224,13 @@ async function getProfile(symbol) {
         profileCache.set(symbol, { data: enrichedProfile, timestamp: Date.now() });
         return enrichedProfile;
       }
-      return null;
+
+      // Return minimal profile if all providers fail
+      console.log(`[Screener] All providers failed for ${symbol}, returning minimal`);
+      return { symbol, _minimal: true };
     } catch (error) {
       console.log(`[Screener] Error fetching profile for ${symbol}:`, error.message);
-      return null;
+      return { symbol, _minimal: true };
     } finally {
       // Clean up pending request
       pendingProfileRequests.delete(symbol);
@@ -108,6 +239,40 @@ async function getProfile(symbol) {
 
   pendingProfileRequests.set(symbol, requestPromise);
   return requestPromise;
+}
+
+/**
+ * Get quote for a symbol (for lazy loading after profile filtering)
+ * Uses Yahoo Finance as primary, Finnhub as fallback
+ */
+async function getQuote(symbol) {
+  // Check quote cache first
+  const cached = quoteCache.get(symbol);
+  if (cached && Date.now() - cached.timestamp < QUOTE_CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    // Try Yahoo first
+    if (!yahooFinanceService.isRateLimited()) {
+      const quote = await yahooFinanceService.getQuote(symbol);
+      if (quote) {
+        quoteCache.set(symbol, { data: quote, timestamp: Date.now() });
+        return quote;
+      }
+    }
+  } catch (e) { /* fall through */ }
+
+  try {
+    // Fallback to Finnhub
+    const quote = await finnhub.getQuote(symbol);
+    if (quote) {
+      quoteCache.set(symbol, { data: quote, timestamp: Date.now() });
+      return quote;
+    }
+  } catch (e) { /* fall through */ }
+
+  return null;
 }
 
 /**
