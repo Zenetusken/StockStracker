@@ -401,24 +401,30 @@ function PortfolioDetail() {
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Shares</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Avg Cost</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Current Price</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Cost Basis</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Market Value</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Gain/Loss</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Day Change</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {portfolio.holdings.map((holding) => {
                     const quote = quotes[holding.symbol];
                     const currentPrice = quote?.c || holding.average_cost;
+                    const previousClose = quote?.pc || holding.average_cost;
                     const marketValue = holding.total_shares * currentPrice;
                     const costBasis = holding.total_shares * holding.average_cost;
                     const gainLoss = marketValue - costBasis;
                     const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+                    const dayChange = holding.total_shares * (currentPrice - previousClose);
+                    const dayChangePercent = previousClose > 0 ? ((currentPrice - previousClose) / previousClose) * 100 : 0;
 
                     return (
                       <tr
                         key={holding.id}
                         className="hover:bg-card-hover cursor-pointer transition-colors"
                         onClick={() => navigate(`/stock/${holding.symbol}`)}
+                        data-testid={`holding-row-${holding.symbol}`}
                       >
                         <td className="px-6 py-4">
                           <span className="font-medium text-text-primary">{holding.symbol}</span>
@@ -432,15 +438,26 @@ function PortfolioDetail() {
                         <td className="px-6 py-4 text-right text-text-primary">
                           {formatCurrency(currentPrice)}
                         </td>
-                        <td className="px-6 py-4 text-right text-text-primary font-medium">
+                        <td className="px-6 py-4 text-right text-text-secondary" data-testid="cost-basis">
+                          {formatCurrency(costBasis)}
+                        </td>
+                        <td className="px-6 py-4 text-right text-text-primary font-medium" data-testid="market-value">
                           {formatCurrency(marketValue)}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right" data-testid="gain-loss">
                           <div className={`font-medium ${gainLoss >= 0 ? 'text-gain' : 'text-loss'}`}>
                             {formatChange(gainLoss)}
                           </div>
                           <div className={`text-xs ${gainLoss >= 0 ? 'text-gain' : 'text-loss'}`}>
                             {formatPercent(gainLossPercent)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right" data-testid="day-change">
+                          <div className={`font-medium ${dayChange >= 0 ? 'text-gain' : 'text-loss'}`}>
+                            {formatChange(dayChange)}
+                          </div>
+                          <div className={`text-xs ${dayChange >= 0 ? 'text-gain' : 'text-loss'}`}>
+                            {formatPercent(dayChangePercent)}
                           </div>
                         </td>
                       </tr>
