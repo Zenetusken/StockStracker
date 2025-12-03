@@ -169,7 +169,7 @@ function Screener() {
       await addSymbol(watchlistId, symbol);
       showToast(`Added ${symbol} to watchlist`, 'success');
       setWatchlistDropdownOpen(null);
-    } catch (err) {
+    } catch {
       showToast(`Failed to add ${symbol} to watchlist`, 'error');
     }
   }, [addSymbol, showToast]);

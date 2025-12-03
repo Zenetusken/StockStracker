@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Scale } from 'lucide-react';
 import { useQuotes } from '../stores/quoteStore';
 
-function BenchmarkComparison({ portfolioReturn, portfolioValue, portfolioCostBasis }) {
+function BenchmarkComparison({ portfolioValue, portfolioCostBasis }) {
   const { quotes, fetchQuote } = useQuotes(['SPY']);
   const [loading, setLoading] = useState(true);
 

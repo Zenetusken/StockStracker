@@ -46,6 +46,37 @@ function AlertChecker() {
     };
   }, [alertSymbols.join(','), subscribe, unsubscribe]);
 
+  // Trigger alert notification (defined first so it can be used by checkAlerts)
+  const triggerAlert = useCallback((alert, quote, message) => {
+    const title = alert.name || `Price Alert: ${alert.symbol}`;
+
+    // Show toast notification
+    addToast({
+      type: 'warning',
+      title,
+      message,
+      service: `alert-${alert.id}`,
+      duration: 10000 // 10 seconds for alerts
+    });
+
+    // Show browser notification if permitted
+    if (notificationPermission === 'granted' && typeof Notification !== 'undefined') {
+      try {
+        new Notification(title, {
+          body: message,
+          icon: '/favicon.ico',
+          tag: `alert-${alert.id}`, // Prevents duplicate notifications
+          requireInteraction: true
+        });
+      } catch (err) {
+        console.error('Browser notification failed:', err);
+      }
+    }
+
+    // Mark as triggered in store
+    markAlertTriggered(alert.id, quote);
+  }, [addToast, notificationPermission, markAlertTriggered]);
+
   // Check alert conditions
   const checkAlerts = useCallback((symbol, quote, prevQuote) => {
     if (!quote || !quote.current) return;
@@ -102,38 +133,7 @@ function AlertChecker() {
         triggerAlert(alert, quote, message);
       }
     });
-  }, [activeAlerts, canTriggerAlert]);
-
-  // Trigger alert notification
-  const triggerAlert = useCallback((alert, quote, message) => {
-    const title = alert.name || `Price Alert: ${alert.symbol}`;
-
-    // Show toast notification
-    addToast({
-      type: 'warning',
-      title,
-      message,
-      service: `alert-${alert.id}`,
-      duration: 10000 // 10 seconds for alerts
-    });
-
-    // Show browser notification if permitted
-    if (notificationPermission === 'granted' && typeof Notification !== 'undefined') {
-      try {
-        new Notification(title, {
-          body: message,
-          icon: '/favicon.ico',
-          tag: `alert-${alert.id}`, // Prevents duplicate notifications
-          requireInteraction: true
-        });
-      } catch (err) {
-        console.error('Browser notification failed:', err);
-      }
-    }
-
-    // Mark as triggered in store
-    markAlertTriggered(alert.id, quote);
-  }, [addToast, notificationPermission, markAlertTriggered]);
+  }, [activeAlerts, canTriggerAlert, triggerAlert]);
 
   // Watch for quote updates and check alerts
   useEffect(() => {

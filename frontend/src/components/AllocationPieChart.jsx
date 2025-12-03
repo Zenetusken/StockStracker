@@ -252,7 +252,7 @@ function AllocationPieChart({ holdings, totalValue, cashBalance }) {
               </div>
             )}
             <svg width="200" height="200" viewBox="0 0 200 200">
-              {slices.map((slice, index) => (
+              {slices.map((slice) => (
                 <path
                   key={slice.name}
                   d={slice.path}

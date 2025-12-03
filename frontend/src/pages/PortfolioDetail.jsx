@@ -248,7 +248,6 @@ function PortfolioDetail() {
 
       // Parse header
       const header = lines[0].toLowerCase();
-      const hasDate = header.includes('date');
       const hasType = header.includes('type');
       const hasSymbol = header.includes('symbol');
       const hasShares = header.includes('shares');

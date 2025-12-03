@@ -60,12 +60,6 @@ function LotSalesModal({ isOpen, onClose, portfolioId }) {
     return years;
   };
 
-  // Get unique symbols from lot sales
-  const getSymbolOptions = () => {
-    const symbols = [...new Set(data.lotSales.map(sale => sale.symbol))];
-    return symbols.sort();
-  };
-
   if (!isOpen) return null;
 
   const { summary } = data;

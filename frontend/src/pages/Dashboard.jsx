@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '../components/Layout';
 import { ApiHealthWidget, ApiKeysModal } from '../components/api-keys';
 import NewsFeed from '../components/NewsFeed';
+import MarketOverview from '../components/MarketOverview';
 
 function Dashboard() {
   const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
@@ -41,6 +42,11 @@ function Dashboard() {
 
           {/* API Status Card */}
           <ApiHealthWidget onClick={() => setIsApiKeysModalOpen(true)} />
+        </div>
+
+        {/* Market Overview Section (#116, #117) */}
+        <div className="mt-8">
+          <MarketOverview />
         </div>
 
         {/* Market News Section (#97) */}
