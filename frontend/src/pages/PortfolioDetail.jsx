@@ -24,6 +24,7 @@ function PortfolioDetail() {
   const [deletingTransaction, setDeletingTransaction] = useState(null);
   const [transactionFilter, setTransactionFilter] = useState('all');
   const [importStatus, setImportStatus] = useState(null); // { type: 'success' | 'error', message: string }
+  const [deleteError, setDeleteError] = useState(null);
   const fileInputRef = useRef(null);
 
   // Get holdings symbols for quote subscription
@@ -126,7 +127,7 @@ function PortfolioDetail() {
 
     const headers = ['Date', 'Type', 'Symbol', 'Shares', 'Price', 'Fees', 'Total', 'Notes'];
     const rows = portfolio.recent_transactions.map(tx => [
-      new Date(tx.executed_at).toLocaleDateString(),
+      new Date(tx.executed_at).toISOString().split('T')[0],
       tx.type.toUpperCase(),
       tx.symbol,
       tx.shares,
@@ -571,7 +572,10 @@ function PortfolioDetail() {
                           </button>
                           <button
                             data-testid={`delete-tx-${tx.id}`}
-                            onClick={() => setDeletingTransaction(tx)}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeletingTransaction(tx);
+                            }}
                             className="p-1.5 hover:bg-loss/20 rounded transition-colors text-text-secondary hover:text-loss"
                             title="Delete transaction"
                           >
@@ -659,6 +663,9 @@ function PortfolioDetail() {
                     <span className="text-text-primary">${deletingTransaction.price}</span>
                   </div>
                 </div>
+                {deleteError && (
+                  <p className="text-sm text-loss mb-4">{deleteError}</p>
+                )}
                 <p className="text-sm text-text-muted">
                   This action cannot be undone. Portfolio holdings will be recalculated.
                 </p>
@@ -676,12 +683,14 @@ function PortfolioDetail() {
                   data-testid="confirm-delete"
                   onClick={async () => {
                     try {
+                      setDeleteError(null);
                       await deleteTransaction(id, deletingTransaction.id);
                       const data = await fetchPortfolioDetail(id, true);
                       setPortfolio(data);
                       setDeletingTransaction(null);
                     } catch (err) {
                       console.error('Failed to delete transaction:', err);
+                      setDeleteError('Failed to delete transaction. Please try again.');
                     }
                   }}
                   className="flex-1 px-4 py-2 text-sm font-medium text-white bg-loss rounded-lg hover:bg-loss/90 transition-colors"

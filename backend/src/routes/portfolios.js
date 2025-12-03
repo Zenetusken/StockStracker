@@ -599,6 +599,73 @@ router.put('/:id/transactions/:txId', (req, res) => {
         SET cost_per_share = ?, shares_remaining = ?, updated_at = CURRENT_TIMESTAMP
         WHERE transaction_id = ?
       `).run(newPrice, newShares, txId);
+    } else if (existingTx.type === 'sell') {
+      // Sell transaction edit: recalculate lot_sales and holdings
+
+      // Get old lot_sales to restore shares to tax lots
+      const oldLotSales = db.prepare(`
+        SELECT * FROM lot_sales WHERE sell_transaction_id = ?
+      `).all(txId);
+
+      // Restore shares to tax lots that were previously sold
+      for (const sale of oldLotSales) {
+        db.prepare(`
+          UPDATE tax_lots SET shares_remaining = shares_remaining + ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(sale.shares_sold, sale.tax_lot_id);
+      }
+
+      // Delete old lot_sales
+      db.prepare(`DELETE FROM lot_sales WHERE sell_transaction_id = ?`).run(txId);
+
+      // Re-apply FIFO sell with updated shares/price
+      const lots = db.prepare(`
+        SELECT * FROM tax_lots
+        WHERE portfolio_id = ? AND symbol = ? AND shares_remaining > 0
+        ORDER BY purchase_date ASC
+      `).all(id, existingTx.symbol);
+
+      let sharesToSell = newShares;
+      for (const lot of lots) {
+        if (sharesToSell <= 0) break;
+        const sellFromLot = Math.min(sharesToSell, lot.shares_remaining);
+        const realizedGain = sellFromLot * (newPrice - lot.cost_per_share);
+        const purchaseDate = new Date(lot.purchase_date);
+        const saleDate = new Date(existingTx.executed_at);
+        const holdingDays = (saleDate - purchaseDate) / (1000 * 60 * 60 * 24);
+        const isShortTerm = holdingDays < 365 ? 1 : 0;
+
+        // Record new lot sale with updated price
+        db.prepare(`
+          INSERT INTO lot_sales (tax_lot_id, sell_transaction_id, shares_sold, sale_price, realized_gain, is_short_term, sale_date)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(lot.id, txId, sellFromLot, newPrice, realizedGain, isShortTerm, existingTx.executed_at.split('T')[0]);
+
+        // Update lot shares remaining
+        db.prepare(`
+          UPDATE tax_lots SET shares_remaining = shares_remaining - ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(sellFromLot, lot.id);
+
+        sharesToSell -= sellFromLot;
+      }
+
+      // Recalculate holdings from tax lots
+      const remainingSharesResult = db.prepare(`
+        SELECT COALESCE(SUM(shares_remaining), 0) as remaining FROM tax_lots
+        WHERE portfolio_id = ? AND symbol = ?
+      `).get(id, existingTx.symbol);
+
+      if (remainingSharesResult.remaining > 0) {
+        db.prepare(`
+          UPDATE portfolio_holdings SET total_shares = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE portfolio_id = ? AND symbol = ?
+        `).run(remainingSharesResult.remaining, id, existingTx.symbol);
+      } else {
+        db.prepare(`
+          DELETE FROM portfolio_holdings WHERE portfolio_id = ? AND symbol = ?
+        `).run(id, existingTx.symbol);
+      }
     }
 
     // Fetch updated transaction
