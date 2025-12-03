@@ -1,21 +1,30 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, TrendingUp, List, Settings } from 'lucide-react';
+import { Plus, TrendingUp, List, Settings, Briefcase } from 'lucide-react';
 import { useWatchlistStore } from '../stores/watchlistStore';
+import { usePortfolioStore } from '../stores/portfolioStore';
 import { getWatchlistIcon } from './WatchlistIcons';
+import NewPortfolioModal from './NewPortfolioModal';
 
 function Sidebar({ onCreateWatchlist }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [showNewPortfolioModal, setShowNewPortfolioModal] = useState(false);
 
   // Get watchlists from centralized store
   const watchlists = useWatchlistStore((state) => state.watchlists);
   const loading = useWatchlistStore((state) => state.isLoading);
   const fetchWatchlists = useWatchlistStore((state) => state.fetchWatchlists);
 
+  // Get portfolios from centralized store
+  const portfolios = usePortfolioStore((state) => state.portfolios);
+  const portfoliosLoading = usePortfolioStore((state) => state.isLoading);
+  const fetchPortfolios = usePortfolioStore((state) => state.fetchPortfolios);
+
   useEffect(() => {
     fetchWatchlists();
-  }, [fetchWatchlists]);
+    fetchPortfolios();
+  }, [fetchWatchlists, fetchPortfolios]);
 
   const isActive = (path) => {
     return location.pathname === path;
@@ -112,7 +121,70 @@ function Sidebar({ onCreateWatchlist }) {
             </div>
           )}
         </div>
+
+        {/* Portfolios Section */}
+        <div className="mt-6">
+          <div className="flex items-center justify-between px-3 py-2 mb-2">
+            <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+              Portfolios
+            </h3>
+            <button
+              onClick={() => setShowNewPortfolioModal(true)}
+              className="p-1 hover:bg-panel-hover rounded transition-colors"
+              title="Create new portfolio"
+              data-testid="new-portfolio-button"
+            >
+              <Plus className="w-4 h-4 text-brand" />
+            </button>
+          </div>
+
+          {portfoliosLoading ? (
+            <div className="px-3 py-2 text-sm text-text-secondary">
+              Loading...
+            </div>
+          ) : portfolios.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-text-secondary">
+              No portfolios yet
+            </div>
+          ) : (
+            <div className="space-y-1" data-testid="portfolios-list">
+              {portfolios.map((portfolio) => (
+                <button
+                  key={portfolio.id}
+                  onClick={() => navigate(`/portfolio/${portfolio.id}`)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === `/portfolio/${portfolio.id}`
+                      ? 'bg-accent-light text-accent'
+                      : 'text-text-primary hover:bg-panel-hover'
+                  }`}
+                  data-testid={`portfolio-item-${portfolio.id}`}
+                >
+                  <Briefcase
+                    className="w-4 h-4"
+                    style={{ color: portfolio.is_paper_trading ? '#F59E0B' : '#10B981' }}
+                  />
+                  <span className="truncate flex-1 text-left">{portfolio.name}</span>
+                  {portfolio.is_paper_trading && (
+                    <span className="text-xs text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                      Paper
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </nav>
+
+      {/* New Portfolio Modal */}
+      <NewPortfolioModal
+        isOpen={showNewPortfolioModal}
+        onClose={() => setShowNewPortfolioModal(false)}
+        onSuccess={() => {
+          // Portfolio is already added to store by createPortfolio
+          // Just close modal - sidebar will re-render with new portfolio
+        }}
+      />
 
       {/* Settings at bottom */}
       <div className="p-4 border-t-2 border-line">

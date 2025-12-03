@@ -53,7 +53,7 @@ Most stock apps hit API rate limits within minutes. **StockTracker solves this**
 - **Real-time Quotes** - Live price updates via Server-Sent Events (SSE)
 - **Interactive Charts** - Candlestick/line charts with technical indicators (SMA, EMA, RSI, MACD)
 - **Watchlist Management** - Custom icons, colors, drag-and-drop ordering
-- **Multi-theme Support** - Jade Requiem, Terminal Green, and more
+- **Beautiful Themes** - Multiple professionally designed themes including Jade Requiem
 - **Search Preview** - Live quote preview on hover with keyboard navigation
 - **API Key Management** - User-managed API keys with rate limit tracking
 

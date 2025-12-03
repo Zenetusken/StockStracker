@@ -110,6 +110,7 @@ import symbolsRoutes from './routes/symbols.js';
 import rateLimitEventsRoutes from './routes/rate-limit-events.js';
 import securityRoutes from './routes/security.js';
 import mfaRoutes from './routes/mfa.js';
+import portfolioRoutes from './routes/portfolios.js';
 
 // Apply rate limiting to all API routes
 app.use('/api', apiLimiter);
@@ -121,6 +122,7 @@ app.get('/api/csrf-token', csrfTokenEndpoint);
 // Note: This protects POST, PUT, DELETE, PATCH requests
 app.use('/api/auth', csrfProtection);
 app.use('/api/watchlists', csrfProtection);
+app.use('/api/portfolios', csrfProtection);
 app.use('/api/admin', csrfProtection);
 
 // API routes
@@ -129,6 +131,7 @@ app.use('/api/quotes', quotesRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/stream', streamRoutes);
 app.use('/api/watchlists', watchlistRoutes);
+app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/admin/api-keys', apiKeysRoutes);
 app.use('/api/admin/security', securityRoutes);
 app.use('/api/mfa', csrfProtection, mfaRoutes);

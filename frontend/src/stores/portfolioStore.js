@@ -1,0 +1,188 @@
+import { create } from 'zustand';
+import api from '../api/client';
+
+const CACHE_TTL = 30000; // 30 seconds for list
+const DETAIL_CACHE_TTL = 60000; // 60 seconds for details
+
+export const usePortfolioStore = create((set, get) => ({
+  // === STATE ===
+  portfolios: [],
+  portfolioDetails: {}, // { [id]: { data, timestamp } }
+  isLoading: false,
+  isLoadingDetail: {}, // { [id]: boolean }
+  error: null,
+  lastFetch: null,
+
+  // === SELECTORS ===
+
+  getPortfolio: (id) => {
+    const { portfolios } = get();
+    return portfolios.find((p) => p.id === parseInt(id)) || null;
+  },
+
+  getPortfolioDetail: (id) => {
+    const { portfolioDetails } = get();
+    return portfolioDetails[id]?.data || null;
+  },
+
+  getPortfolioHoldings: (id) => {
+    const detail = get().getPortfolioDetail(id);
+    return detail?.holdings || [];
+  },
+
+  getDefaultPortfolio: () => {
+    const { portfolios } = get();
+    return portfolios.find((p) => p.is_default) || portfolios[0] || null;
+  },
+
+  isCacheValid: () => {
+    const { lastFetch } = get();
+    return lastFetch && Date.now() - lastFetch < CACHE_TTL;
+  },
+
+  isDetailCacheValid: (id) => {
+    const { portfolioDetails } = get();
+    const detail = portfolioDetails[id];
+    return detail && Date.now() - detail.timestamp < DETAIL_CACHE_TTL;
+  },
+
+  // === ACTIONS ===
+
+  fetchPortfolios: async (force = false) => {
+    const { isCacheValid, isLoading } = get();
+    if (!force && isCacheValid()) return get().portfolios;
+    if (isLoading) return get().portfolios;
+
+    set({ isLoading: true, error: null });
+    try {
+      const data = await api.get('/portfolios');
+      set({
+        portfolios: data,
+        isLoading: false,
+        lastFetch: Date.now(),
+      });
+      return data;
+    } catch (error) {
+      set({ isLoading: false, error: error.message });
+      throw error;
+    }
+  },
+
+  fetchPortfolioDetail: async (id, force = false) => {
+    const { isDetailCacheValid, isLoadingDetail } = get();
+    if (!force && isDetailCacheValid(id)) return get().getPortfolioDetail(id);
+    if (isLoadingDetail[id]) return get().getPortfolioDetail(id);
+
+    set((state) => ({
+      isLoadingDetail: { ...state.isLoadingDetail, [id]: true },
+      error: null,
+    }));
+
+    try {
+      const data = await api.get(`/portfolios/${id}`);
+      set((state) => ({
+        portfolioDetails: {
+          ...state.portfolioDetails,
+          [id]: { data, timestamp: Date.now() },
+        },
+        isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
+      }));
+      return data;
+    } catch (error) {
+      set((state) => ({
+        isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
+        error: error.message,
+      }));
+      throw error;
+    }
+  },
+
+  createPortfolio: async (name, description = '', cashBalance = 0, isPaperTrading = false) => {
+    set({ error: null });
+    try {
+      const data = await api.post('/portfolios', {
+        name,
+        description,
+        cash_balance: cashBalance,
+        is_paper_trading: isPaperTrading,
+      });
+      // Add to list
+      set((state) => ({
+        portfolios: [...state.portfolios, data],
+      }));
+      return data;
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  updatePortfolio: async (id, updates) => {
+    const previous = get().getPortfolio(id);
+
+    // Optimistic update
+    set((state) => ({
+      portfolios: state.portfolios.map((p) =>
+        p.id === parseInt(id) ? { ...p, ...updates } : p
+      ),
+    }));
+
+    try {
+      const data = await api.put(`/portfolios/${id}`, updates);
+      // Update with server response
+      set((state) => ({
+        portfolios: state.portfolios.map((p) =>
+          p.id === parseInt(id) ? { ...p, ...data } : p
+        ),
+      }));
+      return data;
+    } catch (error) {
+      // Rollback
+      if (previous) {
+        set((state) => ({
+          portfolios: state.portfolios.map((p) =>
+            p.id === parseInt(id) ? previous : p
+          ),
+          error: error.message,
+        }));
+      }
+      throw error;
+    }
+  },
+
+  deletePortfolio: async (id) => {
+    const previousPortfolios = get().portfolios;
+
+    // Optimistic update
+    set((state) => ({
+      portfolios: state.portfolios.filter((p) => p.id !== parseInt(id)),
+    }));
+
+    try {
+      await api.delete(`/portfolios/${id}`);
+      // Remove from details cache
+      set((state) => {
+        const newDetails = { ...state.portfolioDetails };
+        delete newDetails[id];
+        return { portfolioDetails: newDetails };
+      });
+    } catch (error) {
+      // Rollback
+      set({
+        portfolios: previousPortfolios,
+        error: error.message,
+      });
+      throw error;
+    }
+  },
+
+  invalidateCache: () => {
+    set({ lastFetch: null, portfolioDetails: {} });
+  },
+
+  clearError: () => {
+    set({ error: null });
+  },
+}));
+
+export default usePortfolioStore;
