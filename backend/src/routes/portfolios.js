@@ -518,6 +518,109 @@ router.post('/:id/transactions', (req, res) => {
 });
 
 /**
+ * PUT /api/portfolios/:id/transactions/:txId
+ * Edit an existing transaction (updates holdings and tax lots)
+ */
+router.put('/:id/transactions/:txId', (req, res) => {
+  try {
+    const { id, txId } = req.params;
+    const { price, shares, fees, notes } = req.body;
+
+    // Verify portfolio ownership
+    const portfolio = db.prepare(`
+      SELECT * FROM portfolios
+      WHERE id = ? AND user_id = ?
+    `).get(id, req.session.userId);
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    // Get the existing transaction
+    const existingTx = db.prepare(`
+      SELECT * FROM transactions
+      WHERE id = ? AND portfolio_id = ?
+    `).get(txId, id);
+
+    if (!existingTx) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    const newPrice = price !== undefined ? price : existingTx.price;
+    const newShares = shares !== undefined ? shares : existingTx.shares;
+    const newFees = fees !== undefined ? fees : existingTx.fees;
+    const newNotes = notes !== undefined ? notes : existingTx.notes;
+
+    // Update the transaction
+    db.prepare(`
+      UPDATE transactions
+      SET price = ?, shares = ?, fees = ?, notes = ?
+      WHERE id = ?
+    `).run(newPrice, newShares, newFees, newNotes, txId);
+
+    // Recalculate holdings for this symbol (simplified: recalculate average cost from all buy transactions)
+    if (existingTx.type === 'buy') {
+      // Get all buy transactions for this symbol
+      const buyTxs = db.prepare(`
+        SELECT * FROM transactions
+        WHERE portfolio_id = ? AND symbol = ? AND type = 'buy'
+        ORDER BY executed_at ASC
+      `).all(id, existingTx.symbol);
+
+      // Calculate total shares and weighted average cost
+      let totalShares = 0;
+      let totalCost = 0;
+      for (const tx of buyTxs) {
+        totalShares += tx.shares;
+        totalCost += tx.shares * tx.price;
+      }
+
+      // Get sell transactions to subtract shares sold
+      const sellTxs = db.prepare(`
+        SELECT COALESCE(SUM(shares), 0) as sold FROM transactions
+        WHERE portfolio_id = ? AND symbol = ? AND type = 'sell'
+      `).get(id, existingTx.symbol);
+
+      const remainingShares = totalShares - (sellTxs?.sold || 0);
+      const avgCost = totalShares > 0 ? totalCost / totalShares : 0;
+
+      // Update holdings
+      if (remainingShares > 0) {
+        db.prepare(`
+          UPDATE portfolio_holdings
+          SET total_shares = ?, average_cost = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE portfolio_id = ? AND symbol = ?
+        `).run(remainingShares, avgCost, id, existingTx.symbol);
+      }
+
+      // Update tax lots for this transaction
+      db.prepare(`
+        UPDATE tax_lots
+        SET cost_per_share = ?, shares_remaining = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE transaction_id = ?
+      `).run(newPrice, newShares, txId);
+    }
+
+    // Fetch updated transaction
+    const updatedTx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(txId);
+
+    // Fetch updated holding
+    const updatedHolding = db.prepare(`
+      SELECT * FROM portfolio_holdings
+      WHERE portfolio_id = ? AND symbol = ?
+    `).get(id, existingTx.symbol);
+
+    res.json({
+      transaction: updatedTx,
+      holding: updatedHolding
+    });
+  } catch (error) {
+    console.error('[Portfolios] Error updating transaction:', error);
+    res.status(500).json({ error: 'Failed to update transaction' });
+  }
+});
+
+/**
  * Helper function to create default portfolio for a user
  */
 export function createDefaultPortfolio(userId) {

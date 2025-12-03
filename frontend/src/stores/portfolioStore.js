@@ -206,6 +206,25 @@ export const usePortfolioStore = create((set, get) => ({
     }
   },
 
+  updateTransaction: async (portfolioId, transactionId, updates) => {
+    set({ error: null });
+    try {
+      const data = await api.put(`/portfolios/${portfolioId}/transactions/${transactionId}`, updates);
+
+      // Invalidate the portfolio detail cache to force refresh
+      set((state) => {
+        const newDetails = { ...state.portfolioDetails };
+        delete newDetails[portfolioId];
+        return { portfolioDetails: newDetails };
+      });
+
+      return data;
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   invalidateCache: () => {
     set({ lastFetch: null, portfolioDetails: {} });
   },

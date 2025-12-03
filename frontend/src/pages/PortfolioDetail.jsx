@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
 import AddTransactionModal from '../components/AddTransactionModal';
+import EditTransactionModal from '../components/EditTransactionModal';
 
 function PortfolioDetail() {
   const { id } = useParams();
@@ -17,6 +18,7 @@ function PortfolioDetail() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
   const [transactionFilter, setTransactionFilter] = useState('all');
 
   // Get holdings symbols for quote subscription
@@ -338,6 +340,7 @@ function PortfolioDetail() {
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Price</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Fees</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Total</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-text-secondary uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -363,6 +366,16 @@ function PortfolioDetail() {
                       <td className="px-6 py-4 text-right text-text-primary font-medium">
                         {formatCurrency(tx.shares * tx.price)}
                       </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          data-testid={`edit-tx-${tx.id}`}
+                          onClick={() => setEditingTransaction(tx)}
+                          className="p-1.5 hover:bg-card-hover rounded transition-colors text-text-secondary hover:text-text-primary"
+                          title="Edit transaction"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -381,6 +394,19 @@ function PortfolioDetail() {
             // Refresh portfolio data
             const data = await fetchPortfolioDetail(id, true);
             setPortfolio(data);
+          }}
+        />
+
+        <EditTransactionModal
+          isOpen={editingTransaction !== null}
+          transaction={editingTransaction}
+          portfolioId={id}
+          onClose={() => setEditingTransaction(null)}
+          onSuccess={async () => {
+            // Refresh portfolio data
+            const data = await fetchPortfolioDetail(id, true);
+            setPortfolio(data);
+            setEditingTransaction(null);
           }}
         />
       </div>
