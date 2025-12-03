@@ -50,12 +50,30 @@ Most stock apps hit API rate limits within minutes. **StockTracker solves this**
 
 ## Features
 
+### Core Trading Tools
 - **Real-time Quotes** - Live price updates via Server-Sent Events (SSE)
-- **Interactive Charts** - Candlestick/line charts with technical indicators (SMA, EMA, RSI, MACD)
-- **Watchlist Management** - Custom icons, colors, drag-and-drop ordering
-- **Beautiful Themes** - Multiple professionally designed themes including Jade Requiem
+- **Interactive Charts** - Candlestick/line/area charts with technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
+- **Watchlist Management** - Custom icons, colors, drag-and-drop ordering, CSV export
 - **Search Preview** - Live quote preview on hover with keyboard navigation
-- **API Key Management** - User-managed API keys with rate limit tracking
+
+### Portfolio Management
+- **Full Transaction Tracking** - Buy, sell, dividend, and stock split support
+- **Tax Lot Accounting** - FIFO-based cost basis with short-term/long-term capital gains
+- **Realized Gains Report** - Track and export your tax-relevant transactions
+- **Performance Analytics** - Portfolio value charts, allocation pie charts, benchmark comparison vs S&P 500
+- **Top/Bottom Performers** - Quickly identify your best and worst holdings
+
+### Market Intelligence
+- **Market Overview Dashboard** - Major indices, top gainers/losers, most active stocks
+- **Sector Heatmap** - Visual sector performance at a glance
+- **Economic Calendar** - Upcoming market events with related stock links
+- **Stock Screener** - Filter stocks by market cap, P/E ratio, sector, and more
+
+### User Experience
+- **Beautiful Themes** - Multiple professionally designed themes including Jade Requiem
+- **Offline Detection** - Graceful handling when network is unavailable
+- **Accessibility** - Skip-to-main, keyboard navigation, ARIA labels
+- **API Key Management** - User-managed API keys with real-time rate limit tracking
 
 ## Tech Stack
 
