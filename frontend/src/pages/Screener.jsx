@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Filter,
@@ -17,13 +17,19 @@ import {
   X,
   Activity,
   Target,
+  Plus,
+  Save,
+  FolderOpen,
+  Star,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import api from '../api/client';
+import { useWatchlistStore } from '../stores/watchlistStore';
+import { useToast } from '../components/toast/ToastContext';
 
 /**
  * Stock Screener Page
- * Features #103-112: Stock Screener
+ * Features #103-115: Stock Screener
  *
  * #103: Filter by market cap range
  * #104: Filter by P/E ratio range
@@ -35,7 +41,13 @@ import api from '../api/client';
  * #110: Filter by dividend yield
  * #111: Combine multiple filters
  * #112: Screener results table
+ * #113: Add result to watchlist
+ * #114: Save screener configuration
+ * #115: Load saved screeners
  */
+
+// Saved screener storage key
+const SAVED_SCREENERS_KEY = 'stocktracker_saved_screeners';
 
 // Market cap presets
 const MARKET_CAP_PRESETS = [
@@ -123,6 +135,78 @@ function Screener() {
   // Sort state
   const [sortField, setSortField] = useState('marketCap');
   const [sortDirection, setSortDirection] = useState('desc');
+
+  // Watchlist state (#113)
+  const watchlists = useWatchlistStore((state) => state.watchlists);
+  const addSymbol = useWatchlistStore((state) => state.addSymbol);
+  const fetchWatchlists = useWatchlistStore((state) => state.fetchWatchlists);
+  const { showToast } = useToast();
+  const [watchlistDropdownOpen, setWatchlistDropdownOpen] = useState(null);
+
+  // Saved screeners state (#114, #115)
+  const [savedScreeners, setSavedScreeners] = useState([]);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [loadModalOpen, setLoadModalOpen] = useState(false);
+  const [screenerName, setScreenerName] = useState('');
+
+  // Fetch watchlists on mount
+  useEffect(() => {
+    fetchWatchlists();
+    // Load saved screeners from localStorage
+    const saved = localStorage.getItem(SAVED_SCREENERS_KEY);
+    if (saved) {
+      try {
+        setSavedScreeners(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to load saved screeners:', e);
+      }
+    }
+  }, [fetchWatchlists]);
+
+  // Add to watchlist handler (#113)
+  const handleAddToWatchlist = useCallback(async (symbol, watchlistId) => {
+    try {
+      await addSymbol(watchlistId, symbol);
+      showToast(`Added ${symbol} to watchlist`, 'success');
+      setWatchlistDropdownOpen(null);
+    } catch (err) {
+      showToast(`Failed to add ${symbol} to watchlist`, 'error');
+    }
+  }, [addSymbol, showToast]);
+
+  // Save screener (#114)
+  const handleSaveScreener = useCallback(() => {
+    if (!screenerName.trim()) return;
+
+    const newScreener = {
+      id: Date.now(),
+      name: screenerName.trim(),
+      filters: { ...filters },
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [...savedScreeners, newScreener];
+    setSavedScreeners(updated);
+    localStorage.setItem(SAVED_SCREENERS_KEY, JSON.stringify(updated));
+    setSaveModalOpen(false);
+    setScreenerName('');
+    showToast(`Saved screener "${newScreener.name}"`, 'success');
+  }, [screenerName, filters, savedScreeners, showToast]);
+
+  // Load screener (#115)
+  const handleLoadScreener = useCallback((screener) => {
+    setFilters(screener.filters);
+    setLoadModalOpen(false);
+    showToast(`Loaded screener "${screener.name}"`, 'success');
+  }, [showToast]);
+
+  // Delete saved screener
+  const handleDeleteScreener = useCallback((screenerId) => {
+    const updated = savedScreeners.filter(s => s.id !== screenerId);
+    setSavedScreeners(updated);
+    localStorage.setItem(SAVED_SCREENERS_KEY, JSON.stringify(updated));
+    showToast('Screener deleted', 'success');
+  }, [savedScreeners, showToast]);
 
   // Active filter count
   const activeFilterCount = useMemo(() => {
@@ -258,14 +342,37 @@ function Screener() {
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-text-primary flex items-center gap-3">
-            <Search className="w-8 h-8" />
-            Stock Screener
-          </h1>
-          <p className="text-text-muted mt-1">
-            Filter stocks by market cap, P/E ratio, sector, and more
-          </p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-text-primary flex items-center gap-3">
+              <Search className="w-8 h-8" />
+              Stock Screener
+            </h1>
+            <p className="text-text-muted mt-1">
+              Filter stocks by market cap, P/E ratio, sector, and more
+            </p>
+          </div>
+
+          {/* Save/Load Buttons (#114, #115) */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setLoadModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-page-bg text-text-primary hover:bg-card-hover rounded-lg transition-colors"
+              title="Load saved screener"
+            >
+              <FolderOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">Load</span>
+            </button>
+            <button
+              onClick={() => setSaveModalOpen(true)}
+              disabled={activeFilterCount === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-brand text-white hover:bg-brand-hover rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Save current screener"
+            >
+              <Save className="w-4 h-4" />
+              <span className="hidden sm:inline">Save</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -629,6 +736,9 @@ function Screener() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider hidden lg:table-cell">
                           Sector
                         </th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase tracking-wider">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -678,6 +788,43 @@ function Screener() {
                           <td className="px-4 py-4 text-left text-text-muted text-sm hidden lg:table-cell">
                             {stock.sector || '-'}
                           </td>
+                          {/* Add to Watchlist (#113) */}
+                          <td className="px-4 py-4 text-center relative">
+                            <button
+                              onClick={() =>
+                                setWatchlistDropdownOpen(
+                                  watchlistDropdownOpen === stock.symbol ? null : stock.symbol
+                                )
+                              }
+                              className="p-2 text-text-muted hover:text-brand hover:bg-brand/10 rounded-lg transition-colors"
+                              title="Add to watchlist"
+                            >
+                              <Star className="w-4 h-4" />
+                            </button>
+                            {/* Watchlist dropdown */}
+                            {watchlistDropdownOpen === stock.symbol && (
+                              <div className="absolute right-4 top-12 z-10 w-48 bg-card border border-border rounded-lg shadow-lg py-1">
+                                <div className="px-3 py-2 text-xs font-medium text-text-muted border-b border-border">
+                                  Add to watchlist
+                                </div>
+                                {watchlists.length === 0 ? (
+                                  <div className="px-3 py-2 text-sm text-text-muted">
+                                    No watchlists
+                                  </div>
+                                ) : (
+                                  watchlists.map((wl) => (
+                                    <button
+                                      key={wl.id}
+                                      onClick={() => handleAddToWatchlist(stock.symbol, wl.id)}
+                                      className="w-full text-left px-3 py-2 text-sm text-text-primary hover:bg-page-bg transition-colors"
+                                    >
+                                      {wl.name}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -688,6 +835,90 @@ function Screener() {
           </div>
         </div>
       </div>
+
+      {/* Save Screener Modal (#114) */}
+      {saveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4">Save Screener</h2>
+            <input
+              type="text"
+              value={screenerName}
+              onChange={(e) => setScreenerName(e.target.value)}
+              placeholder="Enter screener name..."
+              className="w-full px-4 py-2 bg-page-bg border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand mb-4"
+              autoFocus
+            />
+            <div className="text-sm text-text-muted mb-4">
+              <strong>Filters:</strong> {activeFilterCount} active
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setSaveModalOpen(false);
+                  setScreenerName('');
+                }}
+                className="px-4 py-2 text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveScreener}
+                disabled={!screenerName.trim()}
+                className="px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover transition-colors disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load Screener Modal (#115) */}
+      {loadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4">Load Saved Screener</h2>
+            {savedScreeners.length === 0 ? (
+              <p className="text-text-muted py-8 text-center">No saved screeners yet</p>
+            ) : (
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {savedScreeners.map((screener) => (
+                  <div
+                    key={screener.id}
+                    className="flex items-center justify-between p-3 bg-page-bg rounded-lg hover:bg-card-hover transition-colors"
+                  >
+                    <button
+                      onClick={() => handleLoadScreener(screener)}
+                      className="flex-1 text-left"
+                    >
+                      <div className="font-medium text-text-primary">{screener.name}</div>
+                      <div className="text-xs text-text-muted">
+                        Saved {new Date(screener.createdAt).toLocaleDateString()}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteScreener(screener.id)}
+                      className="p-2 text-text-muted hover:text-loss transition-colors"
+                      title="Delete screener"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setLoadModalOpen(false)}
+                className="px-4 py-2 text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
