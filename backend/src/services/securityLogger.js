@@ -26,6 +26,11 @@ export const SecurityEventType = {
   ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
   ACCOUNT_UNLOCKED: 'ACCOUNT_UNLOCKED',
   ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
+  ACCOUNT_DELETED: 'ACCOUNT_DELETED',
+
+  // Data events
+  DATA_EXPORTED: 'DATA_EXPORTED',
+  DATA_IMPORTED: 'DATA_IMPORTED',
 
   // Password events
   PASSWORD_CHANGED: 'PASSWORD_CHANGED',
@@ -82,6 +87,9 @@ const eventSeverityMap = {
   [SecurityEventType.ACCOUNT_LOCKED]: Severity.WARNING,
   [SecurityEventType.ACCOUNT_UNLOCKED]: Severity.INFO,
   [SecurityEventType.ACCOUNT_DISABLED]: Severity.WARNING,
+  [SecurityEventType.ACCOUNT_DELETED]: Severity.WARNING,
+  [SecurityEventType.DATA_EXPORTED]: Severity.INFO,
+  [SecurityEventType.DATA_IMPORTED]: Severity.INFO,
   [SecurityEventType.PASSWORD_CHANGED]: Severity.INFO,
   [SecurityEventType.PASSWORD_RESET_REQUESTED]: Severity.INFO,
   [SecurityEventType.PASSWORD_RESET_COMPLETED]: Severity.INFO,

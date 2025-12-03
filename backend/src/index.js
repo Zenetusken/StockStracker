@@ -115,6 +115,7 @@ import alertsRoutes from './routes/alerts.js';
 import newsRoutes from './routes/news.js';
 import screenerRoutes from './routes/screener.js';
 import marketRoutes from './routes/market.js';
+import settingsRoutes from './routes/settings.js';
 
 // Apply rate limiting to all API routes
 app.use('/api', apiLimiter);
@@ -128,6 +129,7 @@ app.use('/api/auth', csrfProtection);
 app.use('/api/watchlists', csrfProtection);
 app.use('/api/portfolios', csrfProtection);
 app.use('/api/alerts', csrfProtection);
+app.use('/api/settings', csrfProtection);
 app.use('/api/admin', csrfProtection);
 
 // API routes
@@ -141,6 +143,7 @@ app.use('/api/alerts', alertsRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/screener', screenerRoutes);
 app.use('/api/market', marketRoutes);
+app.use('/api/settings', settingsRoutes);
 app.use('/api/admin/api-keys', apiKeysRoutes);
 app.use('/api/admin/security', securityRoutes);
 app.use('/api/mfa', csrfProtection, mfaRoutes);

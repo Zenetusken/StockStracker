@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { Settings } from 'lucide-react';
 import Sidebar from './Sidebar';
 import SearchBar from './SearchBar';
 import NewWatchlistModal from './NewWatchlistModal';
@@ -71,6 +72,13 @@ function Layout({ children }) {
                 )}
                 <ThemeSwitcher />
                 <ApiKeyStatusIndicator onClick={() => setIsApiKeysModalOpen(true)} />
+                <Link
+                  to="/settings"
+                  className="p-2 rounded-lg text-text-muted hover:bg-panel-hover hover:text-text-primary transition-colors"
+                  title="Settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-panel-hover hover:text-text-primary transition-colors"
