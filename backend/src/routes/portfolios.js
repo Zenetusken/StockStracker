@@ -448,6 +448,16 @@ router.post('/:id/transactions', (req, res) => {
         SET cash_balance = cash_balance + ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(saleProceeds, id);
+
+    } else if (type === 'dividend') {
+      // Dividend: price = dividend per share, shares = number of shares
+      // Total dividend = shares * price
+      const dividendAmount = shares * price;
+      db.prepare(`
+        UPDATE portfolios
+        SET cash_balance = cash_balance + ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(dividendAmount, id);
     }
 
     // Fetch the created transaction
