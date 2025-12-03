@@ -397,6 +397,9 @@ class AlphaVantageService {
         fiftyTwoWeekHigh: data['52WeekHigh'] ? parseFloat(data['52WeekHigh']) : null,
         fiftyTwoWeekLow: data['52WeekLow'] ? parseFloat(data['52WeekLow']) : null,
         dividendYield: data.DividendYield ? parseFloat(data.DividendYield) : null,
+        // Additional company info (#93-95)
+        description: data.Description || null,
+        fullTimeEmployees: data.FullTimeEmployees ? parseInt(data.FullTimeEmployees, 10) : null,
       };
     });
   }

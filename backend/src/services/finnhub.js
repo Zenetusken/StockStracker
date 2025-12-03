@@ -244,13 +244,21 @@ class FinnhubService {
                 ipo: finnhubProfile.ipo,
               };
             } else {
-              // Merge Finnhub's logo into Yahoo's profile
+              // Merge Finnhub's data into Yahoo's profile
               if (finnhubProfile.logo && !baseProfile.logo) {
                 baseProfile.logo = finnhubProfile.logo;
               }
               // Use Finnhub's industry if Yahoo didn't provide one
               if (finnhubProfile.finnhubIndustry && !baseProfile.finnhubIndustry) {
                 baseProfile.finnhubIndustry = finnhubProfile.finnhubIndustry;
+              }
+              // Add IPO date from Finnhub (#95)
+              if (finnhubProfile.ipo && !baseProfile.ipo) {
+                baseProfile.ipo = finnhubProfile.ipo;
+              }
+              // Add employee count from Finnhub if Yahoo doesn't have it
+              if (finnhubProfile.employeeTotal && !baseProfile.fullTimeEmployees) {
+                baseProfile.fullTimeEmployees = finnhubProfile.employeeTotal;
               }
             }
           }

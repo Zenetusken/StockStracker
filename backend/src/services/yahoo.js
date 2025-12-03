@@ -430,6 +430,7 @@ class YahooFinanceService {
       await this.throttle();
 
       // Use quoteSummary endpoint for profile data with additional modules for financial metrics
+      // assetProfile has description, fullTimeEmployees, sector, industry
       const modules = 'assetProfile,summaryProfile,price,summaryDetail,defaultKeyStatistics';
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
 
@@ -487,6 +488,10 @@ class YahooFinanceService {
         fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || null,
         dividendYield: summaryDetail.dividendYield?.raw || null,
         sharesOutstanding: keyStats.sharesOutstanding?.raw ? keyStats.sharesOutstanding.raw / 1e6 : null, // Convert to millions
+        // Additional company info (#93-95)
+        description: assetProfile.longBusinessSummary || null,
+        fullTimeEmployees: assetProfile.fullTimeEmployees || null,
+        // Note: IPO date not available from Yahoo Finance profile
       };
     } catch (error) {
       console.error(`[Yahoo] Profile error for ${symbol}:`, error.message);

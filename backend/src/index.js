@@ -112,6 +112,7 @@ import securityRoutes from './routes/security.js';
 import mfaRoutes from './routes/mfa.js';
 import portfolioRoutes from './routes/portfolios.js';
 import alertsRoutes from './routes/alerts.js';
+import newsRoutes from './routes/news.js';
 
 // Apply rate limiting to all API routes
 app.use('/api', apiLimiter);
@@ -135,6 +136,7 @@ app.use('/api/stream', streamRoutes);
 app.use('/api/watchlists', watchlistRoutes);
 app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/alerts', alertsRoutes);
+app.use('/api/news', newsRoutes);
 app.use('/api/admin/api-keys', apiKeysRoutes);
 app.use('/api/admin/security', securityRoutes);
 app.use('/api/mfa', csrfProtection, mfaRoutes);

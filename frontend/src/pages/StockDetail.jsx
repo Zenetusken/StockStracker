@@ -7,6 +7,7 @@ import { useProfileStore } from '../stores/profileStore';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import AddToWatchlistModal from '../components/AddToWatchlistModal';
 import StockChart from '../components/StockChart';
+import NewsFeed from '../components/NewsFeed';
 
 function StockDetail() {
   const { symbol } = useParams();
@@ -381,6 +382,24 @@ function StockDetail() {
                 </div>
               )}
 
+              {/* Additional Company Info Row (#94-95) */}
+              {profile.fullTimeEmployees && (
+                <div>
+                  <p className="text-sm text-text-muted mb-1">Employees</p>
+                  <p className="text-lg text-text-primary font-semibold">
+                    {profile.fullTimeEmployees.toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {profile.ipo && (
+                <div>
+                  <p className="text-sm text-text-muted mb-1">IPO Date</p>
+                  <p className="text-lg text-text-primary font-semibold">
+                    {profile.ipo}
+                  </p>
+                </div>
+              )}
+
               {/* Website */}
               {profile.weburl && (
                 <div className="col-span-2 md:col-span-4 pt-2 border-t border-border">
@@ -395,9 +414,30 @@ function StockDetail() {
                   </a>
                 </div>
               )}
+
+              {/* Company Description (#93) */}
+              {profile.description && (
+                <div className="col-span-2 md:col-span-4 pt-4 border-t border-border">
+                  <p className="text-sm text-text-muted mb-2">About</p>
+                  <p className="text-sm text-text-secondary leading-relaxed">
+                    {profile.description.length > 500
+                      ? `${profile.description.substring(0, 500)}...`
+                      : profile.description}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
+
+        {/* Company News Section (#96) */}
+        <div className="mt-6">
+          <NewsFeed
+            symbol={symbol}
+            title={`${symbol} News`}
+            limit={10}
+          />
+        </div>
       </main>
 
       {/* Add to Watchlist Modal */}
