@@ -198,4 +198,276 @@ router.get('/overview', async (req, res) => {
   }
 });
 
+/**
+ * Movers Universe - Popular stocks to track for gainers/losers/active
+ * Using a subset of the screener universe for faster response
+ */
+const MOVERS_UNIVERSE = [
+  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AVGO', 'ORCL', 'ADBE',
+  'CRM', 'AMD', 'INTC', 'CSCO', 'IBM', 'QCOM', 'TXN', 'NOW', 'INTU', 'AMAT',
+  'JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'AXP', 'BLK', 'SCHW', 'USB',
+  'UNH', 'JNJ', 'PFE', 'ABBV', 'MRK', 'LLY', 'TMO', 'ABT', 'DHR', 'BMY',
+  'WMT', 'PG', 'KO', 'PEP', 'COST', 'HD', 'MCD', 'NKE', 'SBUX', 'TGT',
+];
+
+// Movers cache (longer TTL since it's computationally expensive)
+let moversCache = null;
+let moversCacheTime = 0;
+const MOVERS_CACHE_TTL = 60000; // 1 minute
+
+/**
+ * GET /api/market/movers
+ * Get top gainers, losers, and most active stocks (#118, #119, #120)
+ */
+router.get('/movers', async (req, res) => {
+  try {
+    console.log('[Market] Fetching market movers...');
+
+    // Check cache
+    if (moversCache && Date.now() - moversCacheTime < MOVERS_CACHE_TTL) {
+      console.log('[Market] Returning cached movers');
+      return res.json(moversCache);
+    }
+
+    // Fetch quotes for all movers universe
+    const quotes = await Promise.all(
+      MOVERS_UNIVERSE.map(async (symbol) => {
+        try {
+          const quote = await finnhub.getQuote(symbol);
+          if (quote && quote.c !== 0) {
+            return {
+              symbol,
+              price: quote.c,
+              change: quote.c - quote.pc,
+              changePercent: quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : 0,
+              volume: quote.v || 0,
+            };
+          }
+        } catch {
+          // Skip failed symbols
+        }
+        return null;
+      })
+    );
+
+    const validQuotes = quotes.filter(q => q !== null);
+
+    // Sort for gainers (highest % change)
+    const gainers = [...validQuotes]
+      .sort((a, b) => b.changePercent - a.changePercent)
+      .slice(0, 10);
+
+    // Sort for losers (lowest % change)
+    const losers = [...validQuotes]
+      .sort((a, b) => a.changePercent - b.changePercent)
+      .slice(0, 10);
+
+    // Sort for most active (highest volume)
+    const mostActive = [...validQuotes]
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 10);
+
+    const result = {
+      timestamp: Date.now(),
+      gainers,
+      losers,
+      mostActive,
+    };
+
+    // Update cache
+    moversCache = result;
+    moversCacheTime = Date.now();
+
+    console.log(`[Market] Returning movers: ${gainers.length} gainers, ${losers.length} losers, ${mostActive.length} active`);
+    res.json(result);
+  } catch (error) {
+    console.error('[Market] Movers error:', error);
+    res.status(500).json({ error: 'Failed to fetch market movers' });
+  }
+});
+
+/**
+ * GET /api/market/status
+ * Get market status (open/closed) with countdown (#121)
+ */
+router.get('/status', (req, res) => {
+  try {
+    const now = new Date();
+    const nyTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const day = nyTime.getDay();
+    const hours = nyTime.getHours();
+    const minutes = nyTime.getMinutes();
+    const currentMinutes = hours * 60 + minutes;
+
+    // Market hours: 9:30 AM - 4:00 PM ET
+    const marketOpen = 9 * 60 + 30;  // 9:30 AM
+    const marketClose = 16 * 60;      // 4:00 PM
+
+    // Pre-market: 4:00 AM - 9:30 AM
+    const preMarketOpen = 4 * 60;
+    // After-hours: 4:00 PM - 8:00 PM
+    const afterHoursClose = 20 * 60;
+
+    let status = 'closed';
+    let nextEvent = null;
+    let minutesUntil = 0;
+    let isWeekend = false;
+
+    if (day === 0 || day === 6) {
+      // Weekend
+      isWeekend = true;
+      status = 'closed';
+      // Calculate minutes until Monday 9:30 AM
+      const daysUntilMonday = day === 0 ? 1 : 2;
+      minutesUntil = (daysUntilMonday * 24 * 60) + (marketOpen - currentMinutes);
+      nextEvent = 'market-open';
+    } else if (currentMinutes >= preMarketOpen && currentMinutes < marketOpen) {
+      // Pre-market
+      status = 'pre-market';
+      minutesUntil = marketOpen - currentMinutes;
+      nextEvent = 'market-open';
+    } else if (currentMinutes >= marketOpen && currentMinutes < marketClose) {
+      // Market open
+      status = 'open';
+      minutesUntil = marketClose - currentMinutes;
+      nextEvent = 'market-close';
+    } else if (currentMinutes >= marketClose && currentMinutes < afterHoursClose) {
+      // After hours
+      status = 'after-hours';
+      minutesUntil = afterHoursClose - currentMinutes;
+      nextEvent = 'after-hours-close';
+    } else {
+      // Closed (before pre-market or after after-hours)
+      status = 'closed';
+      if (currentMinutes < preMarketOpen) {
+        minutesUntil = preMarketOpen - currentMinutes;
+        nextEvent = 'pre-market-open';
+      } else {
+        // After 8 PM, calculate to next day
+        minutesUntil = (24 * 60 - currentMinutes) + preMarketOpen;
+        nextEvent = 'pre-market-open';
+        // If Friday after hours, skip to Monday
+        if (day === 5 && currentMinutes >= afterHoursClose) {
+          minutesUntil += 2 * 24 * 60;
+        }
+      }
+    }
+
+    // Format countdown
+    const hoursUntil = Math.floor(minutesUntil / 60);
+    const minsUntil = minutesUntil % 60;
+
+    res.json({
+      timestamp: Date.now(),
+      status,
+      isWeekend,
+      nextEvent,
+      countdown: {
+        hours: hoursUntil,
+        minutes: minsUntil,
+        totalMinutes: minutesUntil,
+        formatted: `${hoursUntil}h ${minsUntil}m`,
+      },
+      currentTime: {
+        nyTime: nyTime.toISOString(),
+        day: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day],
+        time: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ET`,
+      },
+    });
+  } catch (error) {
+    console.error('[Market] Status error:', error);
+    res.status(500).json({ error: 'Failed to get market status' });
+  }
+});
+
+/**
+ * GET /api/market/calendar
+ * Get economic calendar highlights (#122)
+ * Note: Using static data since Finnhub free tier doesn't include economic calendar
+ */
+router.get('/calendar', (req, res) => {
+  try {
+    // Get current week dates
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+
+    // Mock economic calendar data (in production, this would come from an API)
+    const events = [
+      {
+        id: 1,
+        date: getDateString(weekStart, 1),
+        time: '10:00 AM ET',
+        event: 'ISM Manufacturing PMI',
+        importance: 'high',
+        previous: '48.7',
+        forecast: '49.0',
+      },
+      {
+        id: 2,
+        date: getDateString(weekStart, 2),
+        time: '8:30 AM ET',
+        event: 'ADP Employment Change',
+        importance: 'high',
+        previous: '146K',
+        forecast: '150K',
+      },
+      {
+        id: 3,
+        date: getDateString(weekStart, 3),
+        time: '10:00 AM ET',
+        event: 'ISM Services PMI',
+        importance: 'medium',
+        previous: '52.1',
+        forecast: '52.5',
+      },
+      {
+        id: 4,
+        date: getDateString(weekStart, 4),
+        time: '8:30 AM ET',
+        event: 'Initial Jobless Claims',
+        importance: 'medium',
+        previous: '215K',
+        forecast: '218K',
+      },
+      {
+        id: 5,
+        date: getDateString(weekStart, 5),
+        time: '8:30 AM ET',
+        event: 'Non-Farm Payrolls',
+        importance: 'high',
+        previous: '254K',
+        forecast: '200K',
+      },
+      {
+        id: 6,
+        date: getDateString(weekStart, 5),
+        time: '8:30 AM ET',
+        event: 'Unemployment Rate',
+        importance: 'high',
+        previous: '4.1%',
+        forecast: '4.1%',
+      },
+    ];
+
+    res.json({
+      timestamp: Date.now(),
+      weekStart: weekStart.toISOString().split('T')[0],
+      events,
+    });
+  } catch (error) {
+    console.error('[Market] Calendar error:', error);
+    res.status(500).json({ error: 'Failed to get economic calendar' });
+  }
+});
+
+/**
+ * Helper to get date string for a day offset from start
+ */
+function getDateString(weekStart, dayOffset) {
+  const date = new Date(weekStart);
+  date.setDate(weekStart.getDate() + dayOffset);
+  return date.toISOString().split('T')[0];
+}
+
 export default router;
