@@ -64,6 +64,44 @@ router.post('/batch', async (req, res) => {
 });
 
 /**
+ * POST /api/quotes/profiles
+ * Get profiles for multiple symbols at once
+ * Body: { symbols: ['AAPL', 'GOOGL', 'MSFT'] }
+ */
+router.post('/profiles', async (req, res) => {
+  try {
+    const { symbols } = req.body;
+
+    if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: 'Symbols array is required' });
+    }
+
+    if (symbols.length > 50) {
+      return res.status(400).json({ error: 'Maximum 50 symbols allowed' });
+    }
+
+    const profiles = {};
+    await Promise.all(
+      symbols.map(async (symbol) => {
+        try {
+          const profile = await finnhub.getCompanyProfile(symbol);
+          if (profile && profile.name) {
+            profiles[symbol.toUpperCase()] = profile;
+          }
+        } catch (err) {
+          console.log(`Could not fetch profile for ${symbol}:`, err.message);
+        }
+      })
+    );
+
+    res.json(profiles);
+  } catch (error) {
+    console.error('Error fetching batch profiles:', error);
+    res.status(500).json({ error: 'Failed to fetch profiles' });
+  }
+});
+
+/**
  * GET /api/quotes/:symbol/profile
  * Get company profile for a symbol
  */

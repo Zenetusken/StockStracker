@@ -11,6 +11,9 @@ import LotSalesModal from '../components/LotSalesModal';
 import PortfolioValueChart from '../components/PortfolioValueChart';
 import AllocationPieChart from '../components/AllocationPieChart';
 import BenchmarkComparison from '../components/BenchmarkComparison';
+import TopPerformers from '../components/TopPerformers';
+import BottomPerformers from '../components/BottomPerformers';
+import DividendIncome from '../components/DividendIncome';
 
 function PortfolioDetail() {
   const { id } = useParams();
@@ -488,6 +491,13 @@ function PortfolioDetail() {
             portfolioValue={metrics.totalValue}
             portfolioCostBasis={metrics.totalValue - metrics.totalGainLoss}
           />
+        </div>
+
+        {/* Dividend Income & Performers Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <DividendIncome transactions={portfolio?.recent_transactions} />
+          <TopPerformers holdings={sortedHoldings} limit={5} />
+          <BottomPerformers holdings={sortedHoldings} limit={5} />
         </div>
 
         {/* Holdings Table */}
