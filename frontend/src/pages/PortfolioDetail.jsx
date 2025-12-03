@@ -316,6 +316,7 @@ function PortfolioDetail() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase">Symbol</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Shares</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Price</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Fees</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Total</th>
                   </tr>
                 </thead>
@@ -327,7 +328,10 @@ function PortfolioDetail() {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          tx.type === 'buy' ? 'bg-gain/10 text-gain' : 'bg-loss/10 text-loss'
+                          tx.type === 'buy' ? 'bg-gain/10 text-gain' :
+                          tx.type === 'dividend' ? 'bg-brand/10 text-brand' :
+                          tx.type === 'split' ? 'bg-text-secondary/10 text-text-primary' :
+                          'bg-loss/10 text-loss'
                         }`}>
                           {tx.type.toUpperCase()}
                         </span>
@@ -335,6 +339,7 @@ function PortfolioDetail() {
                       <td className="px-6 py-4 font-medium text-text-primary">{tx.symbol}</td>
                       <td className="px-6 py-4 text-right text-text-primary">{tx.shares}</td>
                       <td className="px-6 py-4 text-right text-text-secondary">{formatCurrency(tx.price)}</td>
+                      <td className="px-6 py-4 text-right text-text-muted">{formatCurrency(tx.fees || 0)}</td>
                       <td className="px-6 py-4 text-right text-text-primary font-medium">
                         {formatCurrency(tx.shares * tx.price)}
                       </td>
