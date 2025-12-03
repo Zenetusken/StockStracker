@@ -34,6 +34,22 @@ function calculateSMA(data, period) {
   return smaData;
 }
 
+// Get available SMA periods based on timeframe
+// Ensures we only show periods that will produce meaningful SMA lines
+function getAvailableSmaPeriods(timeframe) {
+  switch (timeframe) {
+    case '1D':   return [5, 10, 15];       // 15-min bars: ~26 points
+    case '5D':   return [5, 10, 20];       // Hourly bars: ~40 points
+    case '1M':   return [5, 10, 15];       // Daily bars: ~22 points
+    case '6M':   return [10, 20, 50];      // Daily bars: ~130 points
+    case '1Y':   return [10, 20, 50];      // Weekly bars: ~52 points
+    case '5Y':   return [10, 20, 50, 200]; // Weekly bars: ~260 points
+    case 'Max':  return [10, 20, 50, 200]; // Weekly bars: ~1040 points
+    case 'custom': return [10, 20, 50];    // Default for custom range
+    default:     return [10, 20, 50];
+  }
+}
+
 function StockChart({ symbol, chartType: initialChartType = 'candlestick', timeframe: initialTimeframe = '6M' }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -62,6 +78,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [timeframe, setTimeframe] = useState(preferences.timeframe || initialTimeframe);
   const [smaEnabled, setSmaEnabled] = useState(preferences.smaEnabled || false);
   const [smaPeriod, setSmaPeriod] = useState(preferences.smaPeriod || 20);
+  const [availablePeriods, setAvailablePeriods] = useState(() => getAvailableSmaPeriods(preferences.timeframe || initialTimeframe));
 
   // Sync preferences from store when symbol changes
   useEffect(() => {
@@ -88,6 +105,16 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   useEffect(() => {
     setStoreSmaPeriod(symbol, smaPeriod);
   }, [symbol, smaPeriod, setStoreSmaPeriod]);
+
+  // Update available SMA periods when timeframe changes
+  useEffect(() => {
+    const periods = getAvailableSmaPeriods(timeframe);
+    setAvailablePeriods(periods);
+    // If current period is not in available periods, reset to first available
+    if (!periods.includes(smaPeriod)) {
+      setSmaPeriod(periods[0]);
+    }
+  }, [timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {
@@ -613,17 +640,17 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                     onChange={(e) => setSmaPeriod(parseInt(e.target.value))}
                     className="px-3 py-1.5 border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand bg-page-bg text-text-primary"
                   >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={200}>200</option>
+                    {availablePeriods.map(period => (
+                      <option key={period} value={period}>{period}</option>
+                    ))}
                   </select>
                 </div>
               )}
             </div>
             {smaEnabled && (
               <div className="text-xs text-text-muted pl-7">
-                Displays a {smaPeriod}-period moving average line on the chart (orange line)
+                Displays a {smaPeriod}-period moving average (orange line).
+                Available periods for {timeframe}: {availablePeriods.join(', ')}
               </div>
             )}
           </div>
