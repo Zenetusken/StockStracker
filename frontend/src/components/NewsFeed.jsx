@@ -1,50 +1,152 @@
-import { useState, useEffect } from 'react';
-import { Newspaper, AlertCircle, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Newspaper, AlertCircle, RefreshCw, Loader2, Filter } from 'lucide-react';
 import NewsCard from './NewsCard';
 import api from '../api/client';
 
 /**
  * NewsFeed Component
- * Fetches and displays news articles for a specific stock or general market news
+ * Fetches and displays news articles with infinite scroll (#100),
+ * category filters (#101), and enhanced refresh (#102)
  *
  * Props:
  * - symbol: Stock symbol for company-specific news (optional)
- * - category: News category for market news ('general', 'forex', 'crypto', 'merger')
+ * - category: Initial news category for market news
  * - title: Section title
- * - limit: Maximum number of articles to display (default: 10)
+ * - pageSize: Articles per page (default: 10)
+ * - showFilters: Show category filter buttons (default: true for market news)
  */
-function NewsFeed({ symbol, category = 'general', title = 'News', limit = 10 }) {
+
+const NEWS_CATEGORIES = [
+  { id: 'general', label: 'General' },
+  { id: 'forex', label: 'Forex' },
+  { id: 'crypto', label: 'Crypto' },
+  { id: 'merger', label: 'M&A' },
+];
+
+function NewsFeed({
+  symbol,
+  category: initialCategory = 'general',
+  title = 'News',
+  pageSize = 10,
+  showFilters = true,
+}) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [category, setCategory] = useState(initialCategory);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchNews = async () => {
-    setLoading(true);
+  // Ref for infinite scroll observer
+  const observerRef = useRef(null);
+  const loadMoreRef = useRef(null);
+
+  // Track all fetched articles for pagination simulation
+  const allArticlesRef = useRef([]);
+  const displayedCountRef = useRef(0);
+
+  // Fetch news from API
+  const fetchNews = useCallback(async (reset = false) => {
+    if (reset) {
+      setLoading(true);
+      setNews([]);
+      allArticlesRef.current = [];
+      displayedCountRef.current = 0;
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
     setError(null);
 
     try {
-      let response;
+      let data;
       if (symbol) {
         // Fetch company-specific news
-        response = await api.get(`/news/${symbol}`);
+        data = await api.get(`/news/${symbol}`);
       } else {
-        // Fetch general market news
-        response = await api.get(`/news/market/general?category=${category}`);
+        // Fetch general market news with category filter (#101)
+        data = await api.get(`/news/market/general?category=${category}`);
       }
 
-      setNews(response.data.slice(0, limit));
+      // API client returns data directly
+      const articles = Array.isArray(data) ? data : [];
+      allArticlesRef.current = articles;
+
+      // Simulate pagination with slice (#100)
+      const nextCount = reset ? pageSize : displayedCountRef.current + pageSize;
+      const displayArticles = articles.slice(0, nextCount);
+      displayedCountRef.current = displayArticles.length;
+
+      setNews(displayArticles);
+      setHasMore(displayArticles.length < articles.length);
     } catch (err) {
       console.error('Error fetching news:', err);
       setError('Unable to load news articles');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [symbol, category, pageSize]);
 
+  // Load more articles (#100)
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+
+    const nextCount = displayedCountRef.current + pageSize;
+    const displayArticles = allArticlesRef.current.slice(0, nextCount);
+    displayedCountRef.current = displayArticles.length;
+
+    setNews(displayArticles);
+    setHasMore(displayArticles.length < allArticlesRef.current.length);
+  }, [loadingMore, hasMore, pageSize]);
+
+  // Refresh handler (#102)
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchNews(true);
+  }, [fetchNews]);
+
+  // Category change handler (#101)
+  const handleCategoryChange = useCallback((newCategory) => {
+    if (newCategory !== category) {
+      setCategory(newCategory);
+    }
+  }, [category]);
+
+  // Initial fetch and category change
   useEffect(() => {
-    fetchNews();
-  }, [symbol, category, limit]);
+    fetchNews(true);
+  }, [symbol, category]);
 
+  // Intersection Observer for infinite scroll (#100)
+  useEffect(() => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [hasMore, loadingMore, loading, loadMore]);
+
+  // Loading state
   if (loading) {
     return (
       <div className="bg-card rounded-lg shadow p-6">
@@ -59,6 +161,7 @@ function NewsFeed({ symbol, category = 'general', title = 'News', limit = 10 }) 
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="bg-card rounded-lg shadow p-6">
@@ -70,7 +173,7 @@ function NewsFeed({ symbol, category = 'general', title = 'News', limit = 10 }) 
           <AlertCircle className="w-10 h-10 text-text-muted mb-2" />
           <p className="text-text-muted mb-4">{error}</p>
           <button
-            onClick={fetchNews}
+            onClick={() => fetchNews(true)}
             className="flex items-center gap-2 px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -81,13 +184,44 @@ function NewsFeed({ symbol, category = 'general', title = 'News', limit = 10 }) 
     );
   }
 
+  // Empty state
   if (news.length === 0) {
     return (
       <div className="bg-card rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center gap-2">
-          <Newspaper className="w-5 h-5" />
-          {title}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
+            <Newspaper className="w-5 h-5" />
+            {title}
+          </h2>
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="p-2 text-text-muted hover:text-text-primary hover:bg-page-bg rounded-lg transition-colors disabled:opacity-50"
+            title="Refresh news"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {/* Category Filters (#101) */}
+        {!symbol && showFilters && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {NEWS_CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => handleCategoryChange(cat.id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  category === cat.id
+                    ? 'bg-brand text-white'
+                    : 'bg-page-bg text-text-secondary hover:bg-brand/10 hover:text-brand'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Newspaper className="w-10 h-10 text-text-muted mb-2" />
           <p className="text-text-muted">No news articles available</p>
@@ -98,24 +232,61 @@ function NewsFeed({ symbol, category = 'general', title = 'News', limit = 10 }) 
 
   return (
     <div className="bg-card rounded-lg shadow p-6">
+      {/* Header with refresh button (#102) */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
           <Newspaper className="w-5 h-5" />
           {title}
         </h2>
         <button
-          onClick={fetchNews}
-          className="p-2 text-text-muted hover:text-text-primary hover:bg-page-bg rounded-lg transition-colors"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="p-2 text-text-muted hover:text-text-primary hover:bg-page-bg rounded-lg transition-colors disabled:opacity-50"
           title="Refresh news"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
+      {/* Category Filters (#101) - only for market news */}
+      {!symbol && showFilters && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {NEWS_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => handleCategoryChange(cat.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                category === cat.id
+                  ? 'bg-brand text-white'
+                  : 'bg-page-bg text-text-secondary hover:bg-brand/10 hover:text-brand'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* News Articles */}
       <div className="space-y-3">
-        {news.map((article) => (
-          <NewsCard key={article.id || article.url} article={article} />
+        {news.map((article, index) => (
+          <NewsCard key={article.id || article.url || index} article={article} />
         ))}
+      </div>
+
+      {/* Infinite scroll trigger (#100) */}
+      <div ref={loadMoreRef} className="py-4">
+        {loadingMore && (
+          <div className="flex items-center justify-center gap-2 text-text-muted">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Loading more...</span>
+          </div>
+        )}
+        {!hasMore && news.length > 0 && (
+          <p className="text-center text-text-muted text-sm">
+            No more articles
+          </p>
+        )}
       </div>
     </div>
   );

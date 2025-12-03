@@ -1,9 +1,46 @@
-import { ExternalLink, Clock, Newspaper } from 'lucide-react';
+import { ExternalLink, Clock, Newspaper, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 /**
  * NewsCard Component
- * Displays a news article with headline, summary, source, and timestamp
+ * Displays a news article with headline, summary, source, timestamp,
+ * sentiment indicator (#98), and related symbols (#99)
  */
+
+// Keyword-based sentiment analysis (#98)
+const POSITIVE_KEYWORDS = [
+  'surge', 'soar', 'jump', 'gain', 'rise', 'rally', 'upgrade', 'beat', 'exceed',
+  'profit', 'growth', 'bullish', 'optimistic', 'record', 'breakthrough', 'success',
+  'boost', 'climb', 'advance', 'positive', 'strong', 'outperform', 'buy', 'upside',
+  'expansion', 'revenue', 'dividend', 'acquisition'
+];
+
+const NEGATIVE_KEYWORDS = [
+  'fall', 'drop', 'plunge', 'crash', 'decline', 'loss', 'downgrade', 'miss', 'fail',
+  'bearish', 'concern', 'risk', 'warning', 'layoff', 'cut', 'lawsuit', 'investigation',
+  'tumble', 'sink', 'slump', 'negative', 'weak', 'underperform', 'sell', 'downside',
+  'recession', 'bankruptcy', 'fraud', 'scandal'
+];
+
+function analyzeSentiment(headline = '', summary = '') {
+  const text = `${headline} ${summary}`.toLowerCase();
+
+  let positiveScore = 0;
+  let negativeScore = 0;
+
+  POSITIVE_KEYWORDS.forEach(word => {
+    if (text.includes(word)) positiveScore++;
+  });
+
+  NEGATIVE_KEYWORDS.forEach(word => {
+    if (text.includes(word)) negativeScore++;
+  });
+
+  if (positiveScore > negativeScore) return 'positive';
+  if (negativeScore > positiveScore) return 'negative';
+  return 'neutral';
+}
+
 function NewsCard({ article }) {
   const {
     headline,
@@ -13,7 +50,16 @@ function NewsCard({ article }) {
     image,
     datetime,
     category,
+    related,
   } = article;
+
+  // Calculate sentiment (#98)
+  const sentiment = analyzeSentiment(headline, summary);
+
+  // Parse related symbols (#99)
+  const relatedSymbols = related
+    ? related.split(',').map(s => s.trim()).filter(s => s.length > 0 && s.length <= 5)
+    : [];
 
   // Format datetime (Finnhub returns Unix timestamp in seconds)
   const formatDate = (timestamp) => {
@@ -36,6 +82,27 @@ function NewsCard({ article }) {
     }
     return date.toLocaleDateString();
   };
+
+  // Sentiment display config
+  const sentimentConfig = {
+    positive: {
+      icon: TrendingUp,
+      label: 'Bullish',
+      className: 'text-gain bg-gain/10',
+    },
+    negative: {
+      icon: TrendingDown,
+      label: 'Bearish',
+      className: 'text-loss bg-loss/10',
+    },
+    neutral: {
+      icon: Minus,
+      label: 'Neutral',
+      className: 'text-text-muted bg-text-muted/10',
+    },
+  };
+
+  const SentimentIcon = sentimentConfig[sentiment].icon;
 
   return (
     <a
@@ -61,14 +128,45 @@ function NewsCard({ article }) {
 
         {/* Article Content */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-text-primary font-semibold mb-1 line-clamp-2">
-            {headline}
-          </h3>
+          <div className="flex items-start gap-2 mb-1">
+            <h3 className="text-text-primary font-semibold line-clamp-2 flex-1">
+              {headline}
+            </h3>
+            {/* Sentiment Indicator (#98) */}
+            <span
+              className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${sentimentConfig[sentiment].className}`}
+              title={`Sentiment: ${sentimentConfig[sentiment].label}`}
+            >
+              <SentimentIcon className="w-3 h-3" />
+              <span className="hidden sm:inline">{sentimentConfig[sentiment].label}</span>
+            </span>
+          </div>
 
           {summary && (
             <p className="text-text-secondary text-sm mb-2 line-clamp-2">
               {summary}
             </p>
+          )}
+
+          {/* Related Symbols (#99) */}
+          {relatedSymbols.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {relatedSymbols.slice(0, 5).map((symbol) => (
+                <Link
+                  key={symbol}
+                  to={`/stock/${symbol}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="px-2 py-0.5 bg-brand/10 text-brand rounded text-xs font-medium hover:bg-brand/20 transition-colors"
+                >
+                  ${symbol}
+                </Link>
+              ))}
+              {relatedSymbols.length > 5 && (
+                <span className="px-2 py-0.5 text-text-muted text-xs">
+                  +{relatedSymbols.length - 5} more
+                </span>
+              )}
+            </div>
           )}
 
           {/* Meta Info */}
@@ -86,7 +184,7 @@ function NewsCard({ article }) {
               </span>
             )}
             {category && (
-              <span className="px-2 py-0.5 bg-brand/10 text-brand rounded text-xs">
+              <span className="px-2 py-0.5 bg-page-bg text-text-muted rounded text-xs">
                 {category}
               </span>
             )}
