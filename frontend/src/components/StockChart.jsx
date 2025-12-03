@@ -15,6 +15,14 @@ import { useChartStore } from '../stores/chartStore';
 // Warm cream intermediate - between page-bg (#E8E0D5) and card (#D6C7AE)
 const CHART_BACKGROUND_COLOR = '#DDD3C5';
 
+// SMA configurations - each SMA has a distinct color
+const SMA_CONFIGS = [
+  { period: 10, color: '#F59E0B', label: 'SMA 10' },   // Amber - fast
+  { period: 20, color: '#FF6B00', label: 'SMA 20' },   // Orange
+  { period: 50, color: '#8B5CF6', label: 'SMA 50' },   // Purple
+  { period: 200, color: '#06B6D4', label: 'SMA 200' }, // Cyan - slow
+];
+
 // Helper function to calculate Simple Moving Average
 function calculateSMA(data, period) {
   if (!data || data.length < period) return [];
@@ -36,11 +44,12 @@ function calculateSMA(data, period) {
 
 // Get available SMA periods based on timeframe
 // Ensures we only show periods that will produce meaningful SMA lines
+// These must match the periods in SMA_CONFIGS [10, 20, 50, 200]
 function getAvailableSmaPeriods(timeframe) {
   switch (timeframe) {
-    case '1D':   return [5, 10, 15];       // 15-min bars: ~26 points
-    case '5D':   return [5, 10, 20];       // Hourly bars: ~40 points
-    case '1M':   return [5, 10, 15];       // Daily bars: ~22 points
+    case '1D':   return [10];              // 15-min bars: ~26 points, only 10 works
+    case '5D':   return [10, 20];          // Hourly bars: ~40 points
+    case '1M':   return [10, 20];          // Daily bars: ~22 points (20 is marginal but OK)
     case '6M':   return [10, 20, 50];      // Daily bars: ~130 points
     case '1Y':   return [10, 20, 50];      // Weekly bars: ~52 points
     case '5Y':   return [10, 20, 50, 200]; // Weekly bars: ~260 points
@@ -54,7 +63,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
-  const smaSeriesRef = useRef(null); // Reference for SMA line series
+  const smaSeriesRefs = useRef(new Map()); // Map<period, series> for multiple SMAs
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tooltipData, setTooltipData] = useState(null);
@@ -76,8 +85,14 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const preferences = getPreferences(symbol);
   const [chartType, setChartType] = useState(preferences.chartType || initialChartType);
   const [timeframe, setTimeframe] = useState(preferences.timeframe || initialTimeframe);
-  const [smaEnabled, setSmaEnabled] = useState(preferences.smaEnabled || false);
-  const [smaPeriod, setSmaPeriod] = useState(preferences.smaPeriod || 20);
+  // Multiple SMAs: array of enabled periods (e.g., [20, 50])
+  const [enabledSMAs, setEnabledSMAs] = useState(() => {
+    // Migrate from old single SMA format if present
+    if (preferences.smaEnabled && preferences.smaPeriod) {
+      return [preferences.smaPeriod];
+    }
+    return preferences.enabledSMAs || [];
+  });
   const [availablePeriods, setAvailablePeriods] = useState(() => getAvailableSmaPeriods(preferences.timeframe || initialTimeframe));
 
   // Sync preferences from store when symbol changes
@@ -85,8 +100,14 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     const prefs = getPreferences(symbol);
     setTimeframe(prefs.timeframe || initialTimeframe);
     setChartType(prefs.chartType || initialChartType);
-    setSmaEnabled(prefs.smaEnabled || false);
-    setSmaPeriod(prefs.smaPeriod || 20);
+    // Handle migration from old single SMA format
+    if (prefs.enabledSMAs) {
+      setEnabledSMAs(prefs.enabledSMAs);
+    } else if (prefs.smaEnabled && prefs.smaPeriod) {
+      setEnabledSMAs([prefs.smaPeriod]);
+    } else {
+      setEnabledSMAs([]);
+    }
   }, [symbol, initialTimeframe, initialChartType, getPreferences]);
 
   // Sync preferences to store when they change
@@ -98,23 +119,22 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     setStoreChartType(symbol, chartType);
   }, [symbol, chartType, setStoreChartType]);
 
+  // For backward compatibility, sync the first enabled SMA to old store fields
   useEffect(() => {
-    setStoreSmaEnabled(symbol, smaEnabled);
-  }, [symbol, smaEnabled, setStoreSmaEnabled]);
-
-  useEffect(() => {
-    setStoreSmaPeriod(symbol, smaPeriod);
-  }, [symbol, smaPeriod, setStoreSmaPeriod]);
+    const hasAnySMA = enabledSMAs.length > 0;
+    setStoreSmaEnabled(symbol, hasAnySMA);
+    if (hasAnySMA) {
+      setStoreSmaPeriod(symbol, enabledSMAs[0]);
+    }
+  }, [symbol, enabledSMAs, setStoreSmaEnabled, setStoreSmaPeriod]);
 
   // Update available SMA periods when timeframe changes
   useEffect(() => {
     const periods = getAvailableSmaPeriods(timeframe);
     setAvailablePeriods(periods);
-    // If current period is not in available periods, reset to first available
-    if (!periods.includes(smaPeriod)) {
-      setSmaPeriod(periods[0]);
-    }
-  }, [timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Filter out any enabled SMAs that are no longer available
+    setEnabledSMAs(prev => prev.filter(p => periods.includes(p)));
+  }, [timeframe]);
 
   // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {
@@ -286,19 +306,23 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
         seriesRef.current = seriesInstance;
 
-        // Add SMA indicator if enabled
-        if (smaEnabled && smaPeriod > 0) {
-          const smaData = calculateSMA(chartData, smaPeriod);
+        // Add multiple SMA indicators
+        smaSeriesRefs.current.clear();
+        for (const period of enabledSMAs) {
+          const config = SMA_CONFIGS.find(c => c.period === period);
+          if (!config) continue;
+
+          const smaData = calculateSMA(chartData, period);
           if (smaData.length > 0) {
             const smaSeries = chartInstance.addLineSeries({
-              color: '#FF6B00', // Orange color for SMA
+              color: config.color,
               lineWidth: 2,
-              title: `SMA(${smaPeriod})`,
+              title: `SMA(${period})`,
               priceLineVisible: false,
               lastValueVisible: true,
             });
             smaSeries.setData(smaData);
-            smaSeriesRef.current = smaSeries;
+            smaSeriesRefs.current.set(period, smaSeries);
           }
         }
 
@@ -314,7 +338,15 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           try {
             const seriesData = param.seriesData.get(seriesInstance);
             if (seriesData) {
-              setTooltipData({ time: param.time, ...seriesData });
+              // Collect SMA values from all enabled SMA series
+              const smaValues = {};
+              for (const [period, series] of smaSeriesRefs.current) {
+                const smaData = param.seriesData.get(series);
+                if (smaData && smaData.value !== undefined) {
+                  smaValues[period] = smaData.value;
+                }
+              }
+              setTooltipData({ time: param.time, ...seriesData, smaValues });
             } else {
               setTooltipData(null);
             }
@@ -372,9 +404,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
       chartRef.current = null;
       seriesRef.current = null;
-      smaSeriesRef.current = null;
+      smaSeriesRefs.current.clear();
     };
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, smaEnabled, smaPeriod, fetchCandles]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, fetchCandles]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -520,7 +552,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           <button
             onClick={() => setShowIndicators(!showIndicators)}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-              showIndicators || smaEnabled
+              showIndicators || enabledSMAs.length > 0
                 ? 'bg-brand text-white hover:bg-brand-hover'
                 : 'bg-line text-text-primary hover:bg-line-light'
             }`}
@@ -614,43 +646,56 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         <div className="mb-4 p-4 bg-card border border-line rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold text-text-primary mb-4">Technical Indicators</h3>
 
-          {/* SMA Indicator */}
+          {/* Multiple SMA Indicators */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="sma-enabled"
-                  checked={smaEnabled}
-                  onChange={(e) => setSmaEnabled(e.target.checked)}
-                  className="w-4 h-4 text-brand rounded focus:ring-2 focus:ring-brand"
-                />
-                <label htmlFor="sma-enabled" className="text-sm font-medium text-text-primary">
-                  Simple Moving Average (SMA)
-                </label>
-              </div>
-              {smaEnabled && (
-                <div className="flex items-center gap-2">
-                  <label htmlFor="sma-period" className="text-sm text-text-secondary">
-                    Period:
-                  </label>
-                  <select
-                    id="sma-period"
-                    value={smaPeriod}
-                    onChange={(e) => setSmaPeriod(parseInt(e.target.value))}
-                    className="px-3 py-1.5 border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand bg-page-bg text-text-primary"
-                  >
-                    {availablePeriods.map(period => (
-                      <option key={period} value={period}>{period}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            <div className="text-sm font-medium text-text-primary mb-2">
+              Simple Moving Averages (SMA)
             </div>
-            {smaEnabled && (
-              <div className="text-xs text-text-muted pl-7">
-                Displays a {smaPeriod}-period moving average (orange line).
-                Available periods for {timeframe}: {availablePeriods.join(', ')}
+            {SMA_CONFIGS.map(({ period, color, label }) => {
+              const isAvailable = availablePeriods.includes(period);
+              const isEnabled = enabledSMAs.includes(period);
+
+              const toggleSMA = () => {
+                if (isEnabled) {
+                  setEnabledSMAs(prev => prev.filter(p => p !== period));
+                } else {
+                  setEnabledSMAs(prev => [...prev, period]);
+                }
+              };
+
+              return (
+                <div key={period} className={`flex items-center gap-3 ${!isAvailable ? 'opacity-50' : ''}`}>
+                  <input
+                    type="checkbox"
+                    id={`sma-${period}`}
+                    checked={isEnabled}
+                    onChange={toggleSMA}
+                    disabled={!isAvailable}
+                    className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
+                    style={{ accentColor: color }}
+                  />
+                  <label
+                    htmlFor={`sma-${period}`}
+                    className="text-sm text-text-primary flex items-center gap-2"
+                  >
+                    <span
+                      className="w-4 h-0.5 rounded"
+                      style={{ backgroundColor: color }}
+                    />
+                    {label}
+                    {!isAvailable && (
+                      <span className="text-xs text-text-muted">(needs more data)</span>
+                    )}
+                  </label>
+                </div>
+              );
+            })}
+            <div className="text-xs text-text-muted mt-2">
+              Available for {timeframe} timeframe: {availablePeriods.join(', ')}
+            </div>
+            {enabledSMAs.length > 0 && (
+              <div className="text-xs text-text-muted">
+                Active: {enabledSMAs.map(p => `SMA(${p})`).join(', ')}
               </div>
             )}
           </div>
@@ -704,6 +749,20 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
               <div className="flex justify-between gap-4">
                 <span className="text-text-muted">Price:</span>
                 <span className="font-medium text-text-primary">${tooltipData.value.toFixed(2)}</span>
+              </div>
+            )}
+            {/* SMA Values */}
+            {tooltipData.smaValues && Object.keys(tooltipData.smaValues).length > 0 && (
+              <div className="mt-2 pt-2 border-t border-line">
+                {SMA_CONFIGS.filter(c => tooltipData.smaValues[c.period] !== undefined).map(({ period, color, label }) => (
+                  <div key={period} className="flex justify-between gap-4">
+                    <span className="text-text-muted flex items-center gap-1">
+                      <span className="w-3 h-0.5 rounded" style={{ backgroundColor: color }} />
+                      {label}:
+                    </span>
+                    <span className="font-medium" style={{ color }}>${tooltipData.smaValues[period].toFixed(2)}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
