@@ -15,19 +15,26 @@ import {
   BarChart3,
   Percent,
   X,
+  Activity,
+  Target,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import api from '../api/client';
 
 /**
  * Stock Screener Page
- * Features #103-107: Stock Screener Core
+ * Features #103-112: Stock Screener
  *
  * #103: Filter by market cap range
  * #104: Filter by P/E ratio range
  * #105: Filter by sector
  * #106: Filter by industry
  * #107: Filter by price range
+ * #108: Filter by volume threshold
+ * #109: Filter by 52-week high/low proximity
+ * #110: Filter by dividend yield
+ * #111: Combine multiple filters
+ * #112: Screener results table
  */
 
 // Market cap presets
@@ -46,6 +53,32 @@ const PE_PRESETS = [
   { label: 'Value (15-25)', min: 15, max: 25 },
   { label: 'Growth (25-50)', min: 25, max: 50 },
   { label: 'High (>50)', min: 50, max: undefined },
+];
+
+// Volume presets (#108)
+const VOLUME_PRESETS = [
+  { label: 'All', min: undefined },
+  { label: 'High (>10M)', min: 10000000 },
+  { label: 'Medium (1M-10M)', min: 1000000 },
+  { label: 'Low (100K-1M)', min: 100000 },
+];
+
+// 52-Week proximity presets (#109)
+const PROXIMITY_PRESETS = [
+  { label: 'All', nearHigh: undefined, nearLow: undefined },
+  { label: 'Near 52W High (<5%)', nearHigh: 5, nearLow: undefined },
+  { label: 'Near 52W High (<10%)', nearHigh: 10, nearLow: undefined },
+  { label: 'Near 52W Low (<10%)', nearLow: 10, nearHigh: undefined },
+  { label: 'Near 52W Low (<20%)', nearLow: 20, nearHigh: undefined },
+];
+
+// Dividend yield presets (#110)
+const DIVIDEND_PRESETS = [
+  { label: 'All', min: undefined, max: undefined },
+  { label: 'High (>4%)', min: 4, max: undefined },
+  { label: 'Medium (2-4%)', min: 2, max: 4 },
+  { label: 'Low (1-2%)', min: 1, max: 2 },
+  { label: 'None (<1%)', min: undefined, max: 1 },
 ];
 
 // Sectors
@@ -75,6 +108,11 @@ function Screener() {
     industry: '',
     minPrice: undefined,
     maxPrice: undefined,
+    minVolume: undefined,  // #108
+    nearHigh: undefined,   // #109
+    nearLow: undefined,    // #109
+    minDividend: undefined, // #110
+    maxDividend: undefined, // #110
   });
 
   // Results state
@@ -94,6 +132,9 @@ function Screener() {
     if (filters.sector !== 'all') count++;
     if (filters.industry) count++;
     if (filters.minPrice !== undefined || filters.maxPrice !== undefined) count++;
+    if (filters.minVolume !== undefined) count++;  // #108
+    if (filters.nearHigh !== undefined || filters.nearLow !== undefined) count++;  // #109
+    if (filters.minDividend !== undefined || filters.maxDividend !== undefined) count++;  // #110
     return count;
   }, [filters]);
 
@@ -112,6 +153,11 @@ function Screener() {
       if (filters.industry) params.append('industry', filters.industry);
       if (filters.minPrice !== undefined) params.append('minPrice', filters.minPrice);
       if (filters.maxPrice !== undefined) params.append('maxPrice', filters.maxPrice);
+      if (filters.minVolume !== undefined) params.append('minVolume', filters.minVolume);  // #108
+      if (filters.nearHigh !== undefined) params.append('nearHigh', filters.nearHigh);  // #109
+      if (filters.nearLow !== undefined) params.append('nearLow', filters.nearLow);  // #109
+      if (filters.minDividend !== undefined) params.append('minDividend', filters.minDividend);  // #110
+      if (filters.maxDividend !== undefined) params.append('maxDividend', filters.maxDividend);  // #110
       params.append('limit', '50');
 
       const data = await api.get(`/screener?${params.toString()}`);
@@ -169,6 +215,11 @@ function Screener() {
       industry: '',
       minPrice: undefined,
       maxPrice: undefined,
+      minVolume: undefined,
+      nearHigh: undefined,
+      nearLow: undefined,
+      minDividend: undefined,
+      maxDividend: undefined,
     });
   };
 
@@ -366,6 +417,94 @@ function Screener() {
                     placeholder="Max"
                     className="w-1/2 px-3 py-2 bg-page-bg border border-border rounded text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
                   />
+                </div>
+              </div>
+
+              {/* Volume Filter (#108) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Volume
+                </label>
+                <div className="space-y-2">
+                  {VOLUME_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          minVolume: preset.min,
+                        })
+                      }
+                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                        filters.minVolume === preset.min
+                          ? 'bg-brand text-white'
+                          : 'bg-page-bg text-text-secondary hover:bg-brand/10'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 52-Week Proximity Filter (#109) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  52-Week Range
+                </label>
+                <div className="space-y-2">
+                  {PROXIMITY_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          nearHigh: preset.nearHigh,
+                          nearLow: preset.nearLow,
+                        })
+                      }
+                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                        filters.nearHigh === preset.nearHigh &&
+                        filters.nearLow === preset.nearLow
+                          ? 'bg-brand text-white'
+                          : 'bg-page-bg text-text-secondary hover:bg-brand/10'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dividend Yield Filter (#110) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <Percent className="w-4 h-4" />
+                  Dividend Yield
+                </label>
+                <div className="space-y-2">
+                  {DIVIDEND_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          minDividend: preset.min,
+                          maxDividend: preset.max,
+                        })
+                      }
+                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                        filters.minDividend === preset.min &&
+                        filters.maxDividend === preset.max
+                          ? 'bg-brand text-white'
+                          : 'bg-page-bg text-text-secondary hover:bg-brand/10'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
