@@ -9,8 +9,10 @@ import PortfolioDetail from './pages/PortfolioDetail';
 import Alerts from './pages/Alerts';
 import Screener from './pages/Screener';
 import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
 import ToastContainer from './components/toast/ToastContainer';
 import AlertChecker from './components/AlertChecker';
+import NetworkStatus from './components/NetworkStatus';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
 import { useAuthStore } from './stores/authStore';
 import { api } from './api/client';
@@ -51,6 +53,7 @@ function App() {
       <RateLimitEventsProvider>
         <ToastContainer />
         <AlertChecker />
+        <NetworkStatus />
         <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -119,6 +122,7 @@ function App() {
           }
         />
         <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<NotFound />} />
         </Routes>
       </RateLimitEventsProvider>
     </BrowserRouter>
