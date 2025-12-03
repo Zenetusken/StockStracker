@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download, Upload } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
@@ -14,6 +14,7 @@ function PortfolioDetail() {
   // Portfolio store
   const fetchPortfolioDetail = usePortfolioStore((state) => state.fetchPortfolioDetail);
   const deleteTransaction = usePortfolioStore((state) => state.deleteTransaction);
+  const addTransaction = usePortfolioStore((state) => state.addTransaction);
 
   const [portfolio, setPortfolio] = useState(null);
   const [error, setError] = useState(null);
@@ -22,6 +23,8 @@ function PortfolioDetail() {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deletingTransaction, setDeletingTransaction] = useState(null);
   const [transactionFilter, setTransactionFilter] = useState('all');
+  const [importStatus, setImportStatus] = useState(null); // { type: 'success' | 'error', message: string }
+  const fileInputRef = useRef(null);
 
   // Get holdings symbols for quote subscription
   const holdingSymbols = useMemo(() => {
@@ -144,6 +147,113 @@ function PortfolioDetail() {
     link.download = `${portfolio.name.replace(/\s+/g, '_')}_transactions.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+
+  // Import transactions from CSV
+  const importFromCsv = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportStatus(null);
+
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim());
+
+      if (lines.length < 2) {
+        setImportStatus({ type: 'error', message: 'CSV file is empty or has no data rows' });
+        return;
+      }
+
+      // Parse header
+      const header = lines[0].toLowerCase();
+      const hasDate = header.includes('date');
+      const hasType = header.includes('type');
+      const hasSymbol = header.includes('symbol');
+      const hasShares = header.includes('shares');
+      const hasPrice = header.includes('price');
+
+      if (!hasType || !hasSymbol || !hasShares || !hasPrice) {
+        setImportStatus({ type: 'error', message: 'CSV must have Type, Symbol, Shares, and Price columns' });
+        return;
+      }
+
+      // Parse data rows
+      const dataRows = lines.slice(1);
+      let imported = 0;
+      let errors = 0;
+
+      for (const row of dataRows) {
+        try {
+          // Parse CSV row (handle quoted values)
+          const values = row.match(/("([^"]*)"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, '').trim()) || [];
+
+          if (values.length < 4) continue;
+
+          // Find column indices from header
+          const headerCols = lines[0].match(/("([^"]*)"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, '').trim().toLowerCase()) || [];
+          const dateIdx = headerCols.findIndex(c => c === 'date');
+          const typeIdx = headerCols.findIndex(c => c === 'type');
+          const symbolIdx = headerCols.findIndex(c => c === 'symbol');
+          const sharesIdx = headerCols.findIndex(c => c === 'shares');
+          const priceIdx = headerCols.findIndex(c => c === 'price');
+          const feesIdx = headerCols.findIndex(c => c === 'fees');
+          const notesIdx = headerCols.findIndex(c => c === 'notes');
+
+          const type = values[typeIdx]?.toLowerCase();
+          const symbol = values[symbolIdx]?.toUpperCase();
+          const shares = parseFloat(values[sharesIdx]);
+          const price = parseFloat(values[priceIdx]);
+          const fees = feesIdx >= 0 ? parseFloat(values[feesIdx]) || 0 : 0;
+          const notes = notesIdx >= 0 ? values[notesIdx] || '' : '';
+          const dateStr = dateIdx >= 0 ? values[dateIdx] : null;
+
+          // Validate
+          if (!['buy', 'sell', 'dividend', 'split'].includes(type)) continue;
+          if (!symbol || isNaN(shares) || isNaN(price)) continue;
+
+          // Parse date
+          let executedAt = new Date().toISOString().split('T')[0];
+          if (dateStr) {
+            const parsed = new Date(dateStr);
+            if (!isNaN(parsed.getTime())) {
+              executedAt = parsed.toISOString().split('T')[0];
+            }
+          }
+
+          await addTransaction(id, {
+            type,
+            symbol,
+            shares,
+            price,
+            fees,
+            notes,
+            executed_at: executedAt
+          });
+
+          imported++;
+        } catch {
+          errors++;
+        }
+      }
+
+      // Refresh portfolio data
+      const data = await fetchPortfolioDetail(id, true);
+      setPortfolio(data);
+
+      if (imported > 0) {
+        setImportStatus({ type: 'success', message: `Successfully imported ${imported} transaction${imported > 1 ? 's' : ''}${errors > 0 ? ` (${errors} failed)` : ''}` });
+      } else {
+        setImportStatus({ type: 'error', message: 'No valid transactions found in CSV' });
+      }
+    } catch (err) {
+      setImportStatus({ type: 'error', message: `Import failed: ${err.message}` });
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   if (loading) {
@@ -368,8 +478,33 @@ function PortfolioDetail() {
                   <Download className="w-4 h-4" />
                   Export CSV
                 </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={importFromCsv}
+                  className="hidden"
+                  data-testid="import-csv-input"
+                />
+                <button
+                  data-testid="import-csv"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-1.5 border border-line rounded-md text-sm bg-page-bg text-text-primary hover:bg-card-hover focus:outline-none focus:ring-2 focus:ring-brand transition-colors"
+                >
+                  <Upload className="w-4 h-4" />
+                  Import CSV
+                </button>
               </div>
             </div>
+            {/* Import status message */}
+            {importStatus && (
+              <div
+                data-testid="import-status"
+                className={`px-6 py-3 ${importStatus.type === 'success' ? 'bg-gain/10 text-gain' : 'bg-loss/10 text-loss'}`}
+              >
+                {importStatus.message}
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-table-header">
