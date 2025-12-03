@@ -42,6 +42,40 @@ function calculateSMA(data, period) {
   return smaData;
 }
 
+// Helper function to calculate Bollinger Bands
+// Returns { upper, middle, lower } arrays
+function calculateBollingerBands(data, period = 20, multiplier = 2) {
+  if (!data || data.length < period) return { upper: [], middle: [], lower: [] };
+
+  const upper = [];
+  const middle = [];
+  const lower = [];
+
+  for (let i = period - 1; i < data.length; i++) {
+    // Calculate SMA (middle band)
+    let sum = 0;
+    for (let j = 0; j < period; j++) {
+      sum += data[i - j].close;
+    }
+    const sma = sum / period;
+
+    // Calculate standard deviation
+    let sumSquaredDiff = 0;
+    for (let j = 0; j < period; j++) {
+      const diff = data[i - j].close - sma;
+      sumSquaredDiff += diff * diff;
+    }
+    const stdDev = Math.sqrt(sumSquaredDiff / period);
+
+    // Calculate bands
+    middle.push({ time: data[i].time, value: sma });
+    upper.push({ time: data[i].time, value: sma + (multiplier * stdDev) });
+    lower.push({ time: data[i].time, value: sma - (multiplier * stdDev) });
+  }
+
+  return { upper, middle, lower };
+}
+
 // Helper function to calculate EMA (Exponential Moving Average)
 function calculateEMA(data, period) {
   if (!data || data.length < period) return [];
@@ -185,6 +219,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const macdContainerRef = useRef(null);
   const macdChartRef = useRef(null);
   const macdSeriesRefs = useRef({ macd: null, signal: null, histogram: null });
+  // Bollinger Bands refs (overlay on main chart)
+  const bbSeriesRefs = useRef({ upper: null, middle: null, lower: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tooltipData, setTooltipData] = useState(null);
@@ -198,6 +234,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [rsiPeriod] = useState(14); // Standard RSI period
   // MACD state
   const [macdEnabled, setMacdEnabled] = useState(false);
+  // Bollinger Bands state
+  const [bbEnabled, setBbEnabled] = useState(false);
 
   // Get preferences and actions from chartStore
   const getPreferences = useChartStore((state) => state.getPreferences);
@@ -449,6 +487,53 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             });
             smaSeries.setData(smaData);
             smaSeriesRefs.current.set(period, smaSeries);
+          }
+        }
+
+        // Add Bollinger Bands if enabled
+        bbSeriesRefs.current = { upper: null, middle: null, lower: null };
+        if (bbEnabled && chartData.length >= 20) {
+          const { upper, middle, lower } = calculateBollingerBands(chartData, 20, 2);
+
+          // Upper band (purple, dashed)
+          if (upper.length > 0) {
+            const upperSeries = chartInstance.addLineSeries({
+              color: '#8B5CF6',
+              lineWidth: 1,
+              lineStyle: 2, // Dashed
+              title: 'BB Upper',
+              priceLineVisible: false,
+              lastValueVisible: false,
+            });
+            upperSeries.setData(upper);
+            bbSeriesRefs.current.upper = upperSeries;
+          }
+
+          // Middle band (SMA 20, purple solid)
+          if (middle.length > 0) {
+            const middleSeries = chartInstance.addLineSeries({
+              color: '#8B5CF6',
+              lineWidth: 1,
+              title: 'BB Middle',
+              priceLineVisible: false,
+              lastValueVisible: true,
+            });
+            middleSeries.setData(middle);
+            bbSeriesRefs.current.middle = middleSeries;
+          }
+
+          // Lower band (purple, dashed)
+          if (lower.length > 0) {
+            const lowerSeries = chartInstance.addLineSeries({
+              color: '#8B5CF6',
+              lineWidth: 1,
+              lineStyle: 2, // Dashed
+              title: 'BB Lower',
+              priceLineVisible: false,
+              lastValueVisible: false,
+            });
+            lowerSeries.setData(lower);
+            bbSeriesRefs.current.lower = lowerSeries;
           }
         }
 
@@ -747,8 +832,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       rsiSeriesRef.current = null;
       macdChartRef.current = null;
       macdSeriesRefs.current = { macd: null, signal: null, histogram: null };
+      bbSeriesRefs.current = { upper: null, middle: null, lower: null };
     };
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, rsiEnabled, rsiPeriod, macdEnabled, fetchCandles]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, rsiEnabled, rsiPeriod, macdEnabled, bbEnabled, fetchCandles]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -894,7 +980,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           <button
             onClick={() => setShowIndicators(!showIndicators)}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-              showIndicators || enabledSMAs.length > 0 || rsiEnabled || macdEnabled
+              showIndicators || enabledSMAs.length > 0 || rsiEnabled || macdEnabled || bbEnabled
                 ? 'bg-brand text-white hover:bg-brand-hover'
                 : 'bg-line text-text-primary hover:bg-line-light'
             }`}
@@ -1040,6 +1126,36 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                 Active: {enabledSMAs.map(p => `SMA(${p})`).join(', ')}
               </div>
             )}
+          </div>
+
+          {/* Bollinger Bands */}
+          <div className="mt-4 pt-4 border-t border-line">
+            <div className="text-sm font-medium text-text-primary mb-2">
+              Volatility Indicators
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="bb-enabled"
+                checked={bbEnabled}
+                onChange={() => setBbEnabled(!bbEnabled)}
+                className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
+                style={{ accentColor: '#8B5CF6' }}
+              />
+              <label
+                htmlFor="bb-enabled"
+                className="text-sm text-text-primary flex items-center gap-2"
+              >
+                <span
+                  className="w-4 h-0.5 rounded"
+                  style={{ backgroundColor: '#8B5CF6' }}
+                />
+                Bollinger Bands (20, 2)
+              </label>
+            </div>
+            <div className="text-xs text-text-muted mt-2 pl-7">
+              Shows price volatility with upper/lower bands at 2 standard deviations
+            </div>
           </div>
 
           {/* RSI Indicator */}
