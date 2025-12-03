@@ -7,6 +7,7 @@ import StockDetail from './pages/StockDetail';
 import WatchlistDetail from './pages/WatchlistDetail';
 import PortfolioDetail from './pages/PortfolioDetail';
 import Alerts from './pages/Alerts';
+import Screener from './pages/Screener';
 import ToastContainer from './components/toast/ToastContainer';
 import AlertChecker from './components/AlertChecker';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
@@ -97,6 +98,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Alerts />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/screener"
+          element={
+            <ProtectedRoute>
+              <Screener />
             </ProtectedRoute>
           }
         />

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, TrendingUp, List, Settings, Briefcase } from 'lucide-react';
+import { Plus, TrendingUp, List, Settings, Briefcase, Search } from 'lucide-react';
 import { useWatchlistStore } from '../stores/watchlistStore';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { getWatchlistIcon } from './WatchlistIcons';
@@ -62,6 +62,18 @@ function Sidebar({ onCreateWatchlist }) {
           >
             <List className="w-5 h-5" />
             Portfolio
+          </button>
+
+          <button
+            onClick={() => navigate('/screener')}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              isActive('/screener')
+                ? 'bg-accent-light text-accent'
+                : 'text-text-primary hover:bg-panel-hover'
+            }`}
+          >
+            <Search className="w-5 h-5" />
+            Stock Screener
           </button>
         </div>
 

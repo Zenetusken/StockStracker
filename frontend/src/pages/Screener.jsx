@@ -1,0 +1,556 @@
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Filter,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
+  Building2,
+  DollarSign,
+  BarChart3,
+  Percent,
+  X,
+} from 'lucide-react';
+import Layout from '../components/Layout';
+import api from '../api/client';
+
+/**
+ * Stock Screener Page
+ * Features #103-107: Stock Screener Core
+ *
+ * #103: Filter by market cap range
+ * #104: Filter by P/E ratio range
+ * #105: Filter by sector
+ * #106: Filter by industry
+ * #107: Filter by price range
+ */
+
+// Market cap presets
+const MARKET_CAP_PRESETS = [
+  { label: 'All', min: undefined, max: undefined },
+  { label: 'Mega (>$200B)', min: 200000, max: undefined },
+  { label: 'Large ($10B-$200B)', min: 10000, max: 200000 },
+  { label: 'Mid ($2B-$10B)', min: 2000, max: 10000 },
+  { label: 'Small ($300M-$2B)', min: 300, max: 2000 },
+];
+
+// P/E presets
+const PE_PRESETS = [
+  { label: 'All', min: undefined, max: undefined },
+  { label: 'Low (<15)', min: undefined, max: 15 },
+  { label: 'Value (15-25)', min: 15, max: 25 },
+  { label: 'Growth (25-50)', min: 25, max: 50 },
+  { label: 'High (>50)', min: 50, max: undefined },
+];
+
+// Sectors
+const SECTORS = [
+  'All Sectors',
+  'Technology',
+  'Healthcare',
+  'Financial Services',
+  'Consumer Cyclical',
+  'Consumer Defensive',
+  'Industrials',
+  'Energy',
+  'Communication Services',
+  'Real Estate',
+  'Utilities',
+  'Basic Materials',
+];
+
+function Screener() {
+  // Filter state
+  const [filters, setFilters] = useState({
+    minMarketCap: undefined,
+    maxMarketCap: undefined,
+    minPE: undefined,
+    maxPE: undefined,
+    sector: 'all',
+    industry: '',
+    minPrice: undefined,
+    maxPrice: undefined,
+  });
+
+  // Results state
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Sort state
+  const [sortField, setSortField] = useState('marketCap');
+  const [sortDirection, setSortDirection] = useState('desc');
+
+  // Active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.minMarketCap !== undefined || filters.maxMarketCap !== undefined) count++;
+    if (filters.minPE !== undefined || filters.maxPE !== undefined) count++;
+    if (filters.sector !== 'all') count++;
+    if (filters.industry) count++;
+    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) count++;
+    return count;
+  }, [filters]);
+
+  // Fetch screener results
+  const runScreener = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams();
+      if (filters.minMarketCap !== undefined) params.append('minMarketCap', filters.minMarketCap);
+      if (filters.maxMarketCap !== undefined) params.append('maxMarketCap', filters.maxMarketCap);
+      if (filters.minPE !== undefined) params.append('minPE', filters.minPE);
+      if (filters.maxPE !== undefined) params.append('maxPE', filters.maxPE);
+      if (filters.sector && filters.sector !== 'all') params.append('sector', filters.sector);
+      if (filters.industry) params.append('industry', filters.industry);
+      if (filters.minPrice !== undefined) params.append('minPrice', filters.minPrice);
+      if (filters.maxPrice !== undefined) params.append('maxPrice', filters.maxPrice);
+      params.append('limit', '50');
+
+      const data = await api.get(`/screener?${params.toString()}`);
+      setResults(data.results || []);
+    } catch (err) {
+      console.error('Screener error:', err);
+      setError('Failed to run screener. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Run screener on mount
+  useEffect(() => {
+    runScreener();
+  }, []);
+
+  // Sort results
+  const sortedResults = useMemo(() => {
+    if (!results.length) return [];
+
+    return [...results].sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+
+      // Handle null/undefined
+      if (aVal == null) aVal = sortDirection === 'asc' ? Infinity : -Infinity;
+      if (bVal == null) bVal = sortDirection === 'asc' ? Infinity : -Infinity;
+
+      if (sortDirection === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      }
+      return aVal < bVal ? 1 : -1;
+    });
+  }, [results, sortField, sortDirection]);
+
+  // Handle sort
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  // Reset filters
+  const resetFilters = () => {
+    setFilters({
+      minMarketCap: undefined,
+      maxMarketCap: undefined,
+      minPE: undefined,
+      maxPE: undefined,
+      sector: 'all',
+      industry: '',
+      minPrice: undefined,
+      maxPrice: undefined,
+    });
+  };
+
+  // Format helpers
+  const formatMarketCap = (val) => {
+    if (val == null) return '-';
+    if (val >= 1000000) return `$${(val / 1000000).toFixed(2)}T`;
+    if (val >= 1000) return `$${(val / 1000).toFixed(1)}B`;
+    return `$${val.toFixed(0)}M`;
+  };
+
+  const formatPrice = (val) => {
+    if (val == null) return '-';
+    return `$${val.toFixed(2)}`;
+  };
+
+  const formatPercent = (val) => {
+    if (val == null) return '-';
+    const sign = val >= 0 ? '+' : '';
+    return `${sign}${val.toFixed(2)}%`;
+  };
+
+  // Sort icon component
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-text-muted" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="w-3 h-3 text-brand" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-brand" />
+    );
+  };
+
+  return (
+    <Layout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-text-primary flex items-center gap-3">
+            <Search className="w-8 h-8" />
+            Stock Screener
+          </h1>
+          <p className="text-text-muted mt-1">
+            Filter stocks by market cap, P/E ratio, sector, and more
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Filters Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-card rounded-lg shadow p-4 sticky top-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-text-primary flex items-center gap-2">
+                  <Filter className="w-5 h-5" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="px-2 py-0.5 bg-brand text-white text-xs rounded-full">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </h2>
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={resetFilters}
+                    className="text-sm text-text-muted hover:text-text-primary flex items-center gap-1"
+                  >
+                    <X className="w-4 h-4" />
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              {/* Market Cap Filter (#103) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Market Cap
+                </label>
+                <div className="space-y-2">
+                  {MARKET_CAP_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          minMarketCap: preset.min,
+                          maxMarketCap: preset.max,
+                        })
+                      }
+                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                        filters.minMarketCap === preset.min &&
+                        filters.maxMarketCap === preset.max
+                          ? 'bg-brand text-white'
+                          : 'bg-page-bg text-text-secondary hover:bg-brand/10'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* P/E Ratio Filter (#104) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4" />
+                  P/E Ratio
+                </label>
+                <div className="space-y-2">
+                  {PE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          minPE: preset.min,
+                          maxPE: preset.max,
+                        })
+                      }
+                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                        filters.minPE === preset.min && filters.maxPE === preset.max
+                          ? 'bg-brand text-white'
+                          : 'bg-page-bg text-text-secondary hover:bg-brand/10'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sector Filter (#105) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Sector
+                </label>
+                <select
+                  value={filters.sector}
+                  onChange={(e) => setFilters({ ...filters, sector: e.target.value })}
+                  className="w-full px-3 py-2 bg-page-bg border border-border rounded text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  {SECTORS.map((sector) => (
+                    <option key={sector} value={sector === 'All Sectors' ? 'all' : sector}>
+                      {sector}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Industry Filter (#106) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Industry (contains)
+                </label>
+                <input
+                  type="text"
+                  value={filters.industry}
+                  onChange={(e) => setFilters({ ...filters, industry: e.target.value })}
+                  placeholder="e.g. Software, Banks"
+                  className="w-full px-3 py-2 bg-page-bg border border-border rounded text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+              </div>
+
+              {/* Price Filter (#107) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4" />
+                  Price Range
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={filters.minPrice || ''}
+                    onChange={(e) =>
+                      setFilters({
+                        ...filters,
+                        minPrice: e.target.value ? parseFloat(e.target.value) : undefined,
+                      })
+                    }
+                    placeholder="Min"
+                    className="w-1/2 px-3 py-2 bg-page-bg border border-border rounded text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                  <input
+                    type="number"
+                    value={filters.maxPrice || ''}
+                    onChange={(e) =>
+                      setFilters({
+                        ...filters,
+                        maxPrice: e.target.value ? parseFloat(e.target.value) : undefined,
+                      })
+                    }
+                    placeholder="Max"
+                    className="w-1/2 px-3 py-2 bg-page-bg border border-border rounded text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              </div>
+
+              {/* Apply Button */}
+              <button
+                onClick={runScreener}
+                disabled={loading}
+                className="w-full py-3 bg-brand hover:bg-brand-hover text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Screening...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-5 h-5" />
+                    Run Screener
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Results */}
+          <div className="lg:col-span-3">
+            <div className="bg-card rounded-lg shadow overflow-hidden">
+              {/* Results Header */}
+              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                <div className="text-sm text-text-muted">
+                  {loading ? (
+                    'Loading...'
+                  ) : (
+                    <>
+                      <span className="font-semibold text-text-primary">{results.length}</span>{' '}
+                      stocks found
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={runScreener}
+                  disabled={loading}
+                  className="p-2 text-text-muted hover:text-text-primary hover:bg-page-bg rounded transition-colors disabled:opacity-50"
+                  title="Refresh results"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {/* Error state */}
+              {error && (
+                <div className="p-6 text-center">
+                  <p className="text-loss">{error}</p>
+                  <button
+                    onClick={runScreener}
+                    className="mt-4 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+
+              {/* Loading state */}
+              {loading && !error && (
+                <div className="p-12 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-brand mx-auto mb-4" />
+                  <p className="text-text-muted">Screening stocks...</p>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!loading && !error && results.length === 0 && (
+                <div className="p-12 text-center">
+                  <Search className="w-12 h-12 text-text-muted mx-auto mb-4" />
+                  <p className="text-text-muted">
+                    No stocks match your criteria. Try adjusting the filters.
+                  </p>
+                </div>
+              )}
+
+              {/* Results Table */}
+              {!loading && !error && results.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-page-bg">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
+                          Symbol
+                        </th>
+                        <th
+                          className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:text-text-primary"
+                          onClick={() => handleSort('currentPrice')}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            Price <SortIcon field="currentPrice" />
+                          </div>
+                        </th>
+                        <th
+                          className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:text-text-primary"
+                          onClick={() => handleSort('changePercent')}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            Change <SortIcon field="changePercent" />
+                          </div>
+                        </th>
+                        <th
+                          className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:text-text-primary"
+                          onClick={() => handleSort('marketCap')}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            Market Cap <SortIcon field="marketCap" />
+                          </div>
+                        </th>
+                        <th
+                          className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:text-text-primary"
+                          onClick={() => handleSort('peRatio')}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            P/E <SortIcon field="peRatio" />
+                          </div>
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                          Sector
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {sortedResults.map((stock) => (
+                        <tr
+                          key={stock.symbol}
+                          className="hover:bg-card-hover transition-colors"
+                        >
+                          <td className="px-4 py-4">
+                            <Link
+                              to={`/stock/${stock.symbol}`}
+                              className="flex items-center gap-3"
+                            >
+                              <div>
+                                <div className="font-semibold text-text-primary hover:text-brand transition-colors">
+                                  {stock.symbol}
+                                </div>
+                                <div className="text-xs text-text-muted truncate max-w-[150px]">
+                                  {stock.name}
+                                </div>
+                              </div>
+                            </Link>
+                          </td>
+                          <td className="px-4 py-4 text-right font-medium text-text-primary">
+                            {formatPrice(stock.currentPrice)}
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <div
+                              className={`flex items-center justify-end gap-1 font-medium ${
+                                stock.changePercent >= 0 ? 'text-gain' : 'text-loss'
+                              }`}
+                            >
+                              {stock.changePercent >= 0 ? (
+                                <TrendingUp className="w-4 h-4" />
+                              ) : (
+                                <TrendingDown className="w-4 h-4" />
+                              )}
+                              {formatPercent(stock.changePercent)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-right text-text-secondary">
+                            {formatMarketCap(stock.marketCap)}
+                          </td>
+                          <td className="px-4 py-4 text-right text-text-secondary">
+                            {stock.peRatio?.toFixed(2) || '-'}
+                          </td>
+                          <td className="px-4 py-4 text-left text-text-muted text-sm hidden lg:table-cell">
+                            {stock.sector || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+export default Screener;
