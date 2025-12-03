@@ -42,6 +42,44 @@ function calculateSMA(data, period) {
   return smaData;
 }
 
+// Helper function to calculate RSI (Relative Strength Index)
+// Uses Wilder's smoothing method (standard RSI calculation)
+function calculateRSI(data, period = 14) {
+  if (!data || data.length < period + 1) return [];
+
+  const rsiData = [];
+  const gains = [];
+  const losses = [];
+
+  // Calculate price changes
+  for (let i = 1; i < data.length; i++) {
+    const change = data[i].close - data[i - 1].close;
+    gains.push(change > 0 ? change : 0);
+    losses.push(change < 0 ? Math.abs(change) : 0);
+  }
+
+  // Calculate first average gain/loss
+  let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
+
+  // First RSI value
+  const firstRS = avgLoss === 0 ? 100 : avgGain / avgLoss;
+  const firstRSI = 100 - (100 / (1 + firstRS));
+  rsiData.push({ time: data[period].time, value: firstRSI });
+
+  // Calculate subsequent RSI values using Wilder's smoothing
+  for (let i = period; i < gains.length; i++) {
+    avgGain = ((avgGain * (period - 1)) + gains[i]) / period;
+    avgLoss = ((avgLoss * (period - 1)) + losses[i]) / period;
+
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    const rsi = 100 - (100 / (1 + rs));
+    rsiData.push({ time: data[i + 1].time, value: rsi });
+  }
+
+  return rsiData;
+}
+
 // Get available SMA periods based on timeframe
 // Ensures we only show periods that will produce meaningful SMA lines
 // These must match the periods in SMA_CONFIGS [10, 20, 50, 200]
@@ -64,6 +102,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const smaSeriesRefs = useRef(new Map()); // Map<period, series> for multiple SMAs
+  // RSI subplot refs
+  const rsiContainerRef = useRef(null);
+  const rsiChartRef = useRef(null);
+  const rsiSeriesRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tooltipData, setTooltipData] = useState(null);
@@ -72,6 +114,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [showIndicators, setShowIndicators] = useState(false);
+  // RSI state
+  const [rsiEnabled, setRsiEnabled] = useState(false);
+  const [rsiPeriod] = useState(14); // Standard RSI period
 
   // Get preferences and actions from chartStore
   const getPreferences = useChartStore((state) => state.getPreferences);
@@ -329,6 +374,96 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         // Fit content
         chartInstance.timeScale().fitContent();
 
+        // Create RSI subplot if enabled
+        const rsiContainer = rsiContainerRef.current;
+        if (rsiEnabled && rsiContainer && chartData.length >= rsiPeriod + 1) {
+          const rsiWidth = rsiContainer.clientWidth || width;
+          const rsiHeight = 150;
+
+          const rsiChart = createChart(rsiContainer, {
+            width: rsiWidth,
+            height: rsiHeight,
+            layout: {
+              background: { type: 'solid', color: CHART_BACKGROUND_COLOR },
+              textColor: '#374151',
+            },
+            grid: {
+              vertLines: { color: '#d1d5db' },
+              horzLines: { color: '#d1d5db' },
+            },
+            crosshair: { mode: 1 },
+            rightPriceScale: {
+              borderColor: '#9ca3af',
+              scaleMargins: { top: 0.1, bottom: 0.1 },
+            },
+            timeScale: {
+              borderColor: '#9ca3af',
+              timeVisible: true,
+              secondsVisible: false,
+              visible: true,
+            },
+          });
+
+          rsiChartRef.current = rsiChart;
+
+          // Add RSI line series
+          const rsiSeries = rsiChart.addLineSeries({
+            color: '#8B5CF6', // Purple
+            lineWidth: 2,
+            title: `RSI(${rsiPeriod})`,
+            priceLineVisible: false,
+            lastValueVisible: true,
+          });
+
+          const rsiData = calculateRSI(chartData, rsiPeriod);
+          rsiSeries.setData(rsiData);
+          rsiSeriesRef.current = rsiSeries;
+
+          // Add overbought line at 70
+          rsiSeries.createPriceLine({
+            price: 70,
+            color: '#EF4444', // Red
+            lineWidth: 1,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: 'Overbought',
+          });
+
+          // Add oversold line at 30
+          rsiSeries.createPriceLine({
+            price: 30,
+            color: '#10B981', // Green
+            lineWidth: 1,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: 'Oversold',
+          });
+
+          // Add middle line at 50
+          rsiSeries.createPriceLine({
+            price: 50,
+            color: '#9CA3AF', // Gray
+            lineWidth: 1,
+            lineStyle: 1, // Dotted
+            axisLabelVisible: false,
+          });
+
+          // Sync time scales
+          chartInstance.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+            if (range && rsiChartRef.current) {
+              rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
+            }
+          });
+
+          rsiChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+            if (range && chartRef.current) {
+              chartRef.current.timeScale().setVisibleLogicalRange(range);
+            }
+          });
+
+          rsiChart.timeScale().fitContent();
+        }
+
         // Setup crosshair handler
         crosshairHandler = (param) => {
           if (!param.time || !param.point || !seriesInstance) {
@@ -402,11 +537,22 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         }
       }
 
+      // Cleanup RSI chart
+      if (rsiChartRef.current) {
+        try {
+          rsiChartRef.current.remove();
+        } catch {
+          // Ignore
+        }
+      }
+
       chartRef.current = null;
       seriesRef.current = null;
       smaSeriesRefs.current.clear();
+      rsiChartRef.current = null;
+      rsiSeriesRef.current = null;
     };
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, fetchCandles]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, rsiEnabled, rsiPeriod, fetchCandles]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -552,7 +698,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           <button
             onClick={() => setShowIndicators(!showIndicators)}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-              showIndicators || enabledSMAs.length > 0
+              showIndicators || enabledSMAs.length > 0 || rsiEnabled
                 ? 'bg-brand text-white hover:bg-brand-hover'
                 : 'bg-line text-text-primary hover:bg-line-light'
             }`}
@@ -700,6 +846,36 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             )}
           </div>
 
+          {/* RSI Indicator */}
+          <div className="mt-4 pt-4 border-t border-line">
+            <div className="text-sm font-medium text-text-primary mb-2">
+              Momentum Indicators
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="rsi-enabled"
+                checked={rsiEnabled}
+                onChange={() => setRsiEnabled(!rsiEnabled)}
+                className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
+                style={{ accentColor: '#8B5CF6' }}
+              />
+              <label
+                htmlFor="rsi-enabled"
+                className="text-sm text-text-primary flex items-center gap-2"
+              >
+                <span
+                  className="w-4 h-0.5 rounded"
+                  style={{ backgroundColor: '#8B5CF6' }}
+                />
+                RSI ({rsiPeriod})
+              </label>
+            </div>
+            <div className="text-xs text-text-muted mt-2 pl-7">
+              Relative Strength Index - shows overbought ({'>'}70) and oversold ({'<'}30) conditions
+            </div>
+          </div>
+
           {/* Close button */}
           <div className="mt-4 pt-4 border-t border-line">
             <button
@@ -775,6 +951,22 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         className="w-full"
         style={{ height: isFullscreen ? `${window.innerHeight - 150}px` : '500px' }}
       />
+
+      {/* RSI Subplot Container */}
+      {rsiEnabled && (
+        <div className="mt-2">
+          <div className="text-xs text-text-muted mb-1 flex items-center gap-2">
+            <span className="font-medium">RSI({rsiPeriod})</span>
+            <span className="text-loss">70 Overbought</span>
+            <span className="text-gain">30 Oversold</span>
+          </div>
+          <div
+            ref={rsiContainerRef}
+            className="w-full rounded-lg"
+            style={{ height: '150px', backgroundColor: CHART_BACKGROUND_COLOR }}
+          />
+        </div>
+      )}
     </div>
   );
 
