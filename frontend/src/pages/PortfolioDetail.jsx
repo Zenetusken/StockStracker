@@ -17,6 +17,7 @@ function PortfolioDetail() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+  const [transactionFilter, setTransactionFilter] = useState('all');
 
   // Get holdings symbols for quote subscription
   const holdingSymbols = useMemo(() => {
@@ -84,6 +85,13 @@ function PortfolioDetail() {
       holdingsCount: holdings.length
     };
   }, [portfolio, quotes]);
+
+  // Filter transactions
+  const filteredTransactions = useMemo(() => {
+    if (!portfolio?.recent_transactions) return [];
+    if (transactionFilter === 'all') return portfolio.recent_transactions;
+    return portfolio.recent_transactions.filter(tx => tx.type === transactionFilter);
+  }, [portfolio?.recent_transactions, transactionFilter]);
 
   // Format helpers
   const formatCurrency = (value) => {
@@ -304,8 +312,20 @@ function PortfolioDetail() {
         {/* Recent Transactions */}
         {portfolio.recent_transactions?.length > 0 && (
           <div className="mt-8 bg-card rounded-lg border border-line overflow-hidden">
-            <div className="px-6 py-4 border-b border-line">
+            <div className="px-6 py-4 border-b border-line flex items-center justify-between">
               <h2 className="text-lg font-semibold text-text-primary">Recent Transactions</h2>
+              <select
+                data-testid="transaction-filter"
+                value={transactionFilter}
+                onChange={(e) => setTransactionFilter(e.target.value)}
+                className="px-3 py-1.5 border border-line rounded-md text-sm bg-page-bg text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                <option value="all">All Types</option>
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+                <option value="dividend">Dividend</option>
+                <option value="split">Split</option>
+              </select>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -321,7 +341,7 @@ function PortfolioDetail() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {portfolio.recent_transactions.map((tx) => (
+                  {filteredTransactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-card-hover">
                       <td className="px-6 py-4 text-text-secondary text-sm">
                         {new Date(tx.executed_at).toLocaleDateString()}
