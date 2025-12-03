@@ -231,6 +231,39 @@ router.get('/:id/holdings', (req, res) => {
 });
 
 /**
+ * GET /api/portfolios/:id/holdings/:symbol/tax-lots
+ * Get tax lots for a specific holding
+ */
+router.get('/:id/holdings/:symbol/tax-lots', (req, res) => {
+  try {
+    const { id, symbol } = req.params;
+
+    // Verify ownership
+    const portfolio = db.prepare(`
+      SELECT * FROM portfolios
+      WHERE id = ? AND user_id = ?
+    `).get(id, req.session.userId);
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    const taxLots = db.prepare(`
+      SELECT tl.*, t.executed_at as purchase_date, t.notes
+      FROM tax_lots tl
+      LEFT JOIN transactions t ON tl.transaction_id = t.id
+      WHERE tl.portfolio_id = ? AND tl.symbol = ?
+      ORDER BY tl.purchase_date ASC
+    `).all(id, symbol.toUpperCase());
+
+    res.json(taxLots);
+  } catch (error) {
+    console.error('[Portfolios] Error fetching tax lots:', error);
+    res.status(500).json({ error: 'Failed to fetch tax lots' });
+  }
+});
+
+/**
  * GET /api/portfolios/:id/transactions
  * Get all transactions for a portfolio
  */
