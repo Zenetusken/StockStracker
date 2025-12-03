@@ -370,14 +370,15 @@ class AlphaVantageService {
         throw new Error('No company data returned from Alpha Vantage');
       }
 
-      // Convert to Finnhub profile format
+      // Convert to Finnhub profile format with additional metrics
       return {
         name: data.Name || symbol,
         ticker: data.Symbol,
         exchange: data.Exchange,
         country: data.Country,
         currency: data.Currency,
-        finnhubIndustry: data.Industry || data.Sector,
+        sector: data.Sector || null,
+        finnhubIndustry: data.Industry || null,
         weburl: null, // Alpha Vantage doesn't provide website
         marketCapitalization: data.MarketCapitalization
           ? parseFloat(data.MarketCapitalization) / 1e6  // Convert to millions like Finnhub
@@ -385,9 +386,17 @@ class AlphaVantageService {
         logo: null, // Alpha Vantage doesn't provide logos
         ipo: data.IPODate || null,
         phone: data.Phone || null,
-        shareOutstanding: data.SharesOutstanding
+        sharesOutstanding: data.SharesOutstanding
           ? parseFloat(data.SharesOutstanding) / 1e6  // Convert to millions
-          : null
+          : null,
+        // Financial metrics (#92)
+        peRatio: data.PERatio ? parseFloat(data.PERatio) : null,
+        forwardPE: data.ForwardPE ? parseFloat(data.ForwardPE) : null,
+        eps: data.EPS ? parseFloat(data.EPS) : null,
+        beta: data.Beta ? parseFloat(data.Beta) : null,
+        fiftyTwoWeekHigh: data['52WeekHigh'] ? parseFloat(data['52WeekHigh']) : null,
+        fiftyTwoWeekLow: data['52WeekLow'] ? parseFloat(data['52WeekLow']) : null,
+        dividendYield: data.DividendYield ? parseFloat(data.DividendYield) : null,
       };
     });
   }

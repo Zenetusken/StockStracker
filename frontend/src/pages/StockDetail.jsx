@@ -188,15 +188,28 @@ function StockDetail() {
           }`}
         >
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-text-primary mb-1">
-                {symbol}
-              </h1>
-              {profile?.name && (
-                <p className="text-lg text-text-muted">
-                  {profile.name}
-                </p>
+            <div className="flex items-center gap-4">
+              {/* Company Logo (#88) */}
+              {profile?.logo && (
+                <img
+                  src={profile.logo}
+                  alt={`${profile.name || symbol} logo`}
+                  className="w-16 h-16 object-contain rounded-lg bg-white p-1"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
               )}
+              <div>
+                <h1 className="text-3xl font-bold text-text-primary mb-1">
+                  {symbol}
+                </h1>
+                {profile?.name && (
+                  <p className="text-lg text-text-muted">
+                    {profile.name}
+                  </p>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setIsAddToWatchlistModalOpen(true)}
@@ -293,7 +306,8 @@ function StockDetail() {
             <h2 className="text-2xl font-bold text-text-primary mb-4">
               Company Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Basic Info Row */}
               <div>
                 <p className="text-sm text-text-muted mb-1">Exchange</p>
                 <p className="text-lg text-text-primary font-semibold">
@@ -307,9 +321,9 @@ function StockDetail() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-text-muted mb-1">Market Cap</p>
+                <p className="text-sm text-text-muted mb-1">Sector</p>
                 <p className="text-lg text-text-primary font-semibold">
-                  {profile.marketCapitalization ? formatLargeNumber(profile.marketCapitalization * 1e6) : '—'}
+                  {profile.sector || '—'}
                 </p>
               </div>
               <div>
@@ -318,14 +332,64 @@ function StockDetail() {
                   {profile.finnhubIndustry || '—'}
                 </p>
               </div>
+
+              {/* Financial Metrics Row (#92) */}
+              <div>
+                <p className="text-sm text-text-muted mb-1">Market Cap</p>
+                <p className="text-lg text-text-primary font-semibold">
+                  {profile.marketCapitalization ? formatLargeNumber(profile.marketCapitalization * 1e6) : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-text-muted mb-1">P/E Ratio</p>
+                <p className="text-lg text-text-primary font-semibold">
+                  {profile.peRatio ? profile.peRatio.toFixed(2) : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-text-muted mb-1">EPS</p>
+                <p className="text-lg text-text-primary font-semibold font-mono">
+                  {profile.eps ? `$${profile.eps.toFixed(2)}` : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-text-muted mb-1">Beta</p>
+                <p className="text-lg text-text-primary font-semibold">
+                  {profile.beta ? profile.beta.toFixed(2) : '—'}
+                </p>
+              </div>
+
+              {/* 52-Week Range Row */}
+              <div>
+                <p className="text-sm text-text-muted mb-1">52-Week High</p>
+                <p className="text-lg text-text-primary font-semibold font-mono">
+                  {profile.fiftyTwoWeekHigh ? formatPrice(profile.fiftyTwoWeekHigh) : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-text-muted mb-1">52-Week Low</p>
+                <p className="text-lg text-text-primary font-semibold font-mono">
+                  {profile.fiftyTwoWeekLow ? formatPrice(profile.fiftyTwoWeekLow) : '—'}
+                </p>
+              </div>
+              {profile.dividendYield !== null && profile.dividendYield !== undefined && (
+                <div>
+                  <p className="text-sm text-text-muted mb-1">Dividend Yield</p>
+                  <p className="text-lg text-text-primary font-semibold">
+                    {(profile.dividendYield * 100).toFixed(2)}%
+                  </p>
+                </div>
+              )}
+
+              {/* Website */}
               {profile.weburl && (
-                <div className="md:col-span-2">
+                <div className="col-span-2 md:col-span-4 pt-2 border-t border-border">
                   <p className="text-sm text-text-muted mb-1">Website</p>
                   <a
                     href={profile.weburl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-lg text-brand hover:underline"
+                    className="text-brand hover:underline"
                   >
                     {profile.weburl}
                   </a>

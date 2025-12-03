@@ -429,8 +429,9 @@ class YahooFinanceService {
     try {
       await this.throttle();
 
-      // Use quoteSummary endpoint for profile data
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=assetProfile,summaryProfile,price`;
+      // Use quoteSummary endpoint for profile data with additional modules for financial metrics
+      const modules = 'assetProfile,summaryProfile,price,summaryDetail,defaultKeyStatistics';
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
 
       const response = await fetch(url, {
         headers: {
@@ -463,6 +464,8 @@ class YahooFinanceService {
 
       const assetProfile = result.assetProfile || {};
       const price = result.price || {};
+      const summaryDetail = result.summaryDetail || {};
+      const keyStats = result.defaultKeyStatistics || {};
 
       return {
         name: price.longName || price.shortName || symbol,
@@ -470,10 +473,20 @@ class YahooFinanceService {
         exchange: price.exchangeName || price.exchange,
         country: assetProfile.country,
         currency: price.currency,
-        finnhubIndustry: assetProfile.industry || assetProfile.sector,
+        sector: assetProfile.sector || null,
+        finnhubIndustry: assetProfile.industry || null,
         weburl: assetProfile.website,
         marketCapitalization: price.marketCap?.raw ? price.marketCap.raw / 1e6 : null, // Convert to millions like Finnhub
         logo: null, // Yahoo doesn't provide logo URLs easily
+        // Financial metrics (#92)
+        peRatio: summaryDetail.trailingPE?.raw || keyStats.trailingPE?.raw || null,
+        forwardPE: summaryDetail.forwardPE?.raw || keyStats.forwardPE?.raw || null,
+        eps: keyStats.trailingEps?.raw || null,
+        beta: summaryDetail.beta?.raw || keyStats.beta?.raw || null,
+        fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || null,
+        fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || null,
+        dividendYield: summaryDetail.dividendYield?.raw || null,
+        sharesOutstanding: keyStats.sharesOutstanding?.raw ? keyStats.sharesOutstanding.raw / 1e6 : null, // Convert to millions
       };
     } catch (error) {
       console.error(`[Yahoo] Profile error for ${symbol}:`, error.message);

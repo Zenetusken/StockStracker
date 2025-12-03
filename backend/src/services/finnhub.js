@@ -193,45 +193,78 @@ class FinnhubService {
   }
 
   /**
-   * Get company profile
-   * Returns: { name, ticker, country, currency, exchange, ipo, marketCapitalization, ... }
+   * Get company profile with merged data from multiple providers
+   * Returns: { name, ticker, country, currency, exchange, ipo, marketCapitalization, peRatio, eps, beta, ... }
    *
-   * Fallback Order:
-   * 1. Finnhub (if API key available)
-   * 2. Yahoo Finance (free, no API key required)
-   * 3. Alpha Vantage (if API key available) - last resort due to 25 calls/day limit
-   * 4. Error - no mock data
+   * Strategy:
+   * 1. Try Yahoo Finance first (has the most complete data with P/E, Beta, EPS, 52-week)
+   * 2. If Yahoo fails, try Finnhub for basic profile (if API key available)
+   * 3. If Finnhub has logo but Yahoo doesn't, merge the logo
+   * 4. Alpha Vantage as last resort
    */
   async getCompanyProfile(symbol) {
     const upperSymbol = symbol.toUpperCase();
     const cacheKey = `profile:${upperSymbol}`;
     return this.getCached(cacheKey, async () => {
-      // 1. Try Finnhub first (if we have a valid API key)
+      let baseProfile = null;
+      let finnhubProfile = null;
+
+      // 1. Try Yahoo Finance first (has the most complete data)
+      try {
+        console.log(`Trying Yahoo Finance profile for ${upperSymbol}...`);
+        const yahooProfile = await yahooFinanceService.getProfile(upperSymbol);
+        if (yahooProfile && yahooProfile.name) {
+          console.log(`✓ Using Yahoo Finance profile for ${upperSymbol}`);
+          baseProfile = yahooProfile;
+        }
+      } catch (yahooError) {
+        console.log(`Yahoo Finance profile error for ${upperSymbol}: ${yahooError.message}`);
+      }
+
+      // 2. Try Finnhub to get logo (Yahoo doesn't provide logos)
       if (this.hasApiKey()) {
         try {
-          const profile = await this.request('/stock/profile2', { symbol: upperSymbol });
-          if (profile && profile.name) {
-            console.log(`✓ Using Finnhub profile for ${upperSymbol}`);
-            return profile;
+          finnhubProfile = await this.request('/stock/profile2', { symbol: upperSymbol });
+          if (finnhubProfile && finnhubProfile.name) {
+            console.log(`✓ Finnhub profile retrieved for ${upperSymbol}`);
+
+            // If we don't have a base profile yet, use Finnhub's
+            if (!baseProfile) {
+              baseProfile = {
+                name: finnhubProfile.name,
+                ticker: finnhubProfile.ticker || upperSymbol,
+                exchange: finnhubProfile.exchange,
+                country: finnhubProfile.country,
+                currency: finnhubProfile.currency,
+                sector: null,
+                finnhubIndustry: finnhubProfile.finnhubIndustry,
+                weburl: finnhubProfile.weburl,
+                marketCapitalization: finnhubProfile.marketCapitalization,
+                logo: finnhubProfile.logo,
+                ipo: finnhubProfile.ipo,
+              };
+            } else {
+              // Merge Finnhub's logo into Yahoo's profile
+              if (finnhubProfile.logo && !baseProfile.logo) {
+                baseProfile.logo = finnhubProfile.logo;
+              }
+              // Use Finnhub's industry if Yahoo didn't provide one
+              if (finnhubProfile.finnhubIndustry && !baseProfile.finnhubIndustry) {
+                baseProfile.finnhubIndustry = finnhubProfile.finnhubIndustry;
+              }
+            }
           }
         } catch (finnhubError) {
           console.log(`Finnhub profile not available for ${upperSymbol}: ${finnhubError.message}`);
         }
       }
 
-      // 2. Try Yahoo Finance (free, no API key required)
-      try {
-        console.log(`Trying Yahoo Finance profile for ${upperSymbol}...`);
-        const yahooProfile = await yahooFinanceService.getProfile(upperSymbol);
-        if (yahooProfile && yahooProfile.name) {
-          console.log(`✓ Using Yahoo Finance profile for ${upperSymbol}`);
-          return yahooProfile;
-        }
-      } catch (yahooError) {
-        console.log(`Yahoo Finance profile error for ${upperSymbol}: ${yahooError.message}`);
+      // 3. If we have a profile, return it
+      if (baseProfile) {
+        return baseProfile;
       }
 
-      // 3. Try Alpha Vantage (last resort - only 25 calls/day on free tier)
+      // 4. Try Alpha Vantage as last resort
       if (alphaVantageService.hasApiKey()) {
         try {
           console.log(`Trying Alpha Vantage profile for ${upperSymbol}...`);
@@ -245,7 +278,7 @@ class FinnhubService {
         }
       }
 
-      // 4. Error - no mock data fallback
+      // 5. Error - no mock data fallback
       console.error(`❌ No profile data available for ${upperSymbol} - all providers exhausted`);
       throw new Error(`No company profile available for ${upperSymbol}. All API providers exhausted or rate limited.`);
     }, this.searchCacheTimeout);
