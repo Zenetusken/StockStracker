@@ -458,6 +458,37 @@ router.post('/:id/transactions', (req, res) => {
         SET cash_balance = cash_balance + ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(dividendAmount, id);
+
+    } else if (type === 'split') {
+      // Stock split: shares = new ratio numerator, price = old ratio denominator
+      // e.g., 2:1 split means shares=2, price=1, ratio=2 (shares double, cost halves)
+      // e.g., 1:2 reverse split means shares=1, price=2, ratio=0.5 (shares halve, cost doubles)
+      const splitRatio = shares / price;
+
+      const existingHolding = db.prepare(`
+        SELECT * FROM portfolio_holdings
+        WHERE portfolio_id = ? AND symbol = ?
+      `).get(id, upperSymbol);
+
+      if (existingHolding) {
+        const newTotalShares = existingHolding.total_shares * splitRatio;
+        const newAverageCost = existingHolding.average_cost / splitRatio;
+
+        db.prepare(`
+          UPDATE portfolio_holdings
+          SET total_shares = ?, average_cost = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(newTotalShares, newAverageCost, existingHolding.id);
+
+        // Update all tax lots for this symbol
+        db.prepare(`
+          UPDATE tax_lots
+          SET shares_remaining = shares_remaining * ?,
+              cost_per_share = cost_per_share / ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE portfolio_id = ? AND symbol = ? AND shares_remaining > 0
+        `).run(splitRatio, splitRatio, id, upperSymbol);
+      }
     }
 
     // Fetch the created transaction

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, DollarSign, Divide } from 'lucide-react';
 import { usePortfolioStore } from '../stores/portfolioStore';
 
 function AddTransactionModal({ isOpen, onClose, portfolioId, portfolioCash = 0, onSuccess }) {
@@ -167,6 +167,19 @@ function AddTransactionModal({ isOpen, onClose, portfolioId, portfolioCash = 0, 
                 <DollarSign className="w-4 h-4" />
                 Dividend
               </button>
+              <button
+                type="button"
+                onClick={() => setType('split')}
+                data-testid="type-split"
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-lg border transition-colors ${
+                  type === 'split'
+                    ? 'border-text-secondary bg-text-secondary/10 text-text-primary'
+                    : 'border-line bg-page-bg text-text-secondary hover:bg-card-hover'
+                }`}
+              >
+                <Divide className="w-4 h-4" />
+                Split
+              </button>
             </div>
           </div>
 
@@ -196,14 +209,14 @@ function AddTransactionModal({ isOpen, onClose, portfolioId, portfolioCash = 0, 
                 htmlFor="tx-shares"
                 className="block text-sm font-medium text-text-primary mb-2"
               >
-                Shares *
+                {type === 'split' ? 'New Ratio *' : 'Shares *'}
               </label>
               <input
                 id="tx-shares"
                 type="number"
                 value={shares}
                 onChange={(e) => setShares(e.target.value)}
-                placeholder="10"
+                placeholder={type === 'split' ? '2' : '10'}
                 min="0.001"
                 step="any"
                 className="w-full px-3 py-2 border border-line rounded-lg bg-page-bg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
@@ -214,21 +227,23 @@ function AddTransactionModal({ isOpen, onClose, portfolioId, portfolioCash = 0, 
                 htmlFor="tx-price"
                 className="block text-sm font-medium text-text-primary mb-2"
               >
-                {type === 'dividend' ? 'Dividend per Share *' : 'Price per Share *'}
+                {type === 'split' ? 'Old Ratio *' : type === 'dividend' ? 'Dividend per Share *' : 'Price per Share *'}
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
-                  $
-                </span>
+                {type !== 'split' && (
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
+                    $
+                  </span>
+                )}
                 <input
                   id="tx-price"
                   type="number"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  placeholder={type === 'dividend' ? '0.92' : '150.00'}
+                  placeholder={type === 'split' ? '1' : type === 'dividend' ? '0.92' : '150.00'}
                   min="0"
-                  step="0.01"
-                  className="w-full pl-7 pr-3 py-2 border border-line rounded-lg bg-page-bg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
+                  step={type === 'split' ? '1' : '0.01'}
+                  className={`w-full pr-3 py-2 border border-line rounded-lg bg-page-bg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand ${type === 'split' ? 'px-3' : 'pl-7'}`}
                 />
               </div>
             </div>
@@ -302,7 +317,7 @@ function AddTransactionModal({ isOpen, onClose, portfolioId, portfolioCash = 0, 
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-text-secondary">Type:</span>
-                <span className={`font-medium ${type === 'buy' ? 'text-gain' : type === 'dividend' ? 'text-brand' : 'text-loss'}`}>
+                <span className={`font-medium ${type === 'buy' ? 'text-gain' : type === 'dividend' ? 'text-brand' : type === 'split' ? 'text-text-primary' : 'text-loss'}`}>
                   {type.toUpperCase()}
                 </span>
               </div>
@@ -313,9 +328,9 @@ function AddTransactionModal({ isOpen, onClose, portfolioId, portfolioCash = 0, 
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-text-secondary">Total:</span>
+                <span className="text-text-secondary">{type === 'split' ? 'Split Ratio:' : 'Total:'}</span>
                 <span className="text-text-primary font-medium">
-                  ${totalCost.toFixed(2)}
+                  {type === 'split' ? `${shares || '?'}:${price || '?'}` : `$${totalCost.toFixed(2)}`}
                 </span>
               </div>
               {type === 'buy' && (
@@ -347,11 +362,13 @@ function AddTransactionModal({ isOpen, onClose, portfolioId, portfolioCash = 0, 
                   ? 'bg-gain hover:bg-gain/90'
                   : type === 'dividend'
                   ? 'bg-brand hover:bg-brand/90'
+                  : type === 'split'
+                  ? 'bg-text-secondary hover:bg-text-secondary/90'
                   : 'bg-loss hover:bg-loss/90'
               }`}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Processing...' : type === 'dividend' ? 'Record Dividend' : `${type === 'buy' ? 'Buy' : 'Sell'} Shares`}
+              {isSubmitting ? 'Processing...' : type === 'dividend' ? 'Record Dividend' : type === 'split' ? 'Record Split' : `${type === 'buy' ? 'Buy' : 'Sell'} Shares`}
             </button>
           </div>
         </form>
