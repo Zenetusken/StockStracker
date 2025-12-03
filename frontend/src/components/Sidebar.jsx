@@ -31,14 +31,18 @@ function Sidebar({ onCreateWatchlist }) {
   };
 
   return (
-    <aside className="w-64 bg-panel border-r-2 border-line h-screen flex flex-col shadow-sm">
+    <aside
+      className="w-64 bg-panel border-r-2 border-line h-screen flex flex-col shadow-sm"
+      role="complementary"
+      aria-label="Site sidebar"
+    >
       {/* Sidebar Header - aligns with main header */}
       <div className="px-4 py-4 border-b border-line">
-        <h2 className="text-lg font-semibold text-text-primary tracking-tight">Navigation</h2>
+        <h2 className="text-lg font-semibold text-text-primary tracking-tight" id="nav-heading">Navigation</h2>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto" role="navigation" aria-labelledby="nav-heading">
         <div className="mb-6">
           <button
             onClick={() => navigate('/dashboard')}

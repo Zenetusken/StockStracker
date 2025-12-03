@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { useEffect, useMemo, useRef } from 'react';
 import { useChartStore } from './chartStore';
+import api from '../api/client';
 
-const SSE_BASE_URL = 'http://localhost:3001/api/stream/quotes';
-const BATCH_API_URL = 'http://localhost:3001/api/quotes/batch';
+// SSE requires full URL for EventSource (cannot use api client)
+const SSE_BASE_URL = '/api/stream/quotes';
 const QUOTE_STALE_MS = 15000; // 15 seconds
 const SSE_RECONNECT_BASE_DELAY = 1000;
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -161,15 +162,8 @@ export const useQuoteStore = create((set, get) => ({
     if (staleSymbols.length === 0) return;
 
     try {
-      const response = await fetch(BATCH_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ symbols: staleSymbols }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      const data = await api.post('/quotes/batch', { symbols: staleSymbols });
+      if (data) {
         get().updateQuotes(data);
       }
     } catch (err) {

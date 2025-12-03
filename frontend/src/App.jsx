@@ -13,6 +13,7 @@ import NotFound from './pages/NotFound';
 import ToastContainer from './components/toast/ToastContainer';
 import AlertChecker from './components/AlertChecker';
 import NetworkStatus from './components/NetworkStatus';
+import SkipToMain from './components/SkipToMain';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
 import { useAuthStore } from './stores/authStore';
 import { api } from './api/client';
@@ -50,6 +51,7 @@ function App() {
 
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <SkipToMain />
       <RateLimitEventsProvider>
         <ToastContainer />
         <AlertChecker />

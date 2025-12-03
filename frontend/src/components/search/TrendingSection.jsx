@@ -93,8 +93,8 @@ function TrendingSection({ onSelectStock, className = '' }) {
   useEffect(() => {
     fetchTrending();
 
-    // Refresh every 2 minutes
-    const interval = setInterval(() => fetchTrending(true), 2 * 60 * 1000);
+    // Refresh every 5 minutes (reduced from 2 min to conserve API calls)
+    const interval = setInterval(() => fetchTrending(true), 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchTrending]);
 

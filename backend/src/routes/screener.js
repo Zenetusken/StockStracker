@@ -42,50 +42,72 @@ const SECTORS = [
 
 // Cache for stock profiles to reduce API calls
 const profileCache = new Map();
-const CACHE_TTL = 3600000; // 1 hour
+const CACHE_TTL = 14400000; // 4 hours (profile data rarely changes)
+
+// Request deduplication: prevents concurrent duplicate API calls for same symbol
+const pendingProfileRequests = new Map();
 
 /**
- * Get cached profile or fetch from API
+ * Get cached profile or fetch from API with request deduplication
+ * Prevents concurrent duplicate API calls for the same symbol
  */
 async function getProfile(symbol) {
+  // Check cache first
   const cached = profileCache.get(symbol);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data;
   }
 
-  try {
-    const profile = await finnhub.getCompanyProfile(symbol);
-    if (profile) {
-      // Get quote for current price and volume
-      const quote = await finnhub.getQuote(symbol);
-
-      // Calculate 52-week proximity (#109)
-      const currentPrice = quote?.c || 0;
-      const high52 = profile.fiftyTwoWeekHigh || profile.weekHigh52 || 0;
-      const low52 = profile.fiftyTwoWeekLow || profile.weekLow52 || 0;
-      const range52 = high52 - low52;
-      const proximityToHigh = range52 > 0 ? ((high52 - currentPrice) / range52) * 100 : 0;
-      const proximityToLow = range52 > 0 ? ((currentPrice - low52) / range52) * 100 : 0;
-
-      const enrichedProfile = {
-        ...profile,
-        symbol,
-        currentPrice: quote?.c || null,
-        change: quote ? quote.c - quote.pc : null,
-        changePercent: quote && quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : null,
-        volume: quote?.v || 0,  // #108
-        fiftyTwoWeekHigh: high52,
-        fiftyTwoWeekLow: low52,
-        proximityToHigh,  // #109
-        proximityToLow,   // #109
-      };
-      profileCache.set(symbol, { data: enrichedProfile, timestamp: Date.now() });
-      return enrichedProfile;
-    }
-  } catch (error) {
-    console.log(`[Screener] Error fetching profile for ${symbol}:`, error.message);
+  // Check if there's already a pending request for this symbol
+  if (pendingProfileRequests.has(symbol)) {
+    return pendingProfileRequests.get(symbol);
   }
-  return null;
+
+  // Create the request promise and store it
+  const requestPromise = (async () => {
+    try {
+      // Fetch profile and quote in parallel (both are deduplicated at finnhub level)
+      const [profile, quote] = await Promise.all([
+        finnhub.getCompanyProfile(symbol),
+        finnhub.getQuote(symbol),
+      ]);
+
+      if (profile) {
+        // Calculate 52-week proximity (#109)
+        const currentPrice = quote?.c || 0;
+        const high52 = profile.fiftyTwoWeekHigh || profile.weekHigh52 || 0;
+        const low52 = profile.fiftyTwoWeekLow || profile.weekLow52 || 0;
+        const range52 = high52 - low52;
+        const proximityToHigh = range52 > 0 ? ((high52 - currentPrice) / range52) * 100 : 0;
+        const proximityToLow = range52 > 0 ? ((currentPrice - low52) / range52) * 100 : 0;
+
+        const enrichedProfile = {
+          ...profile,
+          symbol,
+          currentPrice: quote?.c || null,
+          change: quote ? quote.c - quote.pc : null,
+          changePercent: quote && quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : null,
+          volume: quote?.v || 0,  // #108
+          fiftyTwoWeekHigh: high52,
+          fiftyTwoWeekLow: low52,
+          proximityToHigh,  // #109
+          proximityToLow,   // #109
+        };
+        profileCache.set(symbol, { data: enrichedProfile, timestamp: Date.now() });
+        return enrichedProfile;
+      }
+      return null;
+    } catch (error) {
+      console.log(`[Screener] Error fetching profile for ${symbol}:`, error.message);
+      return null;
+    } finally {
+      // Clean up pending request
+      pendingProfileRequests.delete(symbol);
+    }
+  })();
+
+  pendingProfileRequests.set(symbol, requestPromise);
+  return requestPromise;
 }
 
 /**

@@ -60,7 +60,7 @@ function Layout({ children }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-panel shadow-sm border-b-2 border-line">
+        <header className="bg-panel shadow-sm border-b-2 border-line" role="banner" aria-label="Site header">
           <div className="px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between mb-4">
               <LogoFull size="md" />
@@ -95,7 +95,13 @@ function Layout({ children }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
+        <main
+          id="main-content"
+          className="flex-1 overflow-auto"
+          tabIndex={-1}
+          role="main"
+          aria-label="Main content"
+        >
           {children}
         </main>
       </div>

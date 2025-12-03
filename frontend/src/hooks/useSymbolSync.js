@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-
-const API_BASE = 'http://localhost:3001/api';
+import api from '../api/client';
 
 /**
  * useSymbolSync Hook
@@ -20,15 +19,7 @@ export default function useSymbolSync() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/symbols/status`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch symbol status');
-      }
-
-      const data = await response.json();
+      const data = await api.get('/symbols/status');
       setStatus(data);
       return data;
     } catch (err) {
@@ -48,21 +39,8 @@ export default function useSymbolSync() {
     setError(null);
 
     try {
-      const url = new URL(`${API_BASE}/symbols/sync`);
-      if (refresh) {
-        url.searchParams.append('refresh', 'true');
-      }
-
-      const response = await fetch(url.toString(), {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to sync symbols');
-      }
+      const endpoint = refresh ? '/symbols/sync?refresh=true' : '/symbols/sync';
+      const data = await api.post(endpoint);
 
       // Refresh status after successful sync
       await fetchStatus();

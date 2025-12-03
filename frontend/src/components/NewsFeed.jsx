@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Newspaper, AlertCircle, RefreshCw, Loader2, Filter } from 'lucide-react';
 import NewsCard from './NewsCard';
-import api from '../api/client';
+import { useNewsStore } from '../stores/newsStore';
 
 /**
  * NewsFeed Component
@@ -30,7 +30,11 @@ function NewsFeed({
   pageSize = 10,
   showFilters = true,
 }) {
-  const [news, setNews] = useState([]);
+  // Use newsStore for cached data fetching
+  const fetchNewsFromStore = useNewsStore((state) => state.fetchNews);
+
+  // Local state for UI (pagination, category selection)
+  const [displayedNews, setDisplayedNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
@@ -46,11 +50,11 @@ function NewsFeed({
   const allArticlesRef = useRef([]);
   const displayedCountRef = useRef(0);
 
-  // Fetch news from API
-  const fetchNews = useCallback(async (reset = false) => {
+  // Fetch news (uses store caching)
+  const fetchNews = useCallback(async (reset = false, forceRefresh = false) => {
     if (reset) {
       setLoading(true);
-      setNews([]);
+      setDisplayedNews([]);
       allArticlesRef.current = [];
       displayedCountRef.current = 0;
       setHasMore(true);
@@ -60,26 +64,17 @@ function NewsFeed({
     setError(null);
 
     try {
-      let data;
-      if (symbol) {
-        // Fetch company-specific news
-        data = await api.get(`/news/${symbol}`);
-      } else {
-        // Fetch general market news with category filter (#101)
-        data = await api.get(`/news/market/general?category=${category}`);
-      }
-
-      // API client returns data directly
-      const articles = Array.isArray(data) ? data : [];
-      allArticlesRef.current = articles;
+      // Use store's fetchNews which handles caching and deduplication
+      const articles = await fetchNewsFromStore(symbol, category, forceRefresh);
+      allArticlesRef.current = articles || [];
 
       // Simulate pagination with slice (#100)
       const nextCount = reset ? pageSize : displayedCountRef.current + pageSize;
-      const displayArticles = articles.slice(0, nextCount);
+      const displayArticles = allArticlesRef.current.slice(0, nextCount);
       displayedCountRef.current = displayArticles.length;
 
-      setNews(displayArticles);
-      setHasMore(displayArticles.length < articles.length);
+      setDisplayedNews(displayArticles);
+      setHasMore(displayArticles.length < allArticlesRef.current.length);
     } catch (err) {
       console.error('Error fetching news:', err);
       setError('Unable to load news articles');
@@ -88,7 +83,7 @@ function NewsFeed({
       setLoadingMore(false);
       setIsRefreshing(false);
     }
-  }, [symbol, category, pageSize]);
+  }, [symbol, category, pageSize, fetchNewsFromStore]);
 
   // Load more articles (#100)
   const loadMore = useCallback(() => {
@@ -98,14 +93,14 @@ function NewsFeed({
     const displayArticles = allArticlesRef.current.slice(0, nextCount);
     displayedCountRef.current = displayArticles.length;
 
-    setNews(displayArticles);
+    setDisplayedNews(displayArticles);
     setHasMore(displayArticles.length < allArticlesRef.current.length);
   }, [loadingMore, hasMore, pageSize]);
 
-  // Refresh handler (#102)
+  // Refresh handler (#102) - force refresh bypasses cache
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    fetchNews(true);
+    fetchNews(true, true); // reset=true, forceRefresh=true
   }, [fetchNews]);
 
   // Category change handler (#101)
@@ -185,7 +180,7 @@ function NewsFeed({
   }
 
   // Empty state
-  if (news.length === 0) {
+  if (displayedNews.length === 0) {
     return (
       <div className="bg-card rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
@@ -269,7 +264,7 @@ function NewsFeed({
 
       {/* News Articles */}
       <div className="space-y-3">
-        {news.map((article, index) => (
+        {displayedNews.map((article, index) => (
           <NewsCard key={article.id || article.url || index} article={article} />
         ))}
       </div>
@@ -282,7 +277,7 @@ function NewsFeed({
             <span>Loading more...</span>
           </div>
         )}
-        {!hasMore && news.length > 0 && (
+        {!hasMore && displayedNews.length > 0 && (
           <p className="text-center text-text-muted text-sm">
             No more articles
           </p>

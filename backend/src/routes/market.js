@@ -58,6 +58,7 @@ async function getCachedQuote(symbol) {
         low: quote.l,
         open: quote.o,
         previousClose: quote.pc,
+        volume: quote.v || 0,
       };
       marketCache.set(symbol, { data: enriched, timestamp: Date.now() });
       return enriched;
@@ -229,18 +230,20 @@ router.get('/movers', async (req, res) => {
       return res.json(moversCache);
     }
 
-    // Fetch quotes for all movers universe
+    // Fetch quotes for all movers universe using shared cache
     const quotes = await Promise.all(
       MOVERS_UNIVERSE.map(async (symbol) => {
         try {
-          const quote = await finnhub.getQuote(symbol);
-          if (quote && quote.c !== 0) {
+          // Use getCachedQuote instead of finnhub.getQuote directly
+          // This leverages the 30-second market cache, reducing API calls significantly
+          const quote = await getCachedQuote(symbol);
+          if (quote && quote.price) {
             return {
               symbol,
-              price: quote.c,
-              change: quote.c - quote.pc,
-              changePercent: quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : 0,
-              volume: quote.v || 0,
+              price: quote.price,
+              change: quote.change,
+              changePercent: quote.changePercent,
+              volume: quote.volume || 0,
             };
           }
         } catch {

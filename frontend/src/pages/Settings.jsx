@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import api from '../api/client';
 import { useAuthStore } from '../stores/authStore';
-import { useToast } from '../components/toast/ToastContainer';
+import { useToast } from '../components/toast/ToastContext';
 import {
   Settings as SettingsIcon,
   Bell,

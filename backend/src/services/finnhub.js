@@ -15,6 +15,8 @@ class FinnhubService {
     this.cache = new Map();
     this.cacheTimeout = 10000; // 10 seconds for quote data
     this.searchCacheTimeout = 300000; // 5 minutes for search/symbol data
+    // Request deduplication: prevents concurrent duplicate API calls
+    this.pendingRequests = new Map();
   }
 
   /**
@@ -71,17 +73,36 @@ class FinnhubService {
   }
 
   /**
-   * Get cached data or fetch from API
+   * Get cached data or fetch from API with request deduplication
+   * Prevents multiple concurrent requests for the same data
    */
   async getCached(cacheKey, fetcher, timeout) {
+    // Check cache first
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < timeout) {
       return cached.data;
     }
 
-    const data = await fetcher();
-    this.cache.set(cacheKey, { data, timestamp: Date.now() });
-    return data;
+    // Check if there's already a pending request for this key
+    if (this.pendingRequests.has(cacheKey)) {
+      // Wait for the existing request to complete
+      return this.pendingRequests.get(cacheKey);
+    }
+
+    // Create the request promise and store it
+    const requestPromise = (async () => {
+      try {
+        const data = await fetcher();
+        this.cache.set(cacheKey, { data, timestamp: Date.now() });
+        return data;
+      } finally {
+        // Clean up pending request
+        this.pendingRequests.delete(cacheKey);
+      }
+    })();
+
+    this.pendingRequests.set(cacheKey, requestPromise);
+    return requestPromise;
   }
 
   /**

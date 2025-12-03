@@ -1,103 +1,55 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useProfileStore } from '../stores/profileStore';
 
 /**
  * useSearchPreview Hook
  * Fetches company profile and additional data for search preview panel.
- * Implements caching and debouncing to minimize API calls.
+ * Uses centralized profileStore which handles caching and API calls.
  */
 
-// In-memory cache for profile data (5 minute TTL)
-const profileCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-function getCachedProfile(symbol) {
-  const cached = profileCache.get(symbol);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
-  }
-  return null;
-}
-
-function setCachedProfile(symbol, data) {
-  profileCache.set(symbol, {
-    data,
-    timestamp: Date.now(),
-  });
-}
-
 export default function useSearchPreview(symbol, enabled = true) {
-  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const abortControllerRef = useRef(null);
 
-  const fetchProfile = useCallback(async (sym) => {
+  // Use profileStore for profile data (already has caching)
+  // Extract profile.data since store stores { data, timestamp }
+  const profile = useProfileStore((state) => {
+    const entry = state.profiles[symbol?.toUpperCase()];
+    return entry?.data || null;
+  });
+  const fetchProfile = useProfileStore((state) => state.fetchProfile);
+
+  const loadProfile = useCallback(async (sym) => {
     if (!sym) return;
 
-    // Check cache first
-    const cached = getCachedProfile(sym);
-    if (cached) {
-      setProfile(cached);
+    // Check if profile already exists in store (cached)
+    const upperSym = sym.toUpperCase();
+    const existingEntry = useProfileStore.getState().profiles[upperSym];
+    if (existingEntry?.data) {
       setLoading(false);
       return;
     }
-
-    // Cancel any pending request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    abortControllerRef.current = new AbortController();
 
     try {
       setLoading(true);
       setError(null);
-
-      const response = await fetch(
-        `http://localhost:3001/api/quotes/${sym}/profile`,
-        {
-          credentials: 'include',
-          signal: abortControllerRef.current.signal,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile');
-      }
-
-      const data = await response.json();
-
-      // Cache the result
-      setCachedProfile(sym, data);
-      setProfile(data);
+      await fetchProfile(upperSym);
       setError(null);
     } catch (err) {
-      if (err.name === 'AbortError') {
-        // Request was cancelled, ignore
-        return;
-      }
       setError(err.message);
-      setProfile(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchProfile]);
 
   useEffect(() => {
     if (!enabled || !symbol) {
-      setProfile(null);
       setLoading(false);
       return;
     }
 
-    fetchProfile(symbol);
-
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [symbol, enabled, fetchProfile]);
+    loadProfile(symbol);
+  }, [symbol, enabled, loadProfile]);
 
   // Format market cap for display
   const formatMarketCap = useCallback((marketCap) => {
