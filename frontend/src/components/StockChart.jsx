@@ -42,6 +42,81 @@ function calculateSMA(data, period) {
   return smaData;
 }
 
+// Helper function to calculate EMA (Exponential Moving Average)
+function calculateEMA(data, period) {
+  if (!data || data.length < period) return [];
+
+  const multiplier = 2 / (period + 1);
+  const emaData = [];
+
+  // First EMA is SMA
+  let sum = 0;
+  for (let i = 0; i < period; i++) {
+    sum += data[i].close;
+  }
+  let ema = sum / period;
+  emaData.push({ time: data[period - 1].time, value: ema });
+
+  // Calculate EMA for remaining data
+  for (let i = period; i < data.length; i++) {
+    ema = (data[i].close - ema) * multiplier + ema;
+    emaData.push({ time: data[i].time, value: ema });
+  }
+
+  return emaData;
+}
+
+// Helper function to calculate MACD
+// Returns { macdLine, signalLine, histogram }
+function calculateMACD(data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+  if (!data || data.length < slowPeriod + signalPeriod) return { macdLine: [], signalLine: [], histogram: [] };
+
+  // Calculate EMAs
+  const fastEMA = calculateEMA(data, fastPeriod);
+  const slowEMA = calculateEMA(data, slowPeriod);
+
+  // MACD Line = Fast EMA - Slow EMA
+  // We need to align the arrays - slow EMA starts later
+  const offset = slowPeriod - fastPeriod;
+  const macdLine = [];
+
+  for (let i = 0; i < slowEMA.length; i++) {
+    const fastValue = fastEMA[i + offset]?.value;
+    const slowValue = slowEMA[i]?.value;
+    if (fastValue !== undefined && slowValue !== undefined) {
+      macdLine.push({
+        time: slowEMA[i].time,
+        value: fastValue - slowValue
+      });
+    }
+  }
+
+  // Signal Line = 9-period EMA of MACD Line
+  if (macdLine.length < signalPeriod) return { macdLine, signalLine: [], histogram: [] };
+
+  const multiplier = 2 / (signalPeriod + 1);
+  const signalLine = [];
+  const histogram = [];
+
+  // First signal is SMA of MACD
+  let sum = 0;
+  for (let i = 0; i < signalPeriod; i++) {
+    sum += macdLine[i].value;
+  }
+  let signal = sum / signalPeriod;
+  signalLine.push({ time: macdLine[signalPeriod - 1].time, value: signal });
+  histogram.push({ time: macdLine[signalPeriod - 1].time, value: macdLine[signalPeriod - 1].value - signal });
+
+  // Calculate signal and histogram for remaining data
+  for (let i = signalPeriod; i < macdLine.length; i++) {
+    signal = (macdLine[i].value - signal) * multiplier + signal;
+    signalLine.push({ time: macdLine[i].time, value: signal });
+    histogram.push({ time: macdLine[i].time, value: macdLine[i].value - signal });
+  }
+
+  return { macdLine, signalLine, histogram };
+}
+
 // Helper function to calculate RSI (Relative Strength Index)
 // Uses Wilder's smoothing method (standard RSI calculation)
 function calculateRSI(data, period = 14) {
@@ -106,6 +181,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const rsiContainerRef = useRef(null);
   const rsiChartRef = useRef(null);
   const rsiSeriesRef = useRef(null);
+  // MACD subplot refs
+  const macdContainerRef = useRef(null);
+  const macdChartRef = useRef(null);
+  const macdSeriesRefs = useRef({ macd: null, signal: null, histogram: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tooltipData, setTooltipData] = useState(null);
@@ -117,6 +196,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   // RSI state
   const [rsiEnabled, setRsiEnabled] = useState(false);
   const [rsiPeriod] = useState(14); // Standard RSI period
+  // MACD state
+  const [macdEnabled, setMacdEnabled] = useState(false);
 
   // Get preferences and actions from chartStore
   const getPreferences = useChartStore((state) => state.getPreferences);
@@ -464,6 +545,110 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           rsiChart.timeScale().fitContent();
         }
 
+        // Create MACD subplot if enabled
+        const macdContainer = macdContainerRef.current;
+        if (macdEnabled && macdContainer && chartData.length >= 35) { // Need 26 + 9 points minimum
+          const macdWidth = macdContainer.clientWidth || width;
+          const macdHeight = 150;
+
+          const macdChart = createChart(macdContainer, {
+            width: macdWidth,
+            height: macdHeight,
+            layout: {
+              background: { type: 'solid', color: CHART_BACKGROUND_COLOR },
+              textColor: '#374151',
+            },
+            grid: {
+              vertLines: { color: '#d1d5db' },
+              horzLines: { color: '#d1d5db' },
+            },
+            crosshair: { mode: 1 },
+            rightPriceScale: {
+              borderColor: '#9ca3af',
+              scaleMargins: { top: 0.1, bottom: 0.1 },
+            },
+            timeScale: {
+              borderColor: '#9ca3af',
+              timeVisible: true,
+              secondsVisible: false,
+              visible: true,
+            },
+          });
+
+          macdChartRef.current = macdChart;
+
+          const { macdLine, signalLine, histogram } = calculateMACD(chartData);
+
+          // Add histogram as baseline series (bars)
+          if (histogram.length > 0) {
+            const histogramSeries = macdChart.addHistogramSeries({
+              color: '#10B981',
+              priceLineVisible: false,
+              lastValueVisible: false,
+            });
+            // Color bars based on value (green positive, red negative)
+            const coloredHistogram = histogram.map(h => ({
+              time: h.time,
+              value: h.value,
+              color: h.value >= 0 ? '#10B981' : '#EF4444',
+            }));
+            histogramSeries.setData(coloredHistogram);
+            macdSeriesRefs.current.histogram = histogramSeries;
+          }
+
+          // Add MACD line
+          if (macdLine.length > 0) {
+            const macdSeries = macdChart.addLineSeries({
+              color: '#3B82F6', // Blue
+              lineWidth: 2,
+              title: 'MACD',
+              priceLineVisible: false,
+              lastValueVisible: true,
+            });
+            macdSeries.setData(macdLine);
+            macdSeriesRefs.current.macd = macdSeries;
+          }
+
+          // Add Signal line
+          if (signalLine.length > 0) {
+            const signalSeries = macdChart.addLineSeries({
+              color: '#F59E0B', // Amber
+              lineWidth: 2,
+              title: 'Signal',
+              priceLineVisible: false,
+              lastValueVisible: true,
+            });
+            signalSeries.setData(signalLine);
+            macdSeriesRefs.current.signal = signalSeries;
+          }
+
+          // Add zero line
+          if (macdLine.length > 0) {
+            macdSeriesRefs.current.macd.createPriceLine({
+              price: 0,
+              color: '#9CA3AF',
+              lineWidth: 1,
+              lineStyle: 1,
+              axisLabelVisible: false,
+            });
+          }
+
+          // Sync time scales
+          chartInstance.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+            if (range && macdChartRef.current) {
+              macdChartRef.current.timeScale().setVisibleLogicalRange(range);
+            }
+          });
+
+          macdChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+            if (range && chartRef.current) {
+              chartRef.current.timeScale().setVisibleLogicalRange(range);
+            }
+          });
+
+          macdChart.timeScale().fitContent();
+        }
+
         // Setup crosshair handler
         crosshairHandler = (param) => {
           if (!param.time || !param.point || !seriesInstance) {
@@ -546,13 +731,24 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         }
       }
 
+      // Cleanup MACD chart
+      if (macdChartRef.current) {
+        try {
+          macdChartRef.current.remove();
+        } catch {
+          // Ignore
+        }
+      }
+
       chartRef.current = null;
       seriesRef.current = null;
       smaSeriesRefs.current.clear();
       rsiChartRef.current = null;
       rsiSeriesRef.current = null;
+      macdChartRef.current = null;
+      macdSeriesRefs.current = { macd: null, signal: null, histogram: null };
     };
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, rsiEnabled, rsiPeriod, fetchCandles]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, rsiEnabled, rsiPeriod, macdEnabled, fetchCandles]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -698,7 +894,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           <button
             onClick={() => setShowIndicators(!showIndicators)}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-              showIndicators || enabledSMAs.length > 0 || rsiEnabled
+              showIndicators || enabledSMAs.length > 0 || rsiEnabled || macdEnabled
                 ? 'bg-brand text-white hover:bg-brand-hover'
                 : 'bg-line text-text-primary hover:bg-line-light'
             }`}
@@ -874,6 +1070,30 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             <div className="text-xs text-text-muted mt-2 pl-7">
               Relative Strength Index - shows overbought ({'>'}70) and oversold ({'<'}30) conditions
             </div>
+            {/* MACD */}
+            <div className="flex items-center gap-3 mt-3">
+              <input
+                type="checkbox"
+                id="macd-enabled"
+                checked={macdEnabled}
+                onChange={() => setMacdEnabled(!macdEnabled)}
+                className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
+                style={{ accentColor: '#3B82F6' }}
+              />
+              <label
+                htmlFor="macd-enabled"
+                className="text-sm text-text-primary flex items-center gap-2"
+              >
+                <span
+                  className="w-4 h-0.5 rounded"
+                  style={{ backgroundColor: '#3B82F6' }}
+                />
+                MACD (12, 26, 9)
+              </label>
+            </div>
+            <div className="text-xs text-text-muted mt-2 pl-7">
+              Moving Average Convergence Divergence - trend and momentum indicator
+            </div>
           </div>
 
           {/* Close button */}
@@ -962,6 +1182,23 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           </div>
           <div
             ref={rsiContainerRef}
+            className="w-full rounded-lg"
+            style={{ height: '150px', backgroundColor: CHART_BACKGROUND_COLOR }}
+          />
+        </div>
+      )}
+
+      {/* MACD Subplot Container */}
+      {macdEnabled && (
+        <div className="mt-2">
+          <div className="text-xs text-text-muted mb-1 flex items-center gap-2">
+            <span className="font-medium">MACD (12, 26, 9)</span>
+            <span style={{ color: '#3B82F6' }}>MACD Line</span>
+            <span style={{ color: '#F59E0B' }}>Signal Line</span>
+            <span className="text-gain">Histogram</span>
+          </div>
+          <div
+            ref={macdContainerRef}
             className="w-full rounded-lg"
             style={{ height: '150px', backgroundColor: CHART_BACKGROUND_COLOR }}
           />
