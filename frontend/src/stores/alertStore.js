@@ -1,10 +1,16 @@
 import { create } from 'zustand';
 import api from '../api/client';
 
+// Cooldown to prevent alert spam (5 minutes per alert)
+const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
+
 export const useAlertStore = create((set, get) => ({
   alerts: [],
+  alertHistory: [],
   loading: false,
   error: null,
+  notificationPermission: typeof Notification !== 'undefined' ? Notification.permission : 'denied',
+  triggeredTimestamps: {}, // { alertId: timestamp } to prevent spam
 
   // Fetch all alerts
   fetchAlerts: async () => {
@@ -16,6 +22,71 @@ export const useAlertStore = create((set, get) => ({
     } catch (error) {
       set({ error: error.message, loading: false });
       throw error;
+    }
+  },
+
+  // Fetch alert history
+  fetchAlertHistory: async () => {
+    try {
+      const data = await api.get('/alerts/history/all');
+      set({ alertHistory: data });
+      return data;
+    } catch (error) {
+      console.error('Failed to fetch alert history:', error);
+      return [];
+    }
+  },
+
+  // Request browser notification permission
+  requestNotificationPermission: async () => {
+    if (typeof Notification === 'undefined') {
+      return 'denied';
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      set({ notificationPermission: permission });
+      return permission;
+    } catch (error) {
+      console.error('Failed to request notification permission:', error);
+      return 'denied';
+    }
+  },
+
+  // Get active alerts for specific symbols
+  getActiveAlertsForSymbols: (symbols) => {
+    const { alerts } = get();
+    const upperSymbols = symbols.map(s => s.toUpperCase());
+    return alerts.filter(
+      alert => alert.is_active && upperSymbols.includes(alert.symbol.toUpperCase())
+    );
+  },
+
+  // Check if alert can trigger (respects cooldown)
+  canTriggerAlert: (alertId) => {
+    const { triggeredTimestamps } = get();
+    const lastTriggered = triggeredTimestamps[alertId];
+    if (!lastTriggered) return true;
+    return Date.now() - lastTriggered > ALERT_COOLDOWN_MS;
+  },
+
+  // Mark alert as triggered
+  markAlertTriggered: (alertId, quote) => {
+    set((state) => ({
+      triggeredTimestamps: {
+        ...state.triggeredTimestamps,
+        [alertId]: Date.now()
+      }
+    }));
+
+    // Record in backend (fire and forget)
+    api.post(`/alerts/${alertId}/trigger`, {
+      triggered_price: quote.current
+    }).catch(err => console.error('Failed to record alert trigger:', err));
+
+    // If non-recurring, disable the alert
+    const alert = get().alerts.find(a => a.id === alertId);
+    if (alert && !alert.is_recurring) {
+      get().updateAlert(alertId, { is_active: 0 });
     }
   },
 

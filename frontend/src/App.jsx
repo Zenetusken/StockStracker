@@ -8,6 +8,7 @@ import WatchlistDetail from './pages/WatchlistDetail';
 import PortfolioDetail from './pages/PortfolioDetail';
 import Alerts from './pages/Alerts';
 import ToastContainer from './components/toast/ToastContainer';
+import AlertChecker from './components/AlertChecker';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
 import { useAuthStore } from './stores/authStore';
 import { api } from './api/client';
@@ -47,6 +48,7 @@ function App() {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <RateLimitEventsProvider>
         <ToastContainer />
+        <AlertChecker />
         <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />

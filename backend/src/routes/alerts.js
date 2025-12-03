@@ -188,6 +188,44 @@ router.delete('/:id', (req, res) => {
 });
 
 /**
+ * POST /api/alerts/:id/trigger
+ * Record an alert trigger event
+ */
+router.post('/:id/trigger', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { triggered_price } = req.body;
+
+    // Verify ownership
+    const alert = db.prepare(`
+      SELECT * FROM alerts WHERE id = ? AND user_id = ?
+    `).get(id, req.session.userId);
+
+    if (!alert) {
+      return res.status(404).json({ error: 'Alert not found' });
+    }
+
+    // Record in alert_history
+    db.prepare(`
+      INSERT INTO alert_history (alert_id, user_id, symbol, trigger_price, alert_type, target_price, triggered_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(
+      id,
+      req.session.userId,
+      alert.symbol,
+      triggered_price || 0,
+      alert.type,
+      alert.target_price
+    );
+
+    res.json({ message: 'Alert trigger recorded' });
+  } catch (error) {
+    console.error('Error recording alert trigger:', error);
+    res.status(500).json({ error: 'Failed to record alert trigger' });
+  }
+});
+
+/**
  * GET /api/alerts/history
  * Get alert trigger history
  */

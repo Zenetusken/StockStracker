@@ -1,11 +1,26 @@
 import { useState, useEffect } from 'react';
-import { Bell, Plus, Trash2, X, TrendingUp, TrendingDown, Percent, CheckCircle, XCircle } from 'lucide-react';
+import { Bell, Plus, Trash2, X, TrendingUp, TrendingDown, Percent, CheckCircle, XCircle, BellRing, Clock, History } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAlertStore } from '../stores/alertStore';
 
 function Alerts() {
-  const { alerts, loading, error, fetchAlerts, createAlert, deleteAlert, toggleAlert, clearError } = useAlertStore();
+  const {
+    alerts,
+    alertHistory,
+    loading,
+    error,
+    notificationPermission,
+    fetchAlerts,
+    fetchAlertHistory,
+    createAlert,
+    deleteAlert,
+    toggleAlert,
+    requestNotificationPermission,
+    clearError
+  } = useAlertStore();
+
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
   const [formData, setFormData] = useState({
     symbol: '',
     name: '',
@@ -18,7 +33,8 @@ function Alerts() {
 
   useEffect(() => {
     fetchAlerts();
-  }, [fetchAlerts]);
+    fetchAlertHistory();
+  }, [fetchAlerts, fetchAlertHistory]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -64,6 +80,10 @@ function Alerts() {
     }
   };
 
+  const handleRequestPermission = async () => {
+    await requestNotificationPermission();
+  };
+
   const getTypeIcon = (type) => {
     switch (type) {
       case 'price_above':
@@ -98,6 +118,37 @@ function Alerts() {
     }).format(price);
   };
 
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
+  const getPermissionStatusColor = () => {
+    switch (notificationPermission) {
+      case 'granted':
+        return 'text-gain';
+      case 'denied':
+        return 'text-loss';
+      default:
+        return 'text-text-secondary';
+    }
+  };
+
+  const getPermissionStatusText = () => {
+    switch (notificationPermission) {
+      case 'granted':
+        return 'Browser notifications enabled';
+      case 'denied':
+        return 'Browser notifications blocked';
+      default:
+        return 'Browser notifications not enabled';
+    }
+  };
+
   return (
     <Layout>
       <div className="max-w-4xl mx-auto" data-testid="alerts-page">
@@ -117,6 +168,38 @@ function Alerts() {
           </button>
         </div>
 
+        {/* Notification Settings Banner */}
+        <div className="bg-card rounded-lg border border-line p-4 mb-6" data-testid="notification-settings">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BellRing className="w-5 h-5 text-brand" />
+              <div>
+                <div className="text-sm font-medium text-text-primary">Browser Notifications</div>
+                <div className={`text-xs ${getPermissionStatusColor()}`}>
+                  {getPermissionStatusText()}
+                </div>
+              </div>
+            </div>
+            {notificationPermission !== 'granted' && notificationPermission !== 'denied' && (
+              <button
+                onClick={handleRequestPermission}
+                data-testid="enable-notifications-button"
+                className="px-4 py-2 text-sm font-medium bg-brand text-white rounded-lg hover:bg-brand-hover transition-colors"
+              >
+                Enable Notifications
+              </button>
+            )}
+            {notificationPermission === 'denied' && (
+              <span className="text-xs text-text-muted">
+                Enable in browser settings
+              </span>
+            )}
+            {notificationPermission === 'granted' && (
+              <CheckCircle className="w-5 h-5 text-gain" />
+            )}
+          </div>
+        </div>
+
         {/* Error Message */}
         {error && (
           <div className="mb-4 p-4 bg-loss/10 border border-loss/20 rounded-lg text-loss flex items-center justify-between">
@@ -127,96 +210,167 @@ function Alerts() {
           </div>
         )}
 
-        {/* Alerts List */}
-        <div className="bg-card rounded-lg border border-line" data-testid="alerts-list">
-          {loading && alerts.length === 0 ? (
-            <div className="p-8 text-center text-text-secondary">
-              Loading alerts...
-            </div>
-          ) : alerts.length === 0 ? (
-            <div className="p-8 text-center text-text-secondary">
-              No alerts yet. Create one to get notified when prices hit your targets.
-            </div>
-          ) : (
-            <div className="divide-y divide-line">
-              {alerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className="p-4 flex items-center justify-between hover:bg-card-hover transition-colors"
-                  data-testid={`alert-item-${alert.id}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-page-bg rounded-lg">
-                      {getTypeIcon(alert.type)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-text-primary">{alert.symbol}</span>
-                        <span className="text-xs px-2 py-0.5 bg-page-bg rounded text-text-secondary">
-                          {getTypeLabel(alert.type)}
-                        </span>
-                        {alert.is_recurring ? (
-                          <span className="text-xs px-2 py-0.5 bg-brand/10 text-brand rounded">
-                            Recurring
-                          </span>
-                        ) : (
-                          <span className="text-xs px-2 py-0.5 bg-text-secondary/10 text-text-secondary rounded">
-                            One-time
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-text-secondary">
-                        {alert.name || `${getTypeLabel(alert.type)} ${formatPrice(alert.target_price)}`}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="font-medium text-text-primary">
-                        {formatPrice(alert.target_price)}
-                      </div>
-                      <div className="flex items-center gap-1 text-xs">
-                        {alert.is_active ? (
-                          <>
-                            <CheckCircle className="w-3 h-3 text-gain" />
-                            <span className="text-gain">Active</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-3 h-3 text-text-muted" />
-                            <span className="text-text-muted">Inactive</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleAlert(alert.id)}
-                        data-testid={`toggle-alert-${alert.id}`}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                          alert.is_active
-                            ? 'bg-loss/10 text-loss hover:bg-loss/20'
-                            : 'bg-gain/10 text-gain hover:bg-gain/20'
-                        }`}
-                      >
-                        {alert.is_active ? 'Disable' : 'Enable'}
-                      </button>
-                      <button
-                        onClick={() => setDeletingId(alert.id)}
-                        data-testid={`delete-alert-${alert.id}`}
-                        className="p-1.5 hover:bg-loss/10 rounded transition-colors text-text-secondary hover:text-loss"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Tabs */}
+        <div className="flex gap-1 mb-4 p-1 bg-page-bg rounded-lg w-fit" data-testid="alerts-tabs">
+          <button
+            onClick={() => setActiveTab('active')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === 'active'
+                ? 'bg-card text-text-primary shadow-sm'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            Active Alerts ({alerts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === 'history'
+                ? 'bg-card text-text-primary shadow-sm'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            History ({alertHistory.length})
+          </button>
         </div>
+
+        {/* Active Alerts Tab */}
+        {activeTab === 'active' && (
+          <div className="bg-card rounded-lg border border-line" data-testid="alerts-list">
+            {loading && alerts.length === 0 ? (
+              <div className="p-8 text-center text-text-secondary">
+                Loading alerts...
+              </div>
+            ) : alerts.length === 0 ? (
+              <div className="p-8 text-center text-text-secondary">
+                No alerts yet. Create one to get notified when prices hit your targets.
+              </div>
+            ) : (
+              <div className="divide-y divide-line">
+                {alerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="p-4 flex items-center justify-between hover:bg-card-hover transition-colors"
+                    data-testid={`alert-item-${alert.id}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-page-bg rounded-lg">
+                        {getTypeIcon(alert.type)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-text-primary">{alert.symbol}</span>
+                          <span className="text-xs px-2 py-0.5 bg-page-bg rounded text-text-secondary">
+                            {getTypeLabel(alert.type)}
+                          </span>
+                          {alert.is_recurring ? (
+                            <span className="text-xs px-2 py-0.5 bg-brand/10 text-brand rounded">
+                              Recurring
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 bg-text-secondary/10 text-text-secondary rounded">
+                              One-time
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-text-secondary">
+                          {alert.name || `${getTypeLabel(alert.type)} ${formatPrice(alert.target_price)}`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="font-medium text-text-primary">
+                          {formatPrice(alert.target_price)}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs">
+                          {alert.is_active ? (
+                            <>
+                              <CheckCircle className="w-3 h-3 text-gain" />
+                              <span className="text-gain">Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-3 h-3 text-text-muted" />
+                              <span className="text-text-muted">Inactive</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleAlert(alert.id)}
+                          data-testid={`toggle-alert-${alert.id}`}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            alert.is_active
+                              ? 'bg-loss/10 text-loss hover:bg-loss/20'
+                              : 'bg-gain/10 text-gain hover:bg-gain/20'
+                          }`}
+                        >
+                          {alert.is_active ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          onClick={() => setDeletingId(alert.id)}
+                          data-testid={`delete-alert-${alert.id}`}
+                          className="p-1.5 hover:bg-loss/10 rounded transition-colors text-text-secondary hover:text-loss"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="bg-card rounded-lg border border-line" data-testid="alert-history-list">
+            {alertHistory.length === 0 ? (
+              <div className="p-8 text-center text-text-secondary">
+                No triggered alerts yet. Your alert history will appear here.
+              </div>
+            ) : (
+              <div className="divide-y divide-line">
+                {alertHistory.map((item, index) => (
+                  <div
+                    key={item.id || index}
+                    className="p-4 flex items-center justify-between"
+                    data-testid={`history-item-${index}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-page-bg rounded-lg">
+                        {getTypeIcon(item.alert_type)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-text-primary">{item.symbol}</span>
+                          <span className="text-xs px-2 py-0.5 bg-page-bg rounded text-text-secondary">
+                            {getTypeLabel(item.alert_type)}
+                          </span>
+                        </div>
+                        <div className="text-sm text-text-secondary">
+                          Triggered at {formatPrice(item.trigger_price)} (target: {formatPrice(item.target_price)})
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-text-secondary text-sm">
+                      <Clock className="w-4 h-4" />
+                      {formatDate(item.triggered_at)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Create Alert Modal */}
         {showCreateModal && (
@@ -278,7 +432,7 @@ function Alerts() {
                 {/* Target Price */}
                 <div>
                   <label className="block text-sm font-medium text-text-secondary mb-1">
-                    Target Price
+                    {formData.type === 'percent_change' ? 'Target Percentage' : 'Target Price'}
                   </label>
                   <input
                     type="number"
@@ -286,7 +440,7 @@ function Alerts() {
                     data-testid="alert-price-input"
                     value={formData.target_price}
                     onChange={(e) => setFormData({ ...formData, target_price: e.target.value })}
-                    placeholder="e.g., 200.00"
+                    placeholder={formData.type === 'percent_change' ? 'e.g., 5 for 5%' : 'e.g., 200.00'}
                     className="w-full px-3 py-2 bg-page-bg border border-line rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
                   />
                 </div>
