@@ -621,6 +621,142 @@ router.put('/:id/transactions/:txId', (req, res) => {
 });
 
 /**
+ * DELETE /api/portfolios/:id/transactions/:txId
+ * Delete a transaction and recalculate holdings
+ */
+router.delete('/:id/transactions/:txId', (req, res) => {
+  try {
+    const { id, txId } = req.params;
+
+    // Verify portfolio ownership
+    const portfolio = db.prepare(`
+      SELECT * FROM portfolios
+      WHERE id = ? AND user_id = ?
+    `).get(id, req.session.userId);
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    // Get the transaction to delete
+    const transaction = db.prepare(`
+      SELECT * FROM transactions
+      WHERE id = ? AND portfolio_id = ?
+    `).get(txId, id);
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Get tax lot IDs for this transaction to delete lot_sales first
+    const taxLotIds = db.prepare(`SELECT id FROM tax_lots WHERE transaction_id = ?`).all(txId);
+
+    // Delete lot_sales that reference these tax lots (foreign key constraint)
+    for (const lot of taxLotIds) {
+      db.prepare(`DELETE FROM lot_sales WHERE tax_lot_id = ?`).run(lot.id);
+    }
+
+    // Delete lot_sales that reference this transaction as sell_transaction_id
+    db.prepare(`DELETE FROM lot_sales WHERE sell_transaction_id = ?`).run(txId);
+
+    // Delete any tax lots that reference this transaction
+    db.prepare(`DELETE FROM tax_lots WHERE transaction_id = ?`).run(txId);
+
+    // Delete the transaction
+    db.prepare(`DELETE FROM transactions WHERE id = ?`).run(txId);
+
+    // Recalculate holdings for this symbol
+    if (transaction.type === 'buy' || transaction.type === 'sell') {
+      // Get all remaining buy transactions
+      const buyTxs = db.prepare(`
+        SELECT * FROM transactions
+        WHERE portfolio_id = ? AND symbol = ? AND type = 'buy'
+      `).all(id, transaction.symbol);
+
+      // Get all sell transactions
+      const sellResult = db.prepare(`
+        SELECT COALESCE(SUM(shares), 0) as sold FROM transactions
+        WHERE portfolio_id = ? AND symbol = ? AND type = 'sell'
+      `).get(id, transaction.symbol);
+
+      // Calculate totals
+      let totalShares = 0;
+      let totalCost = 0;
+      for (const tx of buyTxs) {
+        totalShares += tx.shares;
+        totalCost += tx.shares * tx.price;
+      }
+
+      const remainingShares = totalShares - (sellResult?.sold || 0);
+      const avgCost = totalShares > 0 ? totalCost / totalShares : 0;
+
+      if (remainingShares > 0) {
+        // Update holdings
+        db.prepare(`
+          UPDATE portfolio_holdings
+          SET total_shares = ?, average_cost = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE portfolio_id = ? AND symbol = ?
+        `).run(remainingShares, avgCost, id, transaction.symbol);
+      } else {
+        // Delete holdings if no shares remain
+        db.prepare(`
+          DELETE FROM portfolio_holdings
+          WHERE portfolio_id = ? AND symbol = ?
+        `).run(id, transaction.symbol);
+      }
+
+      // Delete tax lots for this symbol and recreate based on remaining transactions
+      // First, delete all lot_sales that reference these tax_lots (foreign key constraint)
+      const allSymbolTaxLots = db.prepare(`SELECT id FROM tax_lots WHERE portfolio_id = ? AND symbol = ?`).all(id, transaction.symbol);
+      for (const lot of allSymbolTaxLots) {
+        db.prepare(`DELETE FROM lot_sales WHERE tax_lot_id = ?`).run(lot.id);
+      }
+      db.prepare(`DELETE FROM tax_lots WHERE portfolio_id = ? AND symbol = ?`).run(id, transaction.symbol);
+
+      // Recreate tax lots from buy transactions
+      for (const tx of buyTxs) {
+        db.prepare(`
+          INSERT INTO tax_lots (portfolio_id, symbol, purchase_date, shares_remaining, cost_per_share, transaction_id)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(id, transaction.symbol, tx.executed_at, tx.shares, tx.price, tx.id);
+      }
+    }
+
+    // If it was a dividend, reverse the cash addition
+    if (transaction.type === 'dividend') {
+      const dividendAmount = transaction.shares * transaction.price;
+      db.prepare(`
+        UPDATE portfolios
+        SET cash_balance = cash_balance - ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(dividendAmount, id);
+    }
+
+    // If it was a buy/sell, reverse the cash impact
+    if (transaction.type === 'buy') {
+      const buyAmount = (transaction.shares * transaction.price) + (transaction.fees || 0);
+      db.prepare(`
+        UPDATE portfolios
+        SET cash_balance = cash_balance + ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(buyAmount, id);
+    } else if (transaction.type === 'sell') {
+      const sellAmount = (transaction.shares * transaction.price) - (transaction.fees || 0);
+      db.prepare(`
+        UPDATE portfolios
+        SET cash_balance = cash_balance - ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(sellAmount, id);
+    }
+
+    res.json({ success: true, message: 'Transaction deleted' });
+  } catch (error) {
+    console.error('[Portfolios] Error deleting transaction:', error);
+    res.status(500).json({ error: 'Failed to delete transaction' });
+  }
+});
+
+/**
  * Helper function to create default portfolio for a user
  */
 export function createDefaultPortfolio(userId) {

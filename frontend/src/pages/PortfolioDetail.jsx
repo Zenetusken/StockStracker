@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
@@ -13,12 +13,14 @@ function PortfolioDetail() {
 
   // Portfolio store
   const fetchPortfolioDetail = usePortfolioStore((state) => state.fetchPortfolioDetail);
+  const deleteTransaction = usePortfolioStore((state) => state.deleteTransaction);
 
   const [portfolio, setPortfolio] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
+  const [deletingTransaction, setDeletingTransaction] = useState(null);
   const [transactionFilter, setTransactionFilter] = useState('all');
 
   // Get holdings symbols for quote subscription
@@ -367,14 +369,24 @@ function PortfolioDetail() {
                         {formatCurrency(tx.shares * tx.price)}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button
-                          data-testid={`edit-tx-${tx.id}`}
-                          onClick={() => setEditingTransaction(tx)}
-                          className="p-1.5 hover:bg-card-hover rounded transition-colors text-text-secondary hover:text-text-primary"
-                          title="Edit transaction"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            data-testid={`edit-tx-${tx.id}`}
+                            onClick={() => setEditingTransaction(tx)}
+                            className="p-1.5 hover:bg-card-hover rounded transition-colors text-text-secondary hover:text-text-primary"
+                            title="Edit transaction"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            data-testid={`delete-tx-${tx.id}`}
+                            onClick={() => setDeletingTransaction(tx)}
+                            className="p-1.5 hover:bg-loss/20 rounded transition-colors text-text-secondary hover:text-loss"
+                            title="Delete transaction"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -409,6 +421,86 @@ function PortfolioDetail() {
             setEditingTransaction(null);
           }}
         />
+
+        {/* Delete Confirmation Modal */}
+        {deletingTransaction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+            <div className="bg-card rounded-lg shadow-xl w-full max-w-md" data-testid="delete-confirm-modal">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-line">
+                <h2 className="text-xl font-semibold text-loss">
+                  Delete Transaction
+                </h2>
+                <button
+                  onClick={() => setDeletingTransaction(null)}
+                  className="p-1 hover:bg-card-hover rounded transition-colors"
+                >
+                  <X className="w-5 h-5 text-text-secondary" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6">
+                <p className="text-text-primary mb-4">
+                  Are you sure you want to delete this transaction?
+                </p>
+                <div className="p-4 bg-table-header rounded-lg mb-4">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-text-secondary">Type:</span>
+                    <span className={`font-medium ${
+                      deletingTransaction.type === 'buy' ? 'text-gain' :
+                      deletingTransaction.type === 'dividend' ? 'text-brand' :
+                      'text-loss'
+                    }`}>
+                      {deletingTransaction.type?.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-text-secondary">Symbol:</span>
+                    <span className="text-text-primary font-medium">{deletingTransaction.symbol}</span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-text-secondary">Shares:</span>
+                    <span className="text-text-primary">{deletingTransaction.shares}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-secondary">Price:</span>
+                    <span className="text-text-primary">${deletingTransaction.price}</span>
+                  </div>
+                </div>
+                <p className="text-sm text-text-muted">
+                  This action cannot be undone. Portfolio holdings will be recalculated.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 p-6 pt-0">
+                <button
+                  onClick={() => setDeletingTransaction(null)}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-text-primary bg-page-bg border border-line rounded-lg hover:bg-table-header transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  data-testid="confirm-delete"
+                  onClick={async () => {
+                    try {
+                      await deleteTransaction(id, deletingTransaction.id);
+                      const data = await fetchPortfolioDetail(id, true);
+                      setPortfolio(data);
+                      setDeletingTransaction(null);
+                    } catch (err) {
+                      console.error('Failed to delete transaction:', err);
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-loss rounded-lg hover:bg-loss/90 transition-colors"
+                >
+                  Delete Transaction
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
