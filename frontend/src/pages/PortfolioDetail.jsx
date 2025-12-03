@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
@@ -115,6 +115,35 @@ function PortfolioDetail() {
   const formatChange = (value) => {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${formatCurrency(value)}`;
+  };
+
+  // Export transactions to CSV
+  const exportToCsv = () => {
+    if (!portfolio?.recent_transactions?.length) return;
+
+    const headers = ['Date', 'Type', 'Symbol', 'Shares', 'Price', 'Fees', 'Total', 'Notes'];
+    const rows = portfolio.recent_transactions.map(tx => [
+      new Date(tx.executed_at).toLocaleDateString(),
+      tx.type.toUpperCase(),
+      tx.symbol,
+      tx.shares,
+      tx.price.toFixed(2),
+      (tx.fees || 0).toFixed(2),
+      (tx.shares * tx.price).toFixed(2),
+      tx.notes || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${portfolio.name.replace(/\s+/g, '_')}_transactions.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   if (loading) {
@@ -318,18 +347,28 @@ function PortfolioDetail() {
           <div className="mt-8 bg-card rounded-lg border border-line overflow-hidden">
             <div className="px-6 py-4 border-b border-line flex items-center justify-between">
               <h2 className="text-lg font-semibold text-text-primary">Recent Transactions</h2>
-              <select
-                data-testid="transaction-filter"
-                value={transactionFilter}
-                onChange={(e) => setTransactionFilter(e.target.value)}
-                className="px-3 py-1.5 border border-line rounded-md text-sm bg-page-bg text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
-              >
-                <option value="all">All Types</option>
-                <option value="buy">Buy</option>
-                <option value="sell">Sell</option>
-                <option value="dividend">Dividend</option>
-                <option value="split">Split</option>
-              </select>
+              <div className="flex items-center gap-3">
+                <select
+                  data-testid="transaction-filter"
+                  value={transactionFilter}
+                  onChange={(e) => setTransactionFilter(e.target.value)}
+                  className="px-3 py-1.5 border border-line rounded-md text-sm bg-page-bg text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  <option value="all">All Types</option>
+                  <option value="buy">Buy</option>
+                  <option value="sell">Sell</option>
+                  <option value="dividend">Dividend</option>
+                  <option value="split">Split</option>
+                </select>
+                <button
+                  data-testid="export-csv"
+                  onClick={exportToCsv}
+                  className="flex items-center gap-2 px-3 py-1.5 border border-line rounded-md text-sm bg-page-bg text-text-primary hover:bg-card-hover focus:outline-none focus:ring-2 focus:ring-brand transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
