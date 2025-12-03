@@ -8,7 +8,7 @@
 ![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?style=flat&logo=vite&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-A real-time stock tracking and portfolio management application with interactive charts, watchlists, and multi-theme support.
+**StockTracker** is a privacy-first, self-hosted investment platform built for developers who want ownership of their financial data. It combines real-time market streaming with professional-grade tax accounting, delivering an enterprise-level experience without the monthly subscription fees or privacy trade-offs.
 
 <p align="center">
   <img src="docs/UI_SCREENSHOT.png" alt="StockTracker Dashboard" width="800">

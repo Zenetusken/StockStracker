@@ -201,6 +201,38 @@ function PortfolioDetail() {
     return `${sign}${formatCurrency(value)}`;
   };
 
+  // Export holdings to CSV
+  const exportHoldingsToCsv = () => {
+    if (!sortedHoldings?.length) return;
+
+    const headers = ['Symbol', 'Shares', 'Avg Cost', 'Current Price', 'Cost Basis', 'Market Value', 'Gain/Loss', 'Gain/Loss %', 'Day Change', 'Day Change %', 'Allocation %'];
+    const rows = sortedHoldings.map(h => [
+      h.symbol,
+      h.total_shares,
+      h.average_cost.toFixed(2),
+      h.currentPrice.toFixed(2),
+      h.costBasis.toFixed(2),
+      h.marketValue.toFixed(2),
+      h.gainLoss.toFixed(2),
+      h.gainLossPercent.toFixed(2),
+      h.dayChange.toFixed(2),
+      h.dayChangePercent.toFixed(2),
+      h.allocation.toFixed(2)
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${portfolio.name.replace(/\s+/g, '_')}_holdings_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   // Export transactions to CSV
   const exportToCsv = () => {
     if (!portfolio?.recent_transactions?.length) return;
@@ -503,7 +535,18 @@ function PortfolioDetail() {
         <div className="bg-card rounded-lg border border-line overflow-hidden">
           <div className="px-6 py-4 border-b border-line flex items-center justify-between">
             <h2 className="text-lg font-semibold text-text-primary">Holdings</h2>
-            <div className="flex gap-1">
+            <div className="flex items-center gap-3">
+              {sortedHoldings.length > 0 && (
+                <button
+                  data-testid="export-holdings-csv"
+                  onClick={exportHoldingsToCsv}
+                  className="flex items-center gap-2 px-3 py-1.5 border border-line rounded-md text-sm bg-page-bg text-text-primary hover:bg-card-hover focus:outline-none focus:ring-2 focus:ring-brand transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Export Holdings
+                </button>
+              )}
+              <div className="flex gap-1">
               <button
                 data-testid="filter-all"
                 onClick={() => setHoldingsFilter('all')}

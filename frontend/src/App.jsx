@@ -15,6 +15,7 @@ import ToastContainer from './components/toast/ToastContainer';
 import AlertChecker from './components/AlertChecker';
 import NetworkStatus from './components/NetworkStatus';
 import SkipToMain from './components/SkipToMain';
+import MobileBottomNav from './components/MobileBottomNav';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
 import { useAuthStore } from './stores/authStore';
 import { api } from './api/client';
@@ -127,9 +128,16 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<NotFound />} />
         </Routes>
+        <AuthenticatedMobileNav />
       </RateLimitEventsProvider>
     </BrowserRouter>
   );
+}
+
+// Separate component to conditionally render mobile nav for authenticated users
+function AuthenticatedMobileNav() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  return isAuthenticated ? <MobileBottomNav /> : null;
 }
 
 export default App;
