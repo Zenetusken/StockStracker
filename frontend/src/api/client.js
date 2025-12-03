@@ -1,6 +1,14 @@
 // Centralized API client for all HTTP requests
 const API_BASE_URL = '/api';
 
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 1000, // 1 second
+  maxDelay: 10000, // 10 seconds
+  retryableStatuses: [408, 429, 500, 502, 503, 504],
+};
+
 class ApiError extends Error {
   constructor(message, status, data = null) {
     super(message);
@@ -14,6 +22,35 @@ class ApiClient {
   constructor(baseUrl = API_BASE_URL) {
     this.baseUrl = baseUrl;
     this.csrfToken = null;
+    this.onSessionExpired = null; // Callback for session expiration
+  }
+
+  // Set callback for session expiration handling
+  setSessionExpiredHandler(callback) {
+    this.onSessionExpired = callback;
+  }
+
+  // Calculate exponential backoff delay
+  getRetryDelay(attempt) {
+    const delay = Math.min(
+      RETRY_CONFIG.baseDelay * Math.pow(2, attempt),
+      RETRY_CONFIG.maxDelay
+    );
+    // Add jitter (±25%)
+    return delay * (0.75 + Math.random() * 0.5);
+  }
+
+  // Check if error is retryable
+  isRetryable(status, attempt) {
+    return (
+      attempt < RETRY_CONFIG.maxRetries &&
+      (status === 0 || RETRY_CONFIG.retryableStatuses.includes(status))
+    );
+  }
+
+  // Sleep helper for retry delays
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // Fetch CSRF token from backend
@@ -36,6 +73,7 @@ class ApiClient {
   async request(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     const method = options.method || 'GET';
+    const skipRetry = options.skipRetry || false;
 
     // Build headers with CSRF token for state-changing requests
     const headers = {
@@ -58,47 +96,96 @@ class ApiClient {
       config.body = JSON.stringify(options.body);
     }
 
-    try {
-      let response = await fetch(url, config);
+    let lastError = null;
+    let attempt = 0;
 
-      // Handle no-content responses
-      if (response.status === 204) {
-        return null;
-      }
+    while (attempt <= (skipRetry ? 0 : RETRY_CONFIG.maxRetries)) {
+      try {
+        let response = await fetch(url, config);
 
-      let data = await response.json().catch(() => null);
-
-      // If CSRF token error, refresh token and retry once
-      if (response.status === 403 && data?.error?.includes('CSRF')) {
-        await this.fetchCsrfToken();
-        if (this.csrfToken) {
-          config.headers['x-csrf-token'] = this.csrfToken;
-          response = await fetch(url, config);
-          if (response.status === 204) return null;
-          data = await response.json().catch(() => null);
+        // Handle no-content responses
+        if (response.status === 204) {
+          return null;
         }
-      }
 
-      if (!response.ok) {
-        throw new ApiError(
-          data?.error || data?.message || `Request failed with status ${response.status}`,
-          response.status,
-          data
-        );
-      }
+        let data = await response.json().catch(() => null);
 
-      // Update CSRF token if returned in response (token rotation)
-      if (data?.csrfToken) {
-        this.csrfToken = data.csrfToken;
-      }
+        // Handle session expired (401 Unauthorized)
+        if (response.status === 401) {
+          if (this.onSessionExpired) {
+            this.onSessionExpired();
+          }
+          throw new ApiError(
+            'Your session has expired. Please log in again.',
+            401,
+            data
+          );
+        }
 
-      return data;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
+        // If CSRF token error, refresh token and retry once
+        if (response.status === 403 && data?.error?.includes('CSRF')) {
+          await this.fetchCsrfToken();
+          if (this.csrfToken) {
+            config.headers['x-csrf-token'] = this.csrfToken;
+            response = await fetch(url, config);
+            if (response.status === 204) return null;
+            data = await response.json().catch(() => null);
+          }
+        }
+
+        if (!response.ok) {
+          const error = new ApiError(
+            data?.error || data?.message || `Request failed with status ${response.status}`,
+            response.status,
+            data
+          );
+
+          // Check if we should retry
+          if (this.isRetryable(response.status, attempt) && !skipRetry) {
+            lastError = error;
+            attempt++;
+            const delay = this.getRetryDelay(attempt - 1);
+            console.warn(`Request failed (${response.status}), retrying in ${Math.round(delay)}ms... (attempt ${attempt}/${RETRY_CONFIG.maxRetries})`);
+            await this.sleep(delay);
+            continue;
+          }
+
+          throw error;
+        }
+
+        // Update CSRF token if returned in response (token rotation)
+        if (data?.csrfToken) {
+          this.csrfToken = data.csrfToken;
+        }
+
+        return data;
+      } catch (error) {
+        if (error instanceof ApiError) {
+          // Don't retry 401 errors
+          if (error.status === 401) {
+            throw error;
+          }
+          lastError = error;
+        } else {
+          // Network error - check if retryable
+          lastError = new ApiError(error.message || 'Network error', 0, null);
+        }
+
+        // Check if we should retry network errors
+        if (this.isRetryable(0, attempt) && !skipRetry) {
+          attempt++;
+          const delay = this.getRetryDelay(attempt - 1);
+          console.warn(`Network error, retrying in ${Math.round(delay)}ms... (attempt ${attempt}/${RETRY_CONFIG.maxRetries})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        throw lastError;
       }
-      throw new ApiError(error.message || 'Network error', 0, null);
     }
+
+    // Should not reach here, but just in case
+    throw lastError || new ApiError('Request failed after retries', 0, null);
   }
 
   get(endpoint, options = {}) {

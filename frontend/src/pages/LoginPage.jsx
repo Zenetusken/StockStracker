@@ -12,6 +12,7 @@ function LoginPage() {
   const error = useAuthStore((state) => state.error);
   const isLoading = useAuthStore((state) => state.isLoading);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const sessionExpired = useAuthStore((state) => state.sessionExpired);
   const clearError = useAuthStore((state) => state.clearError);
 
   // Redirect if already authenticated
@@ -48,6 +49,12 @@ function LoginPage() {
             Sign in to your account
           </p>
         </div>
+
+        {sessionExpired && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 text-sm text-center">
+            Your session has expired. Please sign in again.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

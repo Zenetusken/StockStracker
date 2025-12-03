@@ -43,13 +43,20 @@ function RateLimitEventsProvider({ children }) {
 
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
+  const logout = useAuthStore((state) => state.logout);
 
   useEffect(() => {
+    // Set up session expired handler
+    api.setSessionExpiredHandler(() => {
+      // Clear auth state without calling the logout API (session is already invalid)
+      logout(true); // true = skip API call
+    });
+
     // Fetch CSRF token first, then check auth
     api.fetchCsrfToken().then(() => {
       checkAuth();
     });
-  }, [checkAuth]);
+  }, [checkAuth, logout]);
 
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>

@@ -561,27 +561,38 @@ function WatchlistDetail() {
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
             >
-              <table className="w-full">
-                <thead className="bg-table-header border-b border-line">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
+              <table className="w-full" role="table" aria-label={`Stocks in ${watchlist?.name || 'watchlist'}`}>
+                <caption className="sr-only">
+                  Watchlist stocks with current prices, changes, and volume. Click column headers to sort.
+                </caption>
+                <thead className="bg-table-header border-b border-line" role="rowgroup">
+                  <tr role="row">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider" aria-label="Drag handle">
                       {/* Drag handle column */}
                     </th>
                     <th
+                      scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                       onClick={() => handleSort('symbol')}
+                      aria-sort={sortColumn === 'symbol' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSort('symbol')}
                     >
                       <div className="flex items-center gap-2">
                         Symbol
                         {renderSortIcon('symbol')}
                       </div>
                     </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">
                     Name
                   </th>
                   <th
+                    scope="col"
                     className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('price')}
+                    aria-sort={sortColumn === 'price' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSort('price')}
                   >
                     <div className="flex items-center justify-end gap-2">
                       Price
@@ -589,8 +600,12 @@ function WatchlistDetail() {
                     </div>
                   </th>
                   <th
+                    scope="col"
                     className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('change')}
+                    aria-sort={sortColumn === 'change' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSort('change')}
                   >
                     <div className="flex items-center justify-end gap-2">
                       Change
@@ -598,8 +613,12 @@ function WatchlistDetail() {
                     </div>
                   </th>
                   <th
+                    scope="col"
                     className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('percentChange')}
+                    aria-sort={sortColumn === 'percentChange' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSort('percentChange')}
                   >
                     <div className="flex items-center justify-end gap-2">
                       % Change
@@ -607,15 +626,19 @@ function WatchlistDetail() {
                     </div>
                   </th>
                   <th
+                    scope="col"
                     className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:bg-page-bg transition-colors select-none"
                     onClick={() => handleSort('volume')}
+                    aria-sort={sortColumn === 'volume' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSort('volume')}
                   >
                     <div className="flex items-center justify-end gap-2">
                       Volume
                       {renderSortIcon('volume')}
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>

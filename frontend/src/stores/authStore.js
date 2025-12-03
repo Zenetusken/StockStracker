@@ -23,6 +23,7 @@ export const useAuthStore = create(
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            sessionExpired: false, // Clear session expired flag on successful login
           });
           // Show success toast
           useToastStore.getState().addToast({
@@ -82,19 +83,21 @@ export const useAuthStore = create(
         }
       },
 
-      logout: async () => {
-        try {
-          await api.post('/auth/logout');
-        } catch (error) {
-          console.error('[AuthStore] Logout error:', error);
-        } finally {
-          set({
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-            error: null,
-          });
+      logout: async (skipApiCall = false) => {
+        if (!skipApiCall) {
+          try {
+            await api.post('/auth/logout');
+          } catch (error) {
+            console.error('[AuthStore] Logout error:', error);
+          }
         }
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null,
+          sessionExpired: skipApiCall, // Track if logout was due to session expiration
+        });
       },
 
       checkAuth: async () => {
