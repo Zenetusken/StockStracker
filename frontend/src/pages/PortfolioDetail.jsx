@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download, Upload } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download, Upload, ChevronUp, ChevronDown, Layers } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
 import AddTransactionModal from '../components/AddTransactionModal';
 import EditTransactionModal from '../components/EditTransactionModal';
+import TaxLotsModal from '../components/TaxLotsModal';
 
 function PortfolioDetail() {
   const { id } = useParams();
@@ -25,6 +26,9 @@ function PortfolioDetail() {
   const [transactionFilter, setTransactionFilter] = useState('all');
   const [importStatus, setImportStatus] = useState(null); // { type: 'success' | 'error', message: string }
   const [deleteError, setDeleteError] = useState(null);
+  const [holdingsSort, setHoldingsSort] = useState({ field: null, direction: 'desc' });
+  const [holdingsFilter, setHoldingsFilter] = useState('all'); // 'all' | 'gainers' | 'losers'
+  const [viewingTaxLots, setViewingTaxLots] = useState(null); // symbol string or null
   const fileInputRef = useRef(null);
 
   // Get holdings symbols for quote subscription
@@ -100,6 +104,74 @@ function PortfolioDetail() {
     if (transactionFilter === 'all') return portfolio.recent_transactions;
     return portfolio.recent_transactions.filter(tx => tx.type === transactionFilter);
   }, [portfolio?.recent_transactions, transactionFilter]);
+
+  // Sorted and filtered holdings with calculated values
+  const sortedHoldings = useMemo(() => {
+    if (!portfolio?.holdings) return [];
+
+    // Calculate total portfolio value for allocation percentage
+    const totalPortfolioValue = metrics?.totalValue || 0;
+
+    // Calculate values for each holding
+    let holdingsWithValues = portfolio.holdings.map(holding => {
+      const quote = quotes[holding.symbol];
+      const currentPrice = quote?.c || holding.average_cost;
+      const previousClose = quote?.pc || holding.average_cost;
+      const marketValue = holding.total_shares * currentPrice;
+      const costBasis = holding.total_shares * holding.average_cost;
+      const gainLoss = marketValue - costBasis;
+      const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+      const dayChange = holding.total_shares * (currentPrice - previousClose);
+      const dayChangePercent = previousClose > 0 ? ((currentPrice - previousClose) / previousClose) * 100 : 0;
+      const allocation = totalPortfolioValue > 0 ? (marketValue / totalPortfolioValue) * 100 : 0;
+
+      return {
+        ...holding,
+        currentPrice,
+        previousClose,
+        marketValue,
+        costBasis,
+        gainLoss,
+        gainLossPercent,
+        dayChange,
+        dayChangePercent,
+        allocation
+      };
+    });
+
+    // Apply filter
+    if (holdingsFilter === 'gainers') {
+      holdingsWithValues = holdingsWithValues.filter(h => h.gainLoss >= 0);
+    } else if (holdingsFilter === 'losers') {
+      holdingsWithValues = holdingsWithValues.filter(h => h.gainLoss < 0);
+    }
+
+    // Apply sorting if a field is selected
+    if (holdingsSort.field) {
+      holdingsWithValues.sort((a, b) => {
+        const aVal = a[holdingsSort.field];
+        const bVal = b[holdingsSort.field];
+        if (holdingsSort.direction === 'asc') {
+          return aVal - bVal;
+        }
+        return bVal - aVal;
+      });
+    }
+
+    return holdingsWithValues;
+  }, [portfolio?.holdings, quotes, holdingsSort, holdingsFilter, metrics?.totalValue]);
+
+  // Toggle sort for holdings
+  const toggleHoldingsSort = (field) => {
+    setHoldingsSort(prev => {
+      if (prev.field === field) {
+        // Toggle direction
+        return { field, direction: prev.direction === 'desc' ? 'asc' : 'desc' };
+      }
+      // New field, start with descending (highest first)
+      return { field, direction: 'desc' };
+    });
+  };
 
   // Format helpers
   const formatCurrency = (value) => {
@@ -385,13 +457,52 @@ function PortfolioDetail() {
 
         {/* Holdings Table */}
         <div className="bg-card rounded-lg border border-line overflow-hidden">
-          <div className="px-6 py-4 border-b border-line">
+          <div className="px-6 py-4 border-b border-line flex items-center justify-between">
             <h2 className="text-lg font-semibold text-text-primary">Holdings</h2>
+            <div className="flex gap-1">
+              <button
+                data-testid="filter-all"
+                onClick={() => setHoldingsFilter('all')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  holdingsFilter === 'all'
+                    ? 'bg-brand text-white'
+                    : 'bg-page-bg text-text-secondary hover:text-text-primary hover:bg-table-header'
+                }`}
+              >
+                All
+              </button>
+              <button
+                data-testid="filter-gainers"
+                onClick={() => setHoldingsFilter('gainers')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  holdingsFilter === 'gainers'
+                    ? 'bg-gain text-white'
+                    : 'bg-page-bg text-text-secondary hover:text-gain hover:bg-gain/10'
+                }`}
+              >
+                Gainers
+              </button>
+              <button
+                data-testid="filter-losers"
+                onClick={() => setHoldingsFilter('losers')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  holdingsFilter === 'losers'
+                    ? 'bg-loss text-white'
+                    : 'bg-page-bg text-text-secondary hover:text-loss hover:bg-loss/10'
+                }`}
+              >
+                Losers
+              </button>
+            </div>
           </div>
 
-          {portfolio.holdings?.length === 0 ? (
+          {sortedHoldings.length === 0 ? (
             <div className="p-8 text-center text-text-secondary">
-              No holdings yet. Add stocks to your portfolio to see them here.
+              {holdingsFilter === 'all'
+                ? 'No holdings yet. Add stocks to your portfolio to see them here.'
+                : holdingsFilter === 'gainers'
+                ? 'No holdings with gains.'
+                : 'No holdings with losses.'}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -403,67 +514,119 @@ function PortfolioDetail() {
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Avg Cost</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Current Price</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Cost Basis</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Market Value</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Gain/Loss</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase">Day Change</th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase cursor-pointer hover:text-text-primary select-none"
+                      onClick={() => toggleHoldingsSort('marketValue')}
+                      data-testid="sort-market-value"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Market Value
+                        {holdingsSort.field === 'marketValue' && (
+                          holdingsSort.direction === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase cursor-pointer hover:text-text-primary select-none"
+                      onClick={() => toggleHoldingsSort('gainLoss')}
+                      data-testid="sort-gain-loss"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Gain/Loss
+                        {holdingsSort.field === 'gainLoss' && (
+                          holdingsSort.direction === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase cursor-pointer hover:text-text-primary select-none"
+                      onClick={() => toggleHoldingsSort('dayChange')}
+                      data-testid="sort-day-change"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Day Change
+                        {holdingsSort.field === 'dayChange' && (
+                          holdingsSort.direction === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium text-text-secondary uppercase cursor-pointer hover:text-text-primary select-none"
+                      onClick={() => toggleHoldingsSort('allocation')}
+                      data-testid="sort-allocation"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Allocation
+                        {holdingsSort.field === 'allocation' && (
+                          holdingsSort.direction === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-text-secondary uppercase">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {portfolio.holdings.map((holding) => {
-                    const quote = quotes[holding.symbol];
-                    const currentPrice = quote?.c || holding.average_cost;
-                    const previousClose = quote?.pc || holding.average_cost;
-                    const marketValue = holding.total_shares * currentPrice;
-                    const costBasis = holding.total_shares * holding.average_cost;
-                    const gainLoss = marketValue - costBasis;
-                    const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
-                    const dayChange = holding.total_shares * (currentPrice - previousClose);
-                    const dayChangePercent = previousClose > 0 ? ((currentPrice - previousClose) / previousClose) * 100 : 0;
-
-                    return (
-                      <tr
-                        key={holding.id}
-                        className="hover:bg-card-hover cursor-pointer transition-colors"
-                        onClick={() => navigate(`/stock/${holding.symbol}`)}
-                        data-testid={`holding-row-${holding.symbol}`}
-                      >
-                        <td className="px-6 py-4">
-                          <span className="font-medium text-text-primary">{holding.symbol}</span>
-                        </td>
-                        <td className="px-6 py-4 text-right text-text-primary">
-                          {holding.total_shares.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-right text-text-secondary">
-                          {formatCurrency(holding.average_cost)}
-                        </td>
-                        <td className="px-6 py-4 text-right text-text-primary">
-                          {formatCurrency(currentPrice)}
-                        </td>
-                        <td className="px-6 py-4 text-right text-text-secondary" data-testid="cost-basis">
-                          {formatCurrency(costBasis)}
-                        </td>
-                        <td className="px-6 py-4 text-right text-text-primary font-medium" data-testid="market-value">
-                          {formatCurrency(marketValue)}
-                        </td>
-                        <td className="px-6 py-4 text-right" data-testid="gain-loss">
-                          <div className={`font-medium ${gainLoss >= 0 ? 'text-gain' : 'text-loss'}`}>
-                            {formatChange(gainLoss)}
-                          </div>
-                          <div className={`text-xs ${gainLoss >= 0 ? 'text-gain' : 'text-loss'}`}>
-                            {formatPercent(gainLossPercent)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-right" data-testid="day-change">
-                          <div className={`font-medium ${dayChange >= 0 ? 'text-gain' : 'text-loss'}`}>
-                            {formatChange(dayChange)}
-                          </div>
-                          <div className={`text-xs ${dayChange >= 0 ? 'text-gain' : 'text-loss'}`}>
-                            {formatPercent(dayChangePercent)}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {sortedHoldings.map((holding) => (
+                    <tr
+                      key={holding.id}
+                      className="hover:bg-card-hover cursor-pointer transition-colors"
+                      onClick={() => navigate(`/stock/${holding.symbol}`)}
+                      data-testid={`holding-row-${holding.symbol}`}
+                    >
+                      <td className="px-6 py-4">
+                        <span className="font-medium text-text-primary">{holding.symbol}</span>
+                      </td>
+                      <td className="px-6 py-4 text-right text-text-primary">
+                        {holding.total_shares.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right text-text-secondary">
+                        {formatCurrency(holding.average_cost)}
+                      </td>
+                      <td className="px-6 py-4 text-right text-text-primary">
+                        {formatCurrency(holding.currentPrice)}
+                      </td>
+                      <td className="px-6 py-4 text-right text-text-secondary" data-testid="cost-basis">
+                        {formatCurrency(holding.costBasis)}
+                      </td>
+                      <td className="px-6 py-4 text-right text-text-primary font-medium" data-testid="market-value">
+                        {formatCurrency(holding.marketValue)}
+                      </td>
+                      <td className="px-6 py-4 text-right" data-testid="gain-loss">
+                        <div className={`font-medium ${holding.gainLoss >= 0 ? 'text-gain' : 'text-loss'}`}>
+                          {formatChange(holding.gainLoss)}
+                        </div>
+                        <div className={`text-xs ${holding.gainLoss >= 0 ? 'text-gain' : 'text-loss'}`}>
+                          {formatPercent(holding.gainLossPercent)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right" data-testid="day-change">
+                        <div className={`font-medium ${holding.dayChange >= 0 ? 'text-gain' : 'text-loss'}`}>
+                          {formatChange(holding.dayChange)}
+                        </div>
+                        <div className={`text-xs ${holding.dayChange >= 0 ? 'text-gain' : 'text-loss'}`}>
+                          {formatPercent(holding.dayChangePercent)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right text-text-primary" data-testid="allocation">
+                        {holding.allocation.toFixed(1)}%
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          data-testid={`view-tax-lots-${holding.symbol}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewingTaxLots(holding.symbol);
+                          }}
+                          className="p-1.5 hover:bg-card-hover rounded transition-colors text-text-secondary hover:text-brand"
+                          title="View Tax Lots"
+                        >
+                          <Layers className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -701,6 +864,14 @@ function PortfolioDetail() {
             </div>
           </div>
         )}
+
+        {/* Tax Lots Modal */}
+        <TaxLotsModal
+          isOpen={viewingTaxLots !== null}
+          onClose={() => setViewingTaxLots(null)}
+          portfolioId={id}
+          symbol={viewingTaxLots}
+        />
       </div>
     </Layout>
   );
