@@ -244,6 +244,16 @@ export const usePortfolioStore = create((set, get) => ({
     }
   },
 
+  fetchTaxLots: async (portfolioId, symbol) => {
+    try {
+      const data = await api.get(`/portfolios/${portfolioId}/holdings/${symbol}/tax-lots`);
+      return data;
+    } catch (error) {
+      console.error('Error fetching tax lots:', error);
+      throw error;
+    }
+  },
+
   invalidateCache: () => {
     set({ lastFetch: null, portfolioDetails: {} });
   },
