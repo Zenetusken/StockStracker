@@ -11,10 +11,12 @@ import PortfolioDetail from './pages/PortfolioDetail';
 import Alerts from './pages/Alerts';
 import Screener from './pages/Screener';
 import Settings from './pages/Settings';
+import SecurityDashboard from './pages/SecurityDashboard';
 import NotFound from './pages/NotFound';
 import ToastContainer from './components/toast/ToastContainer';
 import AlertChecker from './components/AlertChecker';
 import NetworkStatus from './components/NetworkStatus';
+import ErrorBoundary from './components/ErrorBoundary';
 import SkipToMain from './components/SkipToMain';
 import MobileBottomNav from './components/MobileBottomNav';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
@@ -66,8 +68,9 @@ function App() {
         <ToastContainer />
         <AlertChecker />
         <NetworkStatus />
-        <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/mfa-verify" element={<MFAVerificationPage />} />
         <Route
@@ -134,9 +137,18 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Route
+          path="/security"
+          element={
+            <ProtectedRoute>
+              <SecurityDashboard />
+            </ProtectedRoute>
+          }
+        />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </ErrorBoundary>
         <AuthenticatedMobileNav />
       </RateLimitEventsProvider>
     </BrowserRouter>

@@ -9,6 +9,7 @@ import {
   Moon,
   Check,
   Palette,
+  Shield,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useTheme } from '../contexts/ThemeContext';
@@ -83,6 +84,11 @@ export default function SidebarSettingsMenu({ onOpenApiKeysModal }) {
   const handleApiKeysClick = () => {
     setIsOpen(false);
     onOpenApiKeysModal?.();
+  };
+
+  const handleSecurityClick = () => {
+    setIsOpen(false);
+    navigate('/security');
   };
 
   return (
@@ -231,6 +237,17 @@ export default function SidebarSettingsMenu({ onOpenApiKeysModal }) {
                     />
                   </span>
                 </div>
+              </button>
+            </div>
+
+            {/* Security Dashboard button */}
+            <div className="px-3 py-2 border-b border-line">
+              <button
+                onClick={handleSecurityClick}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-violet-500/10 transition-colors text-violet-600 dark:text-violet-400"
+              >
+                <Shield className="w-5 h-5" />
+                <span className="text-sm font-medium">Security Dashboard</span>
               </button>
             </div>
 
