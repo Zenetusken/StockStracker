@@ -120,8 +120,6 @@ const pendingProfileRequests = new Map();
  * STRATEGY (updated Dec 2024):
  * - Finnhub: profiles (has market cap, sector, industry) - use FIRST
  * - Yahoo: quotes only (profile API now requires crumb authentication)
- *
- * NEVER uses Alpha Vantage (reserved for technical indicators only)
  */
 async function getProfile(symbol) {
   // Check cache first
@@ -162,28 +160,37 @@ async function getProfile(symbol) {
         console.log(`[Screener] Finnhub metrics failed for ${symbol}: ${e.message}`);
       }
 
-      // STEP 3: Get quote from Yahoo (free, no crumb needed for chart/quote API)
-      try {
-        if (!yahooFinanceService.isRateLimited()) {
-          quote = await yahooFinanceService.getQuote(symbol);
-          if (quote) {
-            console.log(`[Screener] ✓ Yahoo quote for ${symbol}`);
+      // STEP 3: Get quote - check cache first (populated by preBatchQuotes)
+      const cachedQuote = quoteCache.get(symbol);
+      if (cachedQuote && Date.now() - cachedQuote.timestamp < QUOTE_CACHE_TTL) {
+        quote = cachedQuote.data;
+        // console.log(`[Screener] ✓ Cached quote for ${symbol}`);
+      } else {
+        // Cache miss - fetch individually
+        try {
+          if (!yahooFinanceService.isRateLimited()) {
+            quote = await yahooFinanceService.getQuote(symbol);
+            if (quote) {
+              quoteCache.set(symbol, { data: quote, timestamp: Date.now() });
+              console.log(`[Screener] ✓ Yahoo quote for ${symbol}`);
+            }
+          }
+        } catch (e) {
+          // Yahoo quote failed, try Finnhub
+        }
+
+        // STEP 4: Fallback to Finnhub for quote if Yahoo failed
+        if (!quote) {
+          try {
+            quote = await finnhub.getQuote(symbol);
+            if (quote) {
+              quoteCache.set(symbol, { data: quote, timestamp: Date.now() });
+            }
+          } catch (e) {
+            // Both failed for quote
           }
         }
-      } catch (e) {
-        // Yahoo quote failed, try Finnhub
       }
-
-      // STEP 4: Fallback to Finnhub for quote if Yahoo failed
-      if (!quote) {
-        try {
-          quote = await finnhub.getQuote(symbol);
-        } catch (e) {
-          // Both failed for quote
-        }
-      }
-
-      // NOTE: Alpha Vantage is NEVER used for profiles (reserved for technical indicators)
 
       if (profile) {
         // Get 52-week data from metrics (more reliable) or profile
@@ -273,6 +280,50 @@ async function getQuote(symbol) {
   } catch (e) { /* fall through */ }
 
   return null;
+}
+
+/**
+ * Pre-fetch quotes for all symbols in batch (1 API call instead of 50)
+ * Populates quote cache for subsequent getQuote/getProfile calls
+ */
+async function preBatchQuotes(symbols) {
+  // Filter out symbols already in cache
+  const uncachedSymbols = symbols.filter(symbol => {
+    const cached = quoteCache.get(symbol);
+    return !cached || Date.now() - cached.timestamp >= QUOTE_CACHE_TTL;
+  });
+
+  if (uncachedSymbols.length === 0) {
+    console.log('[Screener] All quotes in cache, skipping batch fetch');
+    return;
+  }
+
+  console.log(`[Screener] Pre-batching quotes for ${uncachedSymbols.length} symbols...`);
+
+  try {
+    // BATCH FETCH: Get all quotes in 1-3 API calls (Yahoo batches 20 at a time)
+    const batchQuotes = await yahooFinanceService.getBatchQuotes(uncachedSymbols);
+    const quotesReceived = Object.keys(batchQuotes).length;
+    console.log(`[Screener] Yahoo batch: ${quotesReceived}/${uncachedSymbols.length} quotes`);
+
+    // Populate cache
+    for (const [symbol, quote] of Object.entries(batchQuotes)) {
+      quoteCache.set(symbol, { data: quote, timestamp: Date.now() });
+    }
+
+    // For missing symbols, fall back to Finnhub
+    const missingSymbols = uncachedSymbols.filter(s => !batchQuotes[s.toUpperCase()]);
+    if (missingSymbols.length > 0) {
+      console.log(`[Screener] Fetching ${missingSymbols.length} missing quotes from Finnhub`);
+      const fallbackQuotes = await finnhub.getQuotes(missingSymbols);
+      for (const [symbol, quote] of Object.entries(fallbackQuotes)) {
+        quoteCache.set(symbol, { data: quote, timestamp: Date.now() });
+      }
+    }
+  } catch (error) {
+    console.log(`[Screener] Batch quote fetch failed: ${error.message}`);
+    // Will fall back to individual fetches in getQuote/getProfile
+  }
 }
 
 /**
@@ -406,7 +457,12 @@ router.get('/', async (req, res) => {
 
     console.log('[Screener] Running with filters:', filters);
 
+    // PRE-BATCH: Fetch all quotes in 1-3 API calls (instead of 50 individual calls)
+    // This populates the quote cache so getProfile() hits cache for quotes
+    await preBatchQuotes(SCREENER_UNIVERSE);
+
     // Fetch profiles for all stocks in universe (with caching)
+    // Quotes will be served from cache populated by preBatchQuotes
     const profiles = await Promise.all(
       SCREENER_UNIVERSE.map(symbol => getProfile(symbol))
     );

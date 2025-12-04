@@ -30,7 +30,7 @@ app.use(helmet({
       scriptSrc: ["'self'"],  // H4: Removed 'unsafe-inline' for XSS protection
       styleSrc: ["'self'", "'unsafe-inline'"],  // Keep for Tailwind CSS
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "wss:", "https://finnhub.io", "https://www.alphavantage.co"],
+      connectSrc: ["'self'", "wss:", "https://finnhub.io"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],

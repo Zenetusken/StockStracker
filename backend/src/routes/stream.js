@@ -112,49 +112,46 @@ router.get('/quotes', requireAuth, async (req, res) => {
   });
 
   // Function to send quote updates
-  // Uses Yahoo Finance as PRIMARY provider (higher daily limit, no API key)
-  // Falls back to Finnhub if Yahoo fails
+  // Uses Yahoo Finance BATCH as PRIMARY provider (1 API call for all symbols)
+  // Falls back to Finnhub individual calls only for missing symbols
   const sendQuoteUpdate = async () => {
     const connection = connections.get(connectionId);
     if (!connection) return;
 
     try {
-      // Fetch quotes for all symbols with Yahoo → Finnhub fallback
-      const quotes = await Promise.all(
-        connection.symbols.map(async (symbol) => {
-          try {
-            let quoteData = null;
-            let provider = null;
+      const symbolList = connection.symbols;
+      let batchQuotes = {};
+      let provider = 'yahoo';
 
-            // Try Yahoo Finance FIRST (no API key, higher limits)
-            if (!yahooFinanceService.isRateLimited()) {
-              try {
-                quoteData = await yahooFinanceService.getQuote(symbol);
-                if (quoteData && quoteData.c !== undefined) {
-                  provider = 'yahoo';
-                }
-              } catch (yahooErr) {
-                // Yahoo failed, fall through to Finnhub
-              }
-            }
+      // PRIMARY: Use Yahoo Finance batch endpoint (1 API call for all symbols)
+      if (!yahooFinanceService.isRateLimited()) {
+        try {
+          batchQuotes = await yahooFinanceService.getBatchQuotes(symbolList);
+          console.log(`[SSE] Yahoo batch: ${Object.keys(batchQuotes).length}/${symbolList.length} quotes`);
+        } catch (yahooErr) {
+          console.log(`[SSE] Yahoo batch failed: ${yahooErr.message}, falling back to Finnhub`);
+        }
+      }
 
-            // Fallback to Finnhub if Yahoo didn't work
-            if (!quoteData || quoteData.c === undefined) {
-              try {
-                quoteData = await finnhubService.getQuote(symbol);
-                provider = 'finnhub';
-              } catch (finnhubErr) {
-                return { symbol, quote: null, error: finnhubErr.message };
-              }
-            }
+      // FALLBACK: For any missing symbols, use Finnhub individual calls
+      const missingSymbols = symbolList.filter(s => !batchQuotes[s.toUpperCase()]);
+      if (missingSymbols.length > 0) {
+        provider = 'finnhub';
+        console.log(`[SSE] Fetching ${missingSymbols.length} missing symbols from Finnhub`);
+        const fallbackQuotes = await finnhubService.getQuotes(missingSymbols);
+        Object.assign(batchQuotes, fallbackQuotes);
+      }
 
-            const enriched = finnhubService.enrichQuote(symbol, quoteData);
-            return { symbol, quote: enriched, error: null, _provider: provider };
-          } catch (err) {
-            return { symbol, quote: null, error: err.message };
-          }
-        })
-      );
+      // Build quotes array with enriched data
+      const quotes = symbolList.map(symbol => {
+        const upperSymbol = symbol.toUpperCase();
+        const quoteData = batchQuotes[upperSymbol];
+        if (!quoteData) {
+          return { symbol: upperSymbol, quote: null, error: 'Quote not available' };
+        }
+        const enriched = finnhubService.enrichQuote(upperSymbol, quoteData);
+        return { symbol: upperSymbol, quote: enriched, error: null, _provider: provider };
+      });
 
       // Send update event
       const data = {

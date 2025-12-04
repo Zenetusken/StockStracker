@@ -28,12 +28,15 @@ function TopMovers() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  const fetchMovers = useCallback(async () => {
+  const fetchMovers = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const result = await api.get('/market/movers');
+      const url = force ? '/market/movers?fresh=true' : '/market/movers';
+      const result = await api.get(url);
       setData(result);
+      setLastUpdated(result.timestamp || Date.now());
       setError(null);
     } catch (err) {
       console.error('Failed to fetch movers:', err);
@@ -44,9 +47,9 @@ function TopMovers() {
   }, []);
 
   useEffect(() => {
-    fetchMovers();
-    // Auto-refresh every 2 minutes
-    const interval = setInterval(fetchMovers, 120000);
+    fetchMovers(false);
+    // Auto-refresh every 2 minutes (uses cache)
+    const interval = setInterval(() => fetchMovers(false), 120000);
     return () => clearInterval(interval);
   }, [fetchMovers]);
 
@@ -68,6 +71,16 @@ function TopMovers() {
     if (vol >= 1000000) return `${(vol / 1000000).toFixed(1)}M`;
     if (vol >= 1000) return `${(vol / 1000).toFixed(1)}K`;
     return vol.toString();
+  };
+
+  const formatTimeAgo = (timestamp) => {
+    if (!timestamp) return '';
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ago`;
   };
 
   const activeData = data?.[activeTab] || [];
@@ -96,14 +109,21 @@ function TopMovers() {
               );
             })}
           </div>
-          <button
-            onClick={fetchMovers}
-            disabled={loading}
-            className="p-1.5 text-text-muted hover:text-text-primary hover:bg-page-bg rounded transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            {lastUpdated && (
+              <span className="text-xs text-text-muted">
+                {formatTimeAgo(lastUpdated)}
+              </span>
+            )}
+            <button
+              onClick={() => fetchMovers(true)}
+              disabled={loading}
+              className="p-1.5 text-text-muted hover:text-text-primary hover:bg-page-bg rounded transition-colors"
+              title="Refresh (fetch fresh data)"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
       </div>
 

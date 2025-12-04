@@ -39,7 +39,7 @@ class KeyProviderService {
 
   /**
    * Get an API key for a service
-   * @param {string} serviceName - Service name (e.g., 'finnhub', 'alphavantage')
+   * @param {string} serviceName - Service name (e.g., 'finnhub', 'yahoo')
    * @param {Object} options - Options
    * @param {Function} options.fallbackLoader - Fallback function to load key if none in DB
    * @param {string} options.endpoint - Optional endpoint for granular rate limiting
@@ -88,13 +88,81 @@ class KeyProviderService {
   }
 
   /**
-   * Check if a service is currently rate limited (all keys exhausted)
+   * Check if a service is currently rate limited (all keys exhausted OR usage exceeded)
    * Use this BEFORE making API calls to avoid wasted requests
-   * @param {string} serviceName - Service name (e.g., 'finnhub', 'yahoo', 'alphavantage')
-   * @returns {boolean} True if all keys for the service are rate limited
+   * @param {string} serviceName - Service name (e.g., 'finnhub', 'yahoo')
+   * @returns {boolean} True if service should not be used (hard limited or usage exceeded)
    */
   isServiceRateLimited(serviceName) {
-    return this.rateLimiter.isServiceFullyRateLimited(serviceName);
+    // Check hard rate limit (429 received)
+    const hardLimited = this.rateLimiter.isServiceFullyRateLimited(serviceName);
+    if (hardLimited) return true;
+
+    // Check usage-based limit (preventive)
+    const usageExceeded = this.usageTracker.isUsageExceeded(serviceName);
+    return usageExceeded?.exceeded || false;
+  }
+
+  /**
+   * Get detailed rate limit status for a service
+   * Used by the API Keys Manager UI to show proper status badges
+   * @param {string} serviceName - Service name
+   * @returns {Object} Detailed rate limit status
+   */
+  getServiceRateLimitStatus(serviceName) {
+    const hardLimited = this.rateLimiter.isServiceFullyRateLimited(serviceName);
+    const hardLimitStatus = this.rateLimiter.getRateLimitStatus(serviceName);
+    const usageExceeded = this.usageTracker.isUsageExceeded(serviceName);
+
+    // Calculate reset time based on window type
+    let resetsAt = null;
+    if (usageExceeded?.exceeded) {
+      resetsAt = this.getResetTime(usageExceeded.windowType, usageExceeded.windowSeconds);
+    } else if (hardLimited && hardLimitStatus?.[0]?.rate_limited_until) {
+      resetsAt = hardLimitStatus[0].rate_limited_until;
+    }
+
+    return {
+      isLimited: hardLimited || usageExceeded?.exceeded,
+      hardLimited,                    // 429 received on all keys
+      usageExceeded: usageExceeded?.exceeded || false,   // Usage >= limit
+      reason: hardLimited ? 'rate_limited' : (usageExceeded?.exceeded ? 'usage_exceeded' : null),
+      limitType: usageExceeded?.limitType || null,
+      current: usageExceeded?.current || null,
+      max: usageExceeded?.max || null,
+      windowType: usageExceeded?.windowType || null,
+      rateLimitedUntil: hardLimitStatus?.[0]?.rate_limited_until || null,
+      resetsAt
+    };
+  }
+
+  /**
+   * Calculate reset time based on window type
+   * @param {string} windowType - 'daily' or 'sliding'
+   * @param {number} windowSeconds - Window duration in seconds (for sliding)
+   * @returns {string|null} ISO timestamp when limit resets
+   */
+  getResetTime(windowType, windowSeconds) {
+    if (!windowType) return null;
+
+    const now = new Date();
+
+    if (windowType === 'daily') {
+      // Daily limits reset at midnight UTC
+      const tomorrow = new Date(now);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      tomorrow.setUTCHours(0, 0, 0, 0);
+      return tomorrow.toISOString();
+    }
+
+    if (windowType === 'sliding' && windowSeconds) {
+      // Sliding window - resets based on oldest call expiring
+      // For now, estimate as windowSeconds from now
+      const resetTime = new Date(now.getTime() + windowSeconds * 1000);
+      return resetTime.toISOString();
+    }
+
+    return null;
   }
 
   /**
@@ -118,7 +186,8 @@ class KeyProviderService {
       config: service.config ? JSON.parse(service.config) : null,
       rateLimits: this.getRateLimitsForService(service.id),
       keys: this.getKeysForService(service.id),
-      usage: this.usageTracker.getUsageForService(service.name)
+      usage: this.usageTracker.getUsageForService(service.name),
+      rateLimitStatus: this.getServiceRateLimitStatus(service.name)
     }));
   }
 
@@ -137,7 +206,8 @@ class KeyProviderService {
       config: service.config ? JSON.parse(service.config) : null,
       rateLimits: this.getRateLimitsForService(service.id),
       keys: this.getKeysForService(service.id),
-      usage: this.usageTracker.getUsageForService(serviceName)
+      usage: this.usageTracker.getUsageForService(serviceName),
+      rateLimitStatus: this.getServiceRateLimitStatus(serviceName)
     };
   }
 
@@ -280,10 +350,6 @@ class KeyProviderService {
       switch (key.service_name) {
         case 'finnhub':
           testUrl = `${key.base_url}/stock/symbol?exchange=US&token=${decryptedKeyValue}`;
-          response = await fetch(testUrl);
-          break;
-        case 'alphavantage':
-          testUrl = `${key.base_url}?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=${decryptedKeyValue}`;
           response = await fetch(testUrl);
           break;
         default:

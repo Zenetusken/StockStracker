@@ -1,5 +1,6 @@
 import express from 'express';
 import finnhub from '../services/finnhub.js';
+import yahooFinanceService from '../services/yahoo.js';
 import { requireAuth } from '../middleware/auth.js';
 import { quoteLimiter } from '../middleware/rateLimit.js';
 
@@ -38,8 +39,11 @@ router.get('/:symbol', async (req, res) => {
 
 /**
  * POST /api/quotes/batch
- * Get quotes for multiple symbols at once
+ * Get quotes for multiple symbols at once using TRUE batching
  * Body: { symbols: ['AAPL', 'GOOGL', 'MSFT'] }
+ *
+ * Uses Yahoo Finance spark endpoint for efficient batching (1 API call per 20 symbols)
+ * Falls back to Finnhub individual calls for any missing symbols
  */
 router.post('/batch', async (req, res) => {
   try {
@@ -53,17 +57,35 @@ router.post('/batch', async (req, res) => {
       return res.status(400).json({ error: 'Maximum 50 symbols allowed' });
     }
 
-    const quotes = await finnhub.getQuotes(symbols);
+    console.log(`[Quotes] Batch fetching ${symbols.length} symbols...`);
 
-    // Enrich each quote
+    // PRIMARY: Use Yahoo Finance batch (TRUE batching - 1 API call per 20 symbols)
+    let batchQuotes = {};
+    try {
+      batchQuotes = await yahooFinanceService.getBatchQuotes(symbols);
+      console.log(`[Quotes] Yahoo batch returned ${Object.keys(batchQuotes).length}/${symbols.length} quotes`);
+    } catch (error) {
+      console.log(`[Quotes] Yahoo batch failed: ${error.message}, falling back to individual quotes`);
+    }
+
+    // FALLBACK: For any missing symbols, use Finnhub individual calls
+    const missingSymbols = symbols.filter(s => !batchQuotes[s.toUpperCase()]);
+    if (missingSymbols.length > 0) {
+      console.log(`[Quotes] Fetching ${missingSymbols.length} missing symbols via Finnhub fallback`);
+      const fallbackQuotes = await finnhub.getQuotes(missingSymbols);
+      Object.assign(batchQuotes, fallbackQuotes);
+    }
+
+    // Enrich all quotes (normalizes format regardless of source)
     const enrichedQuotes = {};
-    Object.entries(quotes).forEach(([symbol, quoteData]) => {
+    for (const [symbol, quoteData] of Object.entries(batchQuotes)) {
       const enriched = finnhub.enrichQuote(symbol, quoteData);
       if (enriched) {
         enrichedQuotes[symbol] = enriched;
       }
-    });
+    }
 
+    console.log(`[Quotes] Returning ${Object.keys(enrichedQuotes).length} enriched quotes`);
     res.json(enrichedQuotes);
   } catch (error) {
     console.error('Error fetching batch quotes:', error);
@@ -75,6 +97,9 @@ router.post('/batch', async (req, res) => {
  * POST /api/quotes/profiles
  * Get profiles for multiple symbols at once
  * Body: { symbols: ['AAPL', 'GOOGL', 'MSFT'] }
+ *
+ * OPTIMIZED: Uses sequential batching with delays to respect Finnhub rate limit (60/min)
+ * Processes 5 profiles at a time with 100ms delays between batches
  */
 router.post('/profiles', async (req, res) => {
   try {
@@ -88,20 +113,44 @@ router.post('/profiles', async (req, res) => {
       return res.status(400).json({ error: 'Maximum 50 symbols allowed' });
     }
 
-    const profiles = {};
-    await Promise.all(
-      symbols.map(async (symbol) => {
-        try {
-          const profile = await finnhub.getCompanyProfile(symbol);
-          if (profile && profile.name) {
-            profiles[symbol.toUpperCase()] = profile;
-          }
-        } catch (err) {
-          console.log(`Could not fetch profile for ${symbol}:`, err.message);
-        }
-      })
-    );
+    console.log(`[Quotes] Batch fetching ${symbols.length} profiles...`);
 
+    // Sequential batching: 5 profiles at a time with 100ms delays
+    // Prevents overwhelming Finnhub's 60 calls/minute rate limit
+    const BATCH_SIZE = 5;
+    const DELAY_MS = 100;
+    const profiles = {};
+
+    for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+      const batch = symbols.slice(i, i + BATCH_SIZE);
+
+      // Fetch batch in parallel
+      const batchResults = await Promise.all(
+        batch.map(async (symbol) => {
+          try {
+            const profile = await finnhub.getCompanyProfile(symbol);
+            return { symbol, profile };
+          } catch (err) {
+            console.log(`[Quotes] Could not fetch profile for ${symbol}:`, err.message);
+            return { symbol, profile: null };
+          }
+        })
+      );
+
+      // Add valid profiles to result
+      for (const { symbol, profile } of batchResults) {
+        if (profile && profile.name) {
+          profiles[symbol.toUpperCase()] = profile;
+        }
+      }
+
+      // Small delay between batches (except for last batch)
+      if (i + BATCH_SIZE < symbols.length) {
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      }
+    }
+
+    console.log(`[Quotes] Returning ${Object.keys(profiles).length}/${symbols.length} profiles`);
     res.json(profiles);
   } catch (error) {
     console.error('Error fetching batch profiles:', error);

@@ -92,12 +92,19 @@ export default function RateLimitBar({
     return `${mins}m ${secs}s`;
   }, []);
 
+  // Check if usage has exceeded the limit
+  const isExceeded = currentCount >= max;
+
   // Calculate percentage and colors
   const { percentage, color, bgColor } = useMemo(() => {
     const pct = Math.min(100, (currentCount / max) * 100);
     let clr, bgClr;
 
-    if (pct > 90) {
+    if (currentCount >= max) {
+      // Exceeded - use pulsing red
+      clr = 'bg-red-600 animate-pulse';
+      bgClr = 'bg-red-200 dark:bg-red-900/50';
+    } else if (pct > 90) {
       clr = 'bg-red-500';
       bgClr = 'bg-red-100 dark:bg-red-900/30';
     } else if (pct > 70) {
@@ -176,8 +183,13 @@ export default function RateLimitBar({
         <span className="text-xs text-text-muted dark:text-gray-400">
           {description || 'Usage'}
         </span>
-        <span className="text-xs font-medium text-text-primary dark:text-gray-300">
+        <span className={`text-xs font-medium ${isExceeded ? 'text-red-600 dark:text-red-400' : 'text-text-primary dark:text-gray-300'}`}>
           {currentCount} / {max}
+          {isExceeded && (
+            <span className="ml-1.5 px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-[10px] font-semibold rounded uppercase">
+              EXCEEDED
+            </span>
+          )}
         </span>
       </div>
       <div className={`h-2 rounded-full ${bgColor} overflow-hidden`}>
@@ -187,12 +199,14 @@ export default function RateLimitBar({
         />
       </div>
       <div className="flex justify-between mt-0.5">
-        <span className="text-xs text-text-muted">
-          {currentCount > 0 && nextExpirySeconds !== null
-            ? `Next slot in ${formatTime(nextExpirySeconds)}`
-            : ''}
+        <span className={`text-xs ${isExceeded ? 'text-red-500 dark:text-red-400' : 'text-text-muted'}`}>
+          {isExceeded
+            ? 'Limit exceeded - service unavailable'
+            : currentCount > 0 && nextExpirySeconds !== null
+              ? `Next slot in ${formatTime(nextExpirySeconds)}`
+              : ''}
         </span>
-        <span className="text-xs text-text-muted">
+        <span className={`text-xs ${isExceeded ? 'text-red-500 dark:text-red-400 font-semibold' : 'text-text-muted'}`}>
           {percentage.toFixed(0)}%
         </span>
       </div>

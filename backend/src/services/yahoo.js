@@ -625,6 +625,125 @@ class YahooFinanceService {
       return null;
     }
   }
+
+  /**
+   * Get quotes for multiple symbols using the spark endpoint
+   * Yahoo Finance spark endpoint has a 20 symbol limit per request
+   * We batch into groups of 20 and run them in parallel
+   * Still much more efficient than individual getQuote() calls (8 calls for 150 vs 150 calls)
+   * @param {string[]} symbols - Array of stock symbols
+   * @returns {Object} Map of symbol -> quote data in Finnhub format
+   */
+  async getBatchQuotes(symbols) {
+    if (!symbols || symbols.length === 0) {
+      return {};
+    }
+
+    // Proactive rate limit check
+    if (this.isRateLimited()) {
+      console.log(`[Yahoo] Rate limited, skipping batch quotes`);
+      const error = new Error('Yahoo Finance rate limited');
+      error.isRateLimited = true;
+      error.provider = 'yahoo';
+      throw error;
+    }
+
+    // Yahoo spark endpoint limit is 20 symbols per request
+    const BATCH_SIZE = 20;
+    const batches = [];
+    for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+      batches.push(symbols.slice(i, i + BATCH_SIZE));
+    }
+
+    console.log(`[Yahoo] Batch fetching ${symbols.length} symbols in ${batches.length} parallel requests...`);
+
+    try {
+      // Fetch all batches in parallel
+      const batchResults = await Promise.all(
+        batches.map(async (batch, batchIndex) => {
+          try {
+            await this.throttle();
+
+            const symbolList = batch.map(s => s.toUpperCase()).join(',');
+            const url = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(symbolList)}&range=1d&interval=1d`;
+
+            const response = await fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              },
+              timeout: 15000,
+            });
+
+            // Track the API call
+            this.recordApiCall();
+
+            // Check for rate limiting
+            if (response.status === 429) {
+              console.error(`[Yahoo] Batch ${batchIndex + 1} rate limited`);
+              const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
+              this.recordRateLimit(retryAfter);
+              return {};
+            }
+
+            if (!response.ok) {
+              console.error(`[Yahoo] Batch ${batchIndex + 1} HTTP error: ${response.status}`);
+              return {};
+            }
+
+            const data = await response.json();
+
+            // Spark endpoint returns object with symbol keys directly
+            // But when there's an error, it may return { spark: { error: ... } }
+            if (data.spark?.error) {
+              console.error(`[Yahoo] Batch ${batchIndex + 1} error:`, data.spark.error.description);
+              return {};
+            }
+
+            // Convert spark format to quotes
+            const quotes = {};
+            for (const [symbol, sparkData] of Object.entries(data)) {
+              if (!sparkData || !sparkData.close || sparkData.close.length === 0) {
+                continue;
+              }
+
+              const currentPrice = sparkData.close[sparkData.close.length - 1];
+              const previousClose = sparkData.chartPreviousClose || currentPrice;
+
+              quotes[symbol] = {
+                c: currentPrice,
+                pc: previousClose,
+                h: currentPrice,
+                l: currentPrice,
+                o: previousClose,
+                v: 0,
+                t: sparkData.timestamp?.[0] || Math.floor(Date.now() / 1000),
+              };
+            }
+
+            return quotes;
+          } catch (error) {
+            console.error(`[Yahoo] Batch ${batchIndex + 1} error:`, error.message);
+            return {};
+          }
+        })
+      );
+
+      // Merge all batch results
+      const allQuotes = {};
+      for (const batchQuotes of batchResults) {
+        Object.assign(allQuotes, batchQuotes);
+      }
+
+      console.log(`✓ Yahoo spark returned ${Object.keys(allQuotes).length}/${symbols.length} quotes`);
+      return allQuotes;
+    } catch (error) {
+      if (error.isRateLimited) {
+        throw error;
+      }
+      console.error(`[Yahoo] Batch quotes error:`, error.message);
+      return {};
+    }
+  }
 }
 
 // Export singleton

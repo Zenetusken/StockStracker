@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SearchPreviewPanel, TrendingSection, WatchlistQuickAdd } from './search';
+import { SearchPreviewPanel, WatchlistQuickAdd } from './search';
 import useKeyboardNavigation from '../hooks/useKeyboardNavigation';
 import { useSearchStore } from '../stores/searchStore';
 
@@ -757,14 +757,6 @@ const SearchBar = forwardRef(function SearchBar(props, ref) {
             </div>
           )}
 
-          {/* Trending Stocks - shown when search is empty */}
-          {query.trim().length === 0 && (
-            <div className="p-3 border-t border-line">
-              <TrendingSection
-                onSelectStock={(symbol) => handleSelectSymbol(symbol, '')}
-              />
-            </div>
-          )}
           </div>
           {/* End of scrollable content */}
 

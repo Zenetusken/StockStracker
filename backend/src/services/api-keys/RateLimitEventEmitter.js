@@ -20,7 +20,6 @@ class RateLimitEventEmitter extends EventEmitter {
     // Service display names
     this.serviceDisplayNames = {
       finnhub: 'Finnhub',
-      alphavantage: 'Alpha Vantage',
       yahoo: 'Yahoo Finance'
     };
   }
@@ -82,7 +81,7 @@ class RateLimitEventEmitter extends EventEmitter {
   emitRateLimitHit(serviceName, retryAfter, limitType = 'per_minute') {
     const now = Date.now();
     const displayName = this.getDisplayName(serviceName);
-    const limitDesc = limitType === 'daily' ? '25/day' : '60/min';
+    const limitDesc = limitType === 'daily' ? 'daily limit' : '60/min';
 
     const event = {
       type: 'rate_limit_hit',

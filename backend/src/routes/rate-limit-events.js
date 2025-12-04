@@ -66,7 +66,7 @@ rateLimitEvents.on('rate_limit_event', (event) => {
 /**
  * Manual test endpoint - trigger a test event
  * POST /api/rate-limits/test
- * Body: { type: 'warning' | 'hit' | 'recovered', service: 'finnhub' | 'alphavantage' }
+ * Body: { type: 'warning' | 'hit' | 'recovered', service: 'finnhub' | 'yahoo' }
  */
 router.post('/test', (req, res) => {
   const { type = 'warning', service = 'finnhub' } = req.body;

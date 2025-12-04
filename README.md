@@ -37,7 +37,7 @@ Go beyond simple price tracking with professional-grade accounting tools:
 Built to survive the "free tier" limitations of financial APIs:
 - **Smart Key Rotation**: Automatically cycles through multiple API keys to bypass rate limits.
 - **Intelligent Caching**: Reduces API calls by 90% while keeping data fresh.
-- **Multi-Provider Fallback**: Seamlessly switches between Finnhub, Alpha Vantage, and Yahoo Finance if one fails.
+- **Multi-Provider Fallback**: Seamlessly switches between Yahoo Finance and Finnhub if one fails.
 - **Offline-First Design**: Graceful degradation when network connectivity is lost.
 
 ### 💻 Modern Developer Experience
@@ -77,10 +77,10 @@ A perfect reference architecture for full-stack React applications:
 
 | Frontend | Backend | Data |
 |----------|---------|------|
-| React 18 | Node.js + Express | Finnhub API |
-| Zustand | SQLite (WAL mode) | Alpha Vantage |
-| TailwindCSS | express-session | Yahoo Finance |
-| Lightweight Charts | bcrypt | SSE streaming |
+| React 18 | Node.js + Express | Yahoo Finance |
+| Zustand | SQLite (WAL mode) | Finnhub API |
+| TailwindCSS | express-session | SSE streaming |
+| Lightweight Charts | bcrypt | |
 
 ## Quick Start
 
@@ -103,25 +103,18 @@ Edit `.env` and add your API keys:
 | Variable | Required | Get Key |
 |----------|----------|---------|
 | `FINNHUB_API_KEY` | Yes | [finnhub.io/register](https://finnhub.io/register) → Dashboard → API Key |
-| `ALPHAVANTAGE_API_KEY` | Yes | [alphavantage.co](https://www.alphavantage.co/support/#api-key) → Get Free API Key |
 
 **Getting your keys:**
 
-1. **Finnhub** (for real-time quotes, search, news)
+1. **Finnhub** (for real-time quotes, search, news, company profiles)
    - Go to [finnhub.io/register](https://finnhub.io/register)
    - Create free account
    - Copy API key from Dashboard
    - Free tier: 60 API calls/minute
 
-2. **Alpha Vantage** (for chart historical data)
-   - Go to [alphavantage.co/support/#api-key](https://www.alphavantage.co/support/#api-key)
-   - Enter email, get key instantly
-   - Free tier: 25 calls/day
-
 Your `.env` should look like:
 ```bash
 FINNHUB_API_KEY=abc123your_finnhub_key_here
-ALPHAVANTAGE_API_KEY=xyz789your_alphavantage_key_here
 SESSION_SECRET=any-random-string-for-sessions
 ```
 

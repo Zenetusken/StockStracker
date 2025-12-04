@@ -1,4 +1,3 @@
-import alphaVantageService from './alphavantage.js';
 import yahooFinanceService from './yahoo.js';
 import { getKeyProvider } from './api-keys/index.js';
 
@@ -75,7 +74,7 @@ class FinnhubService {
   /**
    * Check if a provider is available (has key and not rate-limited)
    * Use this BEFORE making API calls to avoid wasted requests
-   * @param {string} serviceName - Service name (e.g., 'finnhub', 'yahoo', 'alphavantage')
+   * @param {string} serviceName - Service name (e.g., 'finnhub', 'yahoo')
    * @returns {boolean} True if provider is available
    */
   _isProviderAvailable(serviceName) {
@@ -181,9 +180,6 @@ class FinnhubService {
    * 1. Finnhub (if API key available AND not rate-limited)
    * 2. Yahoo Finance (free, if not rate-limited)
    * 3. Error - no mock data
-   *
-   * NOTE: Alpha Vantage removed from quote fallback to protect 25 calls/day limit.
-   * Alpha Vantage is reserved for profiles and search only.
    */
   async getQuote(symbol) {
     const upperSymbol = symbol.toUpperCase();
@@ -223,7 +219,6 @@ class FinnhubService {
       }
 
       // 3. Error - no mock data fallback
-      // NOTE: Alpha Vantage intentionally NOT used for quotes (25 calls/day limit)
       console.error(`❌ No quote data available for ${upperSymbol} - all providers exhausted or rate-limited`);
       throw new Error(`No quote data available for ${upperSymbol}. All API providers exhausted or rate limited.`);
     }, this.cacheTimeout);
@@ -237,7 +232,6 @@ class FinnhubService {
    * 1. Try Yahoo Finance first (has the most complete data with P/E, Beta, EPS, 52-week)
    * 2. If Yahoo fails, try Finnhub for basic profile (if API key available)
    * 3. If Finnhub has logo but Yahoo doesn't, merge the logo
-   * 4. Alpha Vantage as last resort
    */
   async getCompanyProfile(symbol) {
     const upperSymbol = symbol.toUpperCase();
@@ -317,9 +311,7 @@ class FinnhubService {
         return baseProfile;
       }
 
-      // 4. Return minimal profile instead of calling Alpha Vantage
-      // NOTE: Alpha Vantage intentionally REMOVED from profile cascade (25 calls/day limit)
-      // Alpha Vantage is reserved for unique features that Yahoo/Finnhub don't provide
+      // 4. Return minimal profile as fallback
       console.log(`⚠ No full profile data available for ${upperSymbol}, returning minimal profile`);
       return {
         name: upperSymbol,
@@ -345,10 +337,7 @@ class FinnhubService {
    * Fallback Order:
    * 1. Finnhub (if API key available, real-time)
    * 2. Yahoo Finance (free, no API key needed)
-   * 3. Alpha Vantage (LAST RESORT - 25 calls/day limit, use sparingly!)
-   *
-   * NOTE: Alpha Vantage is intentionally last resort to preserve 25/day limit
-   * for features where it's truly needed (technical indicators).
+   * 3. Empty results (graceful degradation)
    */
   async searchSymbols(query) {
     const cacheKey = `search:${query.toLowerCase()}`;
@@ -384,24 +373,7 @@ class FinnhubService {
         }
       }
 
-      // 3. Try Alpha Vantage as LAST RESORT (25 calls/day limit!)
-      // NOTE: Consider skipping AV entirely for search since Yahoo/Finnhub usually suffice
-      if (alphaVantageService.hasApiKey() && this._isProviderAvailable('alphavantage') && !alphaVantageService.isRateLimited()) {
-        try {
-          console.log(`⚠ Trying Alpha Vantage search for "${query}" (LAST RESORT - 25/day limit)...`);
-          const avResult = await alphaVantageService.searchSymbols(query);
-          if (avResult && avResult.count > 0) {
-            console.log(`✓ Using Alpha Vantage search results for "${query}"`);
-            return avResult;
-          }
-        } catch (avError) {
-          console.log(`Alpha Vantage search error for "${query}": ${avError.message}`);
-        }
-      } else if (alphaVantageService.hasApiKey() && alphaVantageService.isRateLimited()) {
-        console.log(`[Search] Alpha Vantage rate limited (25/day), skipping for "${query}"`);
-      }
-
-      // 4. Return empty results instead of error (graceful degradation)
+      // 3. Return empty results instead of error (graceful degradation)
       console.warn(`⚠ No search results for "${query}" - all providers exhausted, returning empty`);
       return { count: 0, result: [] };
     }, this.searchCacheTimeout);

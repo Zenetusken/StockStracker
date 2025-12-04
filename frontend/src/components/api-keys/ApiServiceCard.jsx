@@ -9,7 +9,9 @@ import {
   ChevronUp,
   Trash2,
   Power,
-  TestTube
+  TestTube,
+  XCircle,
+  Ban
 } from 'lucide-react';
 import RateLimitBar from './RateLimitBar';
 import MaskedKeyDisplay from './MaskedKeyDisplay';
@@ -19,8 +21,34 @@ const STATUS_ICONS = {
   healthy: { icon: CheckCircle, color: 'text-gain' },
   warning: { icon: AlertTriangle, color: 'text-amber-500' },
   critical: { icon: AlertCircle, color: 'text-loss' },
+  exceeded: { icon: XCircle, color: 'text-loss', badge: 'EXCEEDED' },
+  rate_limited: { icon: Ban, color: 'text-loss', badge: 'RATE LIMITED' },
   not_configured: { icon: Circle, color: 'text-text-muted' }
 };
+
+// Format time until reset for display
+function formatTimeUntil(isoTimestamp) {
+  if (!isoTimestamp) return null;
+  const now = Date.now();
+  const resetTime = new Date(isoTimestamp).getTime();
+  const diffMs = resetTime - now;
+
+  if (diffMs <= 0) return 'now';
+
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    const remainingMins = minutes % 60;
+    return `${hours}h ${remainingMins}m`;
+  }
+  if (minutes > 0) {
+    const remainingSecs = seconds % 60;
+    return `${minutes}m ${remainingSecs}s`;
+  }
+  return `${seconds}s`;
+}
 
 export default function ApiServiceCard({ service, onAddKey }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -32,6 +60,10 @@ export default function ApiServiceCard({ service, onAddKey }) {
   const keyRequired = service.config?.keyRequired !== false;
 
   const getStatus = () => {
+    // Check explicit rate limit status first (from backend)
+    if (service.rateLimitStatus?.hardLimited) return 'rate_limited';
+    if (service.rateLimitStatus?.usageExceeded) return 'exceeded';
+
     // For keyless services, base status on usage only
     if (!keyRequired) {
       if (service.usage?.percentUsed > 90) return 'critical';
@@ -88,13 +120,25 @@ export default function ApiServiceCard({ service, onAddKey }) {
         <div className="flex items-center gap-3">
           <StatusIcon className={`w-5 h-5 ${STATUS_ICONS[status].color}`} />
           <div>
-            <h3 className="font-medium text-text-primary">
-              {service.display_name}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium text-text-primary">
+                {service.display_name}
+              </h3>
+              {STATUS_ICONS[status].badge && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-loss/20 text-loss font-semibold animate-pulse">
+                  {STATUS_ICONS[status].badge}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-text-secondary">
               {keyRequired
                 ? `${service.active_keys} key${service.active_keys !== 1 ? 's' : ''} configured`
                 : 'No API Key Required'}
+              {service.rateLimitStatus?.resetsAt && service.rateLimitStatus?.isLimited && (
+                <span className="ml-2 text-xs text-text-muted">
+                  Resets in {formatTimeUntil(service.rateLimitStatus.resetsAt)}
+                </span>
+              )}
             </p>
           </div>
         </div>

@@ -70,7 +70,6 @@ Copy `.env.example` to `.env` and configure:
 
 ```bash
 FINNHUB_API_KEY=<your_key>        # Required - real-time quotes, search, news
-ALPHAVANTAGE_API_KEY=<your_key>   # Required - historical chart data
 SESSION_SECRET=<random_string>    # Required in production (64+ chars)
 PORT=3001                         # Backend port
 NODE_ENV=development
@@ -79,7 +78,7 @@ NODE_ENV=development
 ### API Rate Limits
 
 - **Finnhub**: 60 calls/minute (free tier) - uses in-memory caching
-- **Alpha Vantage**: 25 calls/day, 5 calls/minute (free tier)
+- **Yahoo Finance**: Unofficial API with no documented limits
 
 ---
 
@@ -89,8 +88,8 @@ NODE_ENV=development
 
 ```
 ┌─────────────────┐    SSE/REST    ┌─────────────────┐    HTTP    ┌─────────────────┐
-│  React Frontend │◄──────────────►│  Express API    │◄──────────►│ Finnhub/Alpha   │
-│  (Zustand)      │                │  (Session Auth) │            │ Vantage APIs    │
+│  React Frontend │◄──────────────►│  Express API    │◄──────────►│ Yahoo Finance/  │
+│  (Zustand)      │                │  (Session Auth) │            │ Finnhub APIs    │
 └─────────────────┘                └────────┬────────┘            └─────────────────┘
                                            │
                                   ┌────────▼────────┐
@@ -106,8 +105,8 @@ NODE_ENV=development
 | `index.js` | Express server entry with middleware (Helmet, CORS, sessions, CSRF) |
 | `database.js` | SQLite schema and initialization (WAL mode enabled) |
 | `routes/` | API endpoints: auth, quotes, stream (SSE), watchlists, search, api-keys, mfa |
-| `services/finnhub.js` | Primary market data provider (quotes, profiles, news, search) |
-| `services/alphavantage.js` | Historical OHLCV data for candlestick charts |
+| `services/finnhub.js` | Market data provider (profiles, news, search) |
+| `services/yahoo.js` | Primary quote/chart provider (no API key required) |
 | `middleware/` | Auth middleware, rate limiting, CSRF protection |
 
 ### Frontend (`frontend/src/`)

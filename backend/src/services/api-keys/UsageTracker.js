@@ -267,6 +267,32 @@ class UsageTracker {
   }
 
   /**
+   * Check if usage has exceeded any rate limit for a service
+   * Used for preventive rate limiting (before 429 is received)
+   * @param {string} serviceName - Service name
+   * @returns {Object} { exceeded: boolean, limitType?, current?, max?, windowType? }
+   */
+  isUsageExceeded(serviceName) {
+    const usage = this.getUsageForService(serviceName);
+    if (!usage || !usage.byLimit) return { exceeded: false };
+
+    // Check if ANY rate limit type is exceeded
+    for (const [type, limit] of Object.entries(usage.byLimit)) {
+      if (limit.current >= limit.max) {
+        return {
+          exceeded: true,
+          limitType: type,
+          current: limit.current,
+          max: limit.max,
+          windowType: limit.windowType,
+          windowSeconds: limit.windowSeconds
+        };
+      }
+    }
+    return { exceeded: false };
+  }
+
+  /**
    * Get detailed usage with individual call timestamps for real-time UI
    * @param {string} serviceName - Service name
    * @returns {Object} Detailed usage data with per-call expiration times

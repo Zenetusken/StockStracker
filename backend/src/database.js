@@ -532,7 +532,6 @@ function cleanupDuplicateRateLimits() {
 function seedApiServices() {
   // Rate limit data sourced from official API documentation (researched Nov 2025)
   // Finnhub: https://finnhub.io/docs/api/rate-limit
-  // Alpha Vantage: https://www.alphavantage.co/premium/
   const services = [
     {
       name: 'finnhub',
@@ -554,29 +553,6 @@ function seedApiServices() {
       rateLimits: [
         { type: 'per_minute', endpointPattern: '', maxCalls: 60, windowSeconds: 60, windowType: 'sliding', description: 'Free tier: 60 calls/minute' },
         { type: 'per_second', endpointPattern: '', maxCalls: 30, windowSeconds: 1, windowType: 'sliding', description: 'Burst limit: 30 calls/second (all tiers)' }
-      ]
-    },
-    {
-      name: 'alphavantage',
-      displayName: 'Alpha Vantage',
-      baseUrl: 'https://www.alphavantage.co/query',
-      docsUrl: 'https://www.alphavantage.co/documentation/',
-      signupUrl: 'https://www.alphavantage.co/support/#api-key',
-      priority: 1,
-      // Alpha Vantage returns HTTP 200 with "Note" or "Information" key when rate limited
-      // Free tier: 25 calls/day + 5 calls/min, daily resets at UTC midnight
-      config: JSON.stringify({
-        rateLimitHttpCode: 200,
-        rateLimitErrorKey: 'Note',
-        rateLimitErrorKeyAlt: 'Information',
-        retryStrategy: 'fixed_delay',
-        retryBaseDelay: 12000,
-        dailyResetTime: '00:00 UTC',
-        tier: 'free'
-      }),
-      rateLimits: [
-        { type: 'daily', endpointPattern: '', maxCalls: 25, windowSeconds: 86400, windowType: 'daily', description: 'Free tier: 25 calls/day (resets UTC midnight)' },
-        { type: 'per_minute', endpointPattern: '', maxCalls: 5, windowSeconds: 60, windowType: 'sliding', description: 'Free tier: 5 calls/minute (12sec spacing recommended)' }
       ]
     },
     {
@@ -703,15 +679,6 @@ function migrateEnvApiKeys() {
     if (key && key !== 'your_finnhub_api_key_here') {
       insertKey.run(key, 'Environment Key', 'finnhub');
       console.log('[Database] Migrated Finnhub API key from environment');
-    }
-  }
-
-  // Migrate Alpha Vantage key
-  if (process.env.ALPHAVANTAGE_API_KEY) {
-    const key = process.env.ALPHAVANTAGE_API_KEY.trim();
-    if (key && key !== 'your_alphavantage_api_key_here') {
-      insertKey.run(key, 'Environment Key', 'alphavantage');
-      console.log('[Database] Migrated Alpha Vantage API key from environment');
     }
   }
 }
