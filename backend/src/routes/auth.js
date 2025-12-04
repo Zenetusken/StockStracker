@@ -5,6 +5,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { authLimiter, passwordLimiter } from '../middleware/rateLimit.js';
 import { authValidators } from '../middleware/validation.js';
 import { validatePassword } from '../utils/passwordValidation.js';
+import { verifyToken, verifyBackupCode } from '../services/mfa.js';
+import { decrypt } from '../utils/encryption.js';
 import {
   logSecurityEvent,
   SecurityEventType,
@@ -114,9 +116,9 @@ router.post('/login', authLimiter, authValidators.login, async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Get user with lockout fields
+    // Get user with lockout fields and MFA status
     const user = db.prepare(`
-      SELECT id, email, name, password_hash, is_active,
+      SELECT id, email, name, password_hash, is_active, mfa_enabled,
              failed_login_attempts, locked_until, last_failed_login
       FROM users
       WHERE email = ?
@@ -258,6 +260,22 @@ router.post('/login', authLimiter, authValidators.login, async (req, res) => {
       return res.status(401).json({
         error: genericError,
         remainingAttempts
+      });
+    }
+
+    // Check if MFA is enabled - require second factor before completing login
+    if (user.mfa_enabled === 1) {
+      console.log(`[Auth] MFA required for ${email}`);
+
+      // Store pending MFA verification in session
+      req.session.pendingMfaUserId = user.id;
+      req.session.pendingMfaEmail = user.email;
+      req.session.pendingMfaTimestamp = Date.now();
+
+      return res.status(202).json({
+        success: false,
+        mfaRequired: true,
+        message: 'MFA verification required'
       });
     }
 
@@ -496,6 +514,157 @@ router.post('/check-password', (req, res) => {
     errors: result.errors,
     warnings: result.warnings
   });
+});
+
+/**
+ * POST /api/auth/verify-mfa
+ * Complete login after MFA verification for users with MFA enabled
+ */
+const MFA_SESSION_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+router.post('/verify-mfa', authLimiter, async (req, res) => {
+  const ipAddress = getClientIp(req);
+  const userAgent = req.headers['user-agent'];
+
+  try {
+    const { code, useBackup } = req.body;
+
+    // Check for pending MFA session
+    const pendingUserId = req.session.pendingMfaUserId;
+    const pendingEmail = req.session.pendingMfaEmail;
+    const pendingTimestamp = req.session.pendingMfaTimestamp;
+
+    if (!pendingUserId) {
+      return res.status(400).json({
+        error: 'No pending MFA verification. Please login first.'
+      });
+    }
+
+    // Check MFA session expiry (5 minutes)
+    if (Date.now() - pendingTimestamp > MFA_SESSION_EXPIRY_MS) {
+      // Clear pending MFA session
+      delete req.session.pendingMfaUserId;
+      delete req.session.pendingMfaEmail;
+      delete req.session.pendingMfaTimestamp;
+
+      logSecurityEvent(SecurityEventType.MFA_FAILED, {
+        userId: pendingUserId,
+        userEmail: pendingEmail,
+        ipAddress,
+        userAgent,
+        details: { reason: 'MFA session expired' },
+      });
+
+      return res.status(401).json({
+        error: 'MFA verification session expired. Please login again.'
+      });
+    }
+
+    if (!code) {
+      return res.status(400).json({ error: 'MFA code is required' });
+    }
+
+    // Get user with MFA secret
+    const user = db.prepare(`
+      SELECT id, email, name, mfa_secret, mfa_enabled
+      FROM users WHERE id = ?
+    `).get(pendingUserId);
+
+    if (!user || !user.mfa_enabled || !user.mfa_secret) {
+      return res.status(400).json({ error: 'MFA is not enabled for this account' });
+    }
+
+    let isValid = false;
+
+    if (useBackup) {
+      // Verify backup code
+      isValid = verifyBackupCode(pendingUserId, code);
+
+      if (isValid) {
+        logSecurityEvent(SecurityEventType.MFA_BACKUP_USED, {
+          userId: pendingUserId,
+          userEmail: pendingEmail,
+          ipAddress,
+          userAgent,
+        });
+      }
+    } else {
+      // Verify TOTP code (decrypt the stored secret first)
+      const decryptedSecret = decrypt(user.mfa_secret);
+      isValid = verifyToken(code, decryptedSecret);
+    }
+
+    if (!isValid) {
+      logSecurityEvent(SecurityEventType.MFA_FAILED, {
+        userId: pendingUserId,
+        userEmail: pendingEmail,
+        ipAddress,
+        userAgent,
+        details: { useBackup, reason: 'Invalid code' },
+      });
+
+      return res.status(401).json({ error: 'Invalid MFA code' });
+    }
+
+    // MFA verification successful - complete login
+    // Reset failed attempts and update last login
+    db.prepare(`
+      UPDATE users
+      SET failed_login_attempts = 0,
+          locked_until = NULL,
+          last_login_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(pendingUserId);
+
+    // Clear failed login tracking
+    clearFailedLoginTracking(ipAddress);
+
+    // Regenerate session for security
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('[Auth] Session regeneration after MFA failed:', err);
+        return res.status(500).json({ error: 'Authentication error' });
+      }
+
+      // Set new session data
+      req.session.userId = user.id;
+      req.session.email = user.email;
+      req.session.loginTime = Date.now();
+      req.session.mfaVerified = true;
+      req.session.mfaVerifiedAt = Date.now();
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('[Auth] Session save after MFA failed:', saveErr);
+          return res.status(500).json({ error: 'Authentication error' });
+        }
+
+        console.log(`[Auth] MFA verification successful for ${user.email}`);
+
+        logSecurityEvent(SecurityEventType.LOGIN_SUCCESS, {
+          userId: user.id,
+          userEmail: user.email,
+          ipAddress,
+          userAgent,
+          sessionId: req.sessionID,
+          details: { mfaVerified: true },
+        });
+
+        res.json({
+          success: true,
+          message: 'MFA verification successful',
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name
+          }
+        });
+      });
+    });
+  } catch (error) {
+    console.error('[Auth] MFA verification error:', error);
+    res.status(500).json({ error: 'MFA verification failed' });
+  }
 });
 
 export default router;

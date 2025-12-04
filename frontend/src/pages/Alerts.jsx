@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Plus, Trash2, X, TrendingUp, TrendingDown, Percent, CheckCircle, XCircle, BellRing, Clock, History } from 'lucide-react';
+import { Bell, Plus, Trash2, X, TrendingUp, TrendingDown, Percent, CheckCircle, XCircle, BellRing, Clock, History, Edit2, Calendar } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAlertStore } from '../stores/alertStore';
 
@@ -13,23 +13,63 @@ function Alerts() {
     fetchAlerts,
     fetchAlertHistory,
     createAlert,
+    updateAlert,
     deleteAlert,
     toggleAlert,
     requestNotificationPermission,
     clearError
   } = useAlertStore();
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editingAlert, setEditingAlert] = useState(null); // null = create mode, object = edit mode
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
   const [formData, setFormData] = useState({
     symbol: '',
     name: '',
     type: 'price_above',
     target_price: '',
-    is_recurring: false
+    is_recurring: false,
+    expires_at: ''
   });
   const [formError, setFormError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+
+  const resetForm = () => {
+    setFormData({
+      symbol: '',
+      name: '',
+      type: 'price_above',
+      target_price: '',
+      is_recurring: false,
+      expires_at: ''
+    });
+    setEditingAlert(null);
+    setFormError(null);
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const openEditModal = (alert) => {
+    setEditingAlert(alert);
+    setFormData({
+      symbol: alert.symbol,
+      name: alert.name || '',
+      type: alert.type,
+      target_price: alert.target_price?.toString() || '',
+      is_recurring: Boolean(alert.is_recurring),
+      expires_at: alert.expires_at ? alert.expires_at.slice(0, 16) : '' // Format for datetime-local input
+    });
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
 
   useEffect(() => {
     fetchAlerts();
@@ -50,22 +90,24 @@ function Alerts() {
       return;
     }
 
+    const alertData = {
+      symbol: formData.symbol.toUpperCase(),
+      name: formData.name || undefined,
+      type: formData.type,
+      target_price: parseFloat(formData.target_price),
+      is_recurring: formData.is_recurring,
+      expires_at: formData.expires_at || null
+    };
+
     try {
-      await createAlert({
-        symbol: formData.symbol.toUpperCase(),
-        name: formData.name || undefined,
-        type: formData.type,
-        target_price: parseFloat(formData.target_price),
-        is_recurring: formData.is_recurring
-      });
-      setShowCreateModal(false);
-      setFormData({
-        symbol: '',
-        name: '',
-        type: 'price_above',
-        target_price: '',
-        is_recurring: false
-      });
+      if (editingAlert) {
+        // Update existing alert
+        await updateAlert(editingAlert.id, alertData);
+      } else {
+        // Create new alert
+        await createAlert(alertData);
+      }
+      closeModal();
     } catch (err) {
       setFormError(err.message);
     }
@@ -159,7 +201,7 @@ function Alerts() {
             <h1 className="text-2xl font-bold text-text-primary">Price Alerts</h1>
           </div>
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateModal}
             data-testid="new-alert-button"
             className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover transition-colors"
           >
@@ -299,6 +341,12 @@ function Alerts() {
                             </>
                           )}
                         </div>
+                        {alert.expires_at && (
+                          <div className="flex items-center gap-1 text-xs text-text-muted mt-0.5">
+                            <Calendar className="w-3 h-3" />
+                            <span>Expires {formatDate(alert.expires_at)}</span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -312,6 +360,13 @@ function Alerts() {
                           }`}
                         >
                           {alert.is_active ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          onClick={() => openEditModal(alert)}
+                          data-testid={`edit-alert-${alert.id}`}
+                          className="p-1.5 hover:bg-brand/10 rounded transition-colors text-text-secondary hover:text-brand"
+                        >
+                          <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setDeletingId(alert.id)}
@@ -372,17 +427,17 @@ function Alerts() {
           </div>
         )}
 
-        {/* Create Alert Modal */}
-        {showCreateModal && (
+        {/* Create/Edit Alert Modal */}
+        {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-            <div className="bg-card rounded-lg shadow-xl w-full max-w-md" data-testid="create-alert-modal">
+            <div className="bg-card rounded-lg shadow-xl w-full max-w-md" data-testid={editingAlert ? 'edit-alert-modal' : 'create-alert-modal'}>
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-line">
                 <h2 className="text-xl font-semibold text-text-primary">
-                  Create Price Alert
+                  {editingAlert ? 'Edit Alert' : 'Create Price Alert'}
                 </h2>
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeModal}
                   className="p-1 hover:bg-card-hover rounded transition-colors"
                 >
                   <X className="w-5 h-5 text-text-secondary" />
@@ -460,6 +515,23 @@ function Alerts() {
                   />
                 </div>
 
+                {/* Expiration Date (optional) */}
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">
+                    Expiration Date (optional)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    data-testid="alert-expires-input"
+                    value={formData.expires_at}
+                    onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
+                    className="w-full px-3 py-2 bg-page-bg border border-line rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                  <p className="text-xs text-text-muted mt-1">
+                    Alert will be automatically disabled after this date
+                  </p>
+                </div>
+
                 {/* Recurring Toggle */}
                 <div className="flex items-center gap-3">
                   <input
@@ -479,7 +551,7 @@ function Alerts() {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={closeModal}
                     className="flex-1 px-4 py-2 text-sm font-medium text-text-primary bg-page-bg border border-line rounded-lg hover:bg-table-header transition-colors"
                   >
                     Cancel
@@ -489,7 +561,7 @@ function Alerts() {
                     data-testid="submit-alert-button"
                     className="flex-1 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-hover transition-colors"
                   >
-                    Create Alert
+                    {editingAlert ? 'Save Changes' : 'Create Alert'}
                   </button>
                 </div>
               </form>

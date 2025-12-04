@@ -11,6 +11,7 @@ import {
   getMFAStatus,
   regenerateBackupCodes,
 } from '../services/mfa.js';
+import { decrypt } from '../utils/encryption.js';
 import {
   logSecurityEvent,
   SecurityEventType,
@@ -140,7 +141,8 @@ router.post('/disable', async (req, res) => {
         return res.status(400).json({ error: 'MFA code is required to disable MFA' });
       }
 
-      if (!verifyToken(code, user.mfa_secret)) {
+      const decryptedSecret = decrypt(user.mfa_secret);
+      if (!verifyToken(code, decryptedSecret)) {
         logSecurityEvent(SecurityEventType.MFA_FAILED, {
           userId: req.session.userId,
           userEmail: req.session.email,
@@ -201,8 +203,9 @@ router.post('/verify', (req, res) => {
         });
       }
     } else {
-      // Verify TOTP code
-      isValid = verifyToken(code, user.mfa_secret);
+      // Verify TOTP code (decrypt the stored secret first)
+      const decryptedSecret = decrypt(user.mfa_secret);
+      isValid = verifyToken(code, decryptedSecret);
     }
 
     if (!isValid) {
@@ -269,7 +272,8 @@ router.post('/backup-codes/regenerate', async (req, res) => {
       return res.status(400).json({ error: 'MFA code is required' });
     }
 
-    if (!verifyToken(code, user.mfa_secret)) {
+    const decryptedSecret = decrypt(user.mfa_secret);
+    if (!verifyToken(code, decryptedSecret)) {
       return res.status(400).json({ error: 'Invalid MFA code' });
     }
 

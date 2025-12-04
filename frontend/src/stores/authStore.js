@@ -11,18 +11,31 @@ export const useAuthStore = create(
       isAuthenticated: false,
       isLoading: true, // True until initial auth check completes
       error: null,
+      mfaRequired: false, // True when MFA verification is pending
 
       // === ACTIONS ===
 
       login: async (email, password) => {
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null, mfaRequired: false });
         try {
           const data = await api.post('/auth/login', { email, password });
+
+          // Check if MFA is required (202 response with mfaRequired flag)
+          if (data.mfaRequired) {
+            set({
+              isLoading: false,
+              mfaRequired: true,
+              error: null,
+            });
+            return { success: false, mfaRequired: true };
+          }
+
           set({
             user: data.user || data,
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            mfaRequired: false,
             sessionExpired: false, // Clear session expired flag on successful login
           });
           // Show success toast
@@ -38,6 +51,7 @@ export const useAuthStore = create(
             isAuthenticated: false,
             isLoading: false,
             error: error.message || 'Login failed',
+            mfaRequired: false,
           });
           // Show error toast
           useToastStore.getState().addToast({
@@ -47,6 +61,44 @@ export const useAuthStore = create(
           });
           return { success: false, error: error.message };
         }
+      },
+
+      verifyMFA: async (code, useBackup = false) => {
+        set({ isLoading: true, error: null });
+        try {
+          const data = await api.post('/auth/verify-mfa', { code, useBackup });
+          set({
+            user: data.user || data,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+            mfaRequired: false,
+            sessionExpired: false,
+          });
+          // Show success toast
+          useToastStore.getState().addToast({
+            type: 'success',
+            title: 'Welcome back!',
+            message: 'MFA verification successful.',
+          });
+          return { success: true };
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error.message || 'MFA verification failed',
+          });
+          // Show error toast
+          useToastStore.getState().addToast({
+            type: 'error',
+            title: 'MFA verification failed',
+            message: error.message || 'Invalid code. Please try again.',
+          });
+          return { success: false, error: error.message };
+        }
+      },
+
+      clearMfaState: () => {
+        set({ mfaRequired: false, error: null });
       },
 
       register: async (email, password) => {

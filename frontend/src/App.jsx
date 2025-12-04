@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import MFAVerificationPage from './pages/MFAVerificationPage';
 import Dashboard from './pages/Dashboard';
 import Portfolio from './pages/Portfolio';
 import StockDetail from './pages/StockDetail';
@@ -68,6 +69,7 @@ function App() {
         <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/mfa-verify" element={<MFAVerificationPage />} />
         <Route
           path="/dashboard"
           element={

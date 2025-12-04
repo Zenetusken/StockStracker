@@ -202,7 +202,7 @@ export function initializeDatabase() {
       symbol TEXT NOT NULL,
       name TEXT,
       type TEXT NOT NULL CHECK(type IN ('price_above', 'price_below', 'percent_change')),
-      target_value REAL NOT NULL,
+      target_price REAL NOT NULL,
       is_active INTEGER DEFAULT 1,
       is_recurring INTEGER DEFAULT 0,
       triggered_at DATETIME,

@@ -12,6 +12,7 @@ function LoginPage() {
   const error = useAuthStore((state) => state.error);
   const isLoading = useAuthStore((state) => state.isLoading);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const mfaRequired = useAuthStore((state) => state.mfaRequired);
   const sessionExpired = useAuthStore((state) => state.sessionExpired);
   const clearError = useAuthStore((state) => state.clearError);
 
@@ -22,6 +23,13 @@ function LoginPage() {
     }
   }, [isAuthenticated, navigate]);
 
+  // Redirect to MFA verification if required
+  useEffect(() => {
+    if (mfaRequired) {
+      navigate('/mfa-verify');
+    }
+  }, [mfaRequired, navigate]);
+
   // Clear error on unmount
   useEffect(() => {
     return () => clearError();
@@ -30,12 +38,13 @@ function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    try {
-      await login(email, password);
+    const result = await login(email, password);
+    if (result.success) {
       navigate('/dashboard');
-    } catch {
-      // Error is already set in the store
+    } else if (result.mfaRequired) {
+      navigate('/mfa-verify');
     }
+    // If login failed, error is already set in the store
   };
 
   return (

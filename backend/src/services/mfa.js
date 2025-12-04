@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import crypto from 'crypto';
 import db from '../database.js';
 import { logSecurityEvent, SecurityEventType, getClientIp } from './securityLogger.js';
+import { encrypt, decrypt } from '../utils/encryption.js';
 
 /**
  * MFA (Multi-Factor Authentication) Service
@@ -147,9 +148,9 @@ export async function setupMFA(userId) {
   const otpAuthUri = generateOtpAuthUri(user.email, secret);
   const qrCode = await generateQRCode(otpAuthUri);
 
-  // Store the secret temporarily (not enabled until verified)
-  // We'll store it encrypted in a real production environment
-  db.prepare('UPDATE users SET mfa_secret = ? WHERE id = ?').run(secret, userId);
+  // Store the secret encrypted (not enabled until verified)
+  const encryptedSecret = encrypt(secret);
+  db.prepare('UPDATE users SET mfa_secret = ? WHERE id = ?').run(encryptedSecret, userId);
 
   return {
     secret,
@@ -185,8 +186,9 @@ export function enableMFA(userId, token, req = null) {
     throw new Error('MFA not set up. Call setup first.');
   }
 
-  // Verify the token
-  if (!verifyToken(token, user.mfa_secret)) {
+  // Decrypt and verify the token
+  const decryptedSecret = decrypt(user.mfa_secret);
+  if (!verifyToken(token, decryptedSecret)) {
     throw new Error('Invalid verification code');
   }
 

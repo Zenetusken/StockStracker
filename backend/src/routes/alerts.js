@@ -13,6 +13,13 @@ router.use(requireAuth);
  */
 router.get('/', (req, res) => {
   try {
+    // Auto-disable expired alerts first
+    db.prepare(`
+      UPDATE alerts
+      SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND is_active = 1 AND expires_at IS NOT NULL AND expires_at < datetime('now')
+    `).run(req.session.userId);
+
     const alerts = db.prepare(`
       SELECT * FROM alerts
       WHERE user_id = ?
@@ -56,7 +63,7 @@ router.get('/:id', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { symbol, name, type, target_price, is_recurring } = req.body;
+    const { symbol, name, type, target_price, is_recurring, expires_at } = req.body;
 
     // Validate required fields
     if (!symbol || !type || target_price === undefined) {
@@ -70,15 +77,16 @@ router.post('/', (req, res) => {
     }
 
     const result = db.prepare(`
-      INSERT INTO alerts (user_id, symbol, name, type, target_price, is_recurring, is_active)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO alerts (user_id, symbol, name, type, target_price, is_recurring, is_active, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
     `).run(
       req.session.userId,
       symbol.toUpperCase(),
       name || `${type === 'price_above' ? 'Above' : type === 'price_below' ? 'Below' : 'Change'} ${target_price}`,
       type,
       target_price,
-      is_recurring ? 1 : 0
+      is_recurring ? 1 : 0,
+      expires_at || null
     );
 
     const newAlert = db.prepare('SELECT * FROM alerts WHERE id = ?').get(result.lastInsertRowid);
@@ -97,7 +105,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { symbol, name, type, target_price, is_recurring, is_active } = req.body;
+    const { symbol, name, type, target_price, is_recurring, is_active, expires_at } = req.body;
 
     // Verify ownership
     const existingAlert = db.prepare(`
@@ -139,6 +147,10 @@ router.put('/:id', (req, res) => {
     if (is_active !== undefined) {
       updates.push('is_active = ?');
       values.push(is_active ? 1 : 0);
+    }
+    if (expires_at !== undefined) {
+      updates.push('expires_at = ?');
+      values.push(expires_at || null);
     }
 
     if (updates.length === 0) {
@@ -205,20 +217,33 @@ router.post('/:id/trigger', (req, res) => {
       return res.status(404).json({ error: 'Alert not found' });
     }
 
-    // Record in alert_history
+    // Record in alert_history with message
+    const message = alert.name || `${alert.type === 'price_above' ? 'Price above' : alert.type === 'price_below' ? 'Price below' : 'Change of'} ${alert.target_price}`;
     db.prepare(`
-      INSERT INTO alert_history (alert_id, user_id, symbol, trigger_price, alert_type, target_price, triggered_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO alert_history (alert_id, user_id, symbol, trigger_price, message, triggered_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `).run(
       id,
       req.session.userId,
       alert.symbol,
       triggered_price || 0,
-      alert.type,
-      alert.target_price
+      message
     );
 
-    res.json({ message: 'Alert trigger recorded' });
+    // Update triggered_at; disable if not recurring
+    if (alert.is_recurring) {
+      // Recurring alerts stay active, just update triggered_at
+      db.prepare(`
+        UPDATE alerts SET triggered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(id);
+    } else {
+      // Non-recurring alerts get disabled
+      db.prepare(`
+        UPDATE alerts SET triggered_at = CURRENT_TIMESTAMP, is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(id);
+    }
+
+    res.json({ message: 'Alert trigger recorded', is_recurring: alert.is_recurring });
   } catch (error) {
     console.error('Error recording alert trigger:', error);
     res.status(500).json({ error: 'Failed to record alert trigger' });
