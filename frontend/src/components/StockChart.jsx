@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import { useChartStore } from '../stores/chartStore';
+import {
+  SMA_CONFIGS,
+  calculateSMA,
+  calculateBollingerBands,
+  calculateMACD,
+  calculateRSI,
+  getAvailableSmaPeriods,
+} from '../utils/indicators';
+import IndicatorsPanel from './chart/IndicatorsPanel';
 
 /**
  * StockChart Component
@@ -14,197 +23,6 @@ import { useChartStore } from '../stores/chartStore';
 // Chart background color - MUST be solid, not transparent
 // Warm cream intermediate - between page-bg (#E8E0D5) and card (#D6C7AE)
 const CHART_BACKGROUND_COLOR = '#DDD3C5';
-
-// SMA configurations - each SMA has a distinct color
-const SMA_CONFIGS = [
-  { period: 10, color: '#F59E0B', label: 'SMA 10' },   // Amber - fast
-  { period: 20, color: '#FF6B00', label: 'SMA 20' },   // Orange
-  { period: 50, color: '#8B5CF6', label: 'SMA 50' },   // Purple
-  { period: 200, color: '#06B6D4', label: 'SMA 200' }, // Cyan - slow
-];
-
-// Helper function to calculate Simple Moving Average
-function calculateSMA(data, period) {
-  if (!data || data.length < period) return [];
-
-  const smaData = [];
-  for (let i = period - 1; i < data.length; i++) {
-    let sum = 0;
-    for (let j = 0; j < period; j++) {
-      sum += data[i - j].close;
-    }
-    const smaValue = sum / period;
-    smaData.push({
-      time: data[i].time,
-      value: smaValue
-    });
-  }
-  return smaData;
-}
-
-// Helper function to calculate Bollinger Bands
-// Returns { upper, middle, lower } arrays
-function calculateBollingerBands(data, period = 20, multiplier = 2) {
-  if (!data || data.length < period) return { upper: [], middle: [], lower: [] };
-
-  const upper = [];
-  const middle = [];
-  const lower = [];
-
-  for (let i = period - 1; i < data.length; i++) {
-    // Calculate SMA (middle band)
-    let sum = 0;
-    for (let j = 0; j < period; j++) {
-      sum += data[i - j].close;
-    }
-    const sma = sum / period;
-
-    // Calculate standard deviation
-    let sumSquaredDiff = 0;
-    for (let j = 0; j < period; j++) {
-      const diff = data[i - j].close - sma;
-      sumSquaredDiff += diff * diff;
-    }
-    const stdDev = Math.sqrt(sumSquaredDiff / period);
-
-    // Calculate bands
-    middle.push({ time: data[i].time, value: sma });
-    upper.push({ time: data[i].time, value: sma + (multiplier * stdDev) });
-    lower.push({ time: data[i].time, value: sma - (multiplier * stdDev) });
-  }
-
-  return { upper, middle, lower };
-}
-
-// Helper function to calculate EMA (Exponential Moving Average)
-function calculateEMA(data, period) {
-  if (!data || data.length < period) return [];
-
-  const multiplier = 2 / (period + 1);
-  const emaData = [];
-
-  // First EMA is SMA
-  let sum = 0;
-  for (let i = 0; i < period; i++) {
-    sum += data[i].close;
-  }
-  let ema = sum / period;
-  emaData.push({ time: data[period - 1].time, value: ema });
-
-  // Calculate EMA for remaining data
-  for (let i = period; i < data.length; i++) {
-    ema = (data[i].close - ema) * multiplier + ema;
-    emaData.push({ time: data[i].time, value: ema });
-  }
-
-  return emaData;
-}
-
-// Helper function to calculate MACD
-// Returns { macdLine, signalLine, histogram }
-function calculateMACD(data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
-  if (!data || data.length < slowPeriod + signalPeriod) return { macdLine: [], signalLine: [], histogram: [] };
-
-  // Calculate EMAs
-  const fastEMA = calculateEMA(data, fastPeriod);
-  const slowEMA = calculateEMA(data, slowPeriod);
-
-  // MACD Line = Fast EMA - Slow EMA
-  // We need to align the arrays - slow EMA starts later
-  const offset = slowPeriod - fastPeriod;
-  const macdLine = [];
-
-  for (let i = 0; i < slowEMA.length; i++) {
-    const fastValue = fastEMA[i + offset]?.value;
-    const slowValue = slowEMA[i]?.value;
-    if (fastValue !== undefined && slowValue !== undefined) {
-      macdLine.push({
-        time: slowEMA[i].time,
-        value: fastValue - slowValue
-      });
-    }
-  }
-
-  // Signal Line = 9-period EMA of MACD Line
-  if (macdLine.length < signalPeriod) return { macdLine, signalLine: [], histogram: [] };
-
-  const multiplier = 2 / (signalPeriod + 1);
-  const signalLine = [];
-  const histogram = [];
-
-  // First signal is SMA of MACD
-  let sum = 0;
-  for (let i = 0; i < signalPeriod; i++) {
-    sum += macdLine[i].value;
-  }
-  let signal = sum / signalPeriod;
-  signalLine.push({ time: macdLine[signalPeriod - 1].time, value: signal });
-  histogram.push({ time: macdLine[signalPeriod - 1].time, value: macdLine[signalPeriod - 1].value - signal });
-
-  // Calculate signal and histogram for remaining data
-  for (let i = signalPeriod; i < macdLine.length; i++) {
-    signal = (macdLine[i].value - signal) * multiplier + signal;
-    signalLine.push({ time: macdLine[i].time, value: signal });
-    histogram.push({ time: macdLine[i].time, value: macdLine[i].value - signal });
-  }
-
-  return { macdLine, signalLine, histogram };
-}
-
-// Helper function to calculate RSI (Relative Strength Index)
-// Uses Wilder's smoothing method (standard RSI calculation)
-function calculateRSI(data, period = 14) {
-  if (!data || data.length < period + 1) return [];
-
-  const rsiData = [];
-  const gains = [];
-  const losses = [];
-
-  // Calculate price changes
-  for (let i = 1; i < data.length; i++) {
-    const change = data[i].close - data[i - 1].close;
-    gains.push(change > 0 ? change : 0);
-    losses.push(change < 0 ? Math.abs(change) : 0);
-  }
-
-  // Calculate first average gain/loss
-  let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
-
-  // First RSI value
-  const firstRS = avgLoss === 0 ? 100 : avgGain / avgLoss;
-  const firstRSI = 100 - (100 / (1 + firstRS));
-  rsiData.push({ time: data[period].time, value: firstRSI });
-
-  // Calculate subsequent RSI values using Wilder's smoothing
-  for (let i = period; i < gains.length; i++) {
-    avgGain = ((avgGain * (period - 1)) + gains[i]) / period;
-    avgLoss = ((avgLoss * (period - 1)) + losses[i]) / period;
-
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    const rsi = 100 - (100 / (1 + rs));
-    rsiData.push({ time: data[i + 1].time, value: rsi });
-  }
-
-  return rsiData;
-}
-
-// Get available SMA periods based on timeframe
-// Ensures we only show periods that will produce meaningful SMA lines
-// These must match the periods in SMA_CONFIGS [10, 20, 50, 200]
-function getAvailableSmaPeriods(timeframe) {
-  switch (timeframe) {
-    case '1D':   return [10];              // 15-min bars: ~26 points, only 10 works
-    case '5D':   return [10, 20];          // Hourly bars: ~40 points
-    case '1M':   return [10, 20];          // Daily bars: ~22 points (20 is marginal but OK)
-    case '6M':   return [10, 20, 50];      // Daily bars: ~130 points
-    case '1Y':   return [10, 20, 50];      // Weekly bars: ~52 points
-    case '5Y':   return [10, 20, 50, 200]; // Weekly bars: ~260 points
-    case 'Max':  return [10, 20, 50, 200]; // Weekly bars: ~1040 points
-    case 'custom': return [10, 20, 50];    // Default for custom range
-    default:     return [10, 20, 50];
-  }
-}
 
 function StockChart({ symbol, chartType: initialChartType = 'candlestick', timeframe: initialTimeframe = '6M' }) {
   const chartContainerRef = useRef(null);
@@ -1081,342 +899,49 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
       {/* Indicators Panel */}
       {showIndicators && (
-        <div className="mb-4 p-4 bg-card border border-line rounded-lg shadow-lg">
-          <h3 className="text-lg font-semibold text-text-primary mb-4">Technical Indicators</h3>
-
-          {/* Multiple SMA Indicators */}
-          <div className="space-y-3">
-            <div className="text-sm font-medium text-text-primary mb-2">
-              Simple Moving Averages (SMA)
-            </div>
-            {SMA_CONFIGS.map(({ period, color, label }) => {
-              const isAvailable = availablePeriods.includes(period);
-              const isEnabled = enabledSMAs.includes(period);
-              const isVisible = smaVisible[period] !== false; // Default to visible
-              const settingsOpen = smaSettingsOpen === period;
-
-              const toggleSMA = () => {
-                if (isEnabled) {
-                  setEnabledSMAs(prev => prev.filter(p => p !== period));
-                  setSmaSettingsOpen(null); // Close settings when disabling
-                } else {
-                  setEnabledSMAs(prev => [...prev, period]);
-                }
-              };
-
-              const toggleVisibility = () => {
-                setSmaVisible(prev => ({ ...prev, [period]: !isVisible }));
-              };
-
-              const toggleSettings = () => {
-                setSmaSettingsOpen(settingsOpen ? null : period);
-              };
-
-              const changePeriod = (newPeriod) => {
-                // Replace current period with new period
-                setEnabledSMAs(prev => prev.map(p => p === period ? newPeriod : p));
-                // Transfer visibility state
-                setSmaVisible(prev => {
-                  const newState = { ...prev };
-                  newState[newPeriod] = prev[period];
-                  delete newState[period];
-                  return newState;
-                });
-                setSmaSettingsOpen(null);
-              };
-
-              return (
-                <div key={period} className={`flex flex-col ${!isAvailable ? 'opacity-50' : ''}`}>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id={`sma-${period}`}
-                      checked={isEnabled}
-                      onChange={toggleSMA}
-                      disabled={!isAvailable}
-                      className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
-                      style={{ accentColor: color }}
-                    />
-                    <label
-                      htmlFor={`sma-${period}`}
-                      className="text-sm text-text-primary flex items-center gap-2 flex-1"
-                    >
-                      <span
-                        className="w-4 h-0.5 rounded"
-                        style={{ backgroundColor: color }}
-                      />
-                      {label}
-                      {!isAvailable && (
-                        <span className="text-xs text-text-muted">(needs more data)</span>
-                      )}
-                    </label>
-                    {isEnabled && isAvailable && (
-                      <>
-                        {/* Settings gear icon */}
-                        <button
-                          id={`sma-${period}-settings`}
-                          onClick={toggleSettings}
-                          className={`p-1 rounded hover:bg-line transition-colors ${settingsOpen ? 'bg-line' : ''}`}
-                          title="Change period"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                        </button>
-                        {/* Visibility toggle */}
-                        <button
-                          id={`sma-${period}-visibility`}
-                          onClick={toggleVisibility}
-                          className="p-1 rounded hover:bg-line transition-colors"
-                          title={isVisible ? 'Hide SMA' : 'Show SMA'}
-                        >
-                          {isVisible ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            </svg>
-                          )}
-                        </button>
-                        {/* Remove/delete icon */}
-                        <button
-                          id={`sma-${period}-remove`}
-                          onClick={toggleSMA}
-                          className="p-1 rounded hover:bg-loss/20 transition-colors"
-                          title="Remove indicator"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-loss" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {/* Settings dropdown */}
-                  {settingsOpen && (
-                    <div className="ml-7 mt-2 p-2 bg-table-header rounded-md border border-line">
-                      <div className="text-xs text-text-muted mb-2">Change period to:</div>
-                      <div className="flex flex-wrap gap-2">
-                        {availablePeriods.filter(p => p !== period && !enabledSMAs.includes(p)).map(newPeriod => (
-                          <button
-                            key={newPeriod}
-                            id={`sma-${period}-change-to-${newPeriod}`}
-                            onClick={() => changePeriod(newPeriod)}
-                            className="px-2 py-1 text-xs bg-page-bg border border-line rounded hover:bg-line transition-colors"
-                          >
-                            {newPeriod}
-                          </button>
-                        ))}
-                        {availablePeriods.filter(p => p !== period && !enabledSMAs.includes(p)).length === 0 && (
-                          <span className="text-xs text-text-muted">No other periods available</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <div className="text-xs text-text-muted mt-2">
-              Available for {timeframe} timeframe: {availablePeriods.join(', ')}
-            </div>
-            {enabledSMAs.length > 0 && (
-              <div className="text-xs text-text-muted">
-                Active: {enabledSMAs.map(p => `SMA(${p})`).join(', ')}
-              </div>
-            )}
-          </div>
-
-          {/* Bollinger Bands */}
-          <div className="mt-4 pt-4 border-t border-line">
-            <div className="text-sm font-medium text-text-primary mb-2">
-              Volatility Indicators
-            </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="bb-enabled"
-                checked={bbEnabled}
-                onChange={() => setBbEnabled(!bbEnabled)}
-                className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
-                style={{ accentColor: '#8B5CF6' }}
-              />
-              <label
-                htmlFor="bb-enabled"
-                className="text-sm text-text-primary flex items-center gap-2 flex-1"
-              >
-                <span
-                  className="w-4 h-0.5 rounded"
-                  style={{ backgroundColor: '#8B5CF6' }}
-                />
-                Bollinger Bands (20, 2)
-              </label>
-              {bbEnabled && (
-                <>
-                  <button
-                    id="bb-visibility"
-                    onClick={() => setBbVisible(!bbVisible)}
-                    className="p-1 rounded hover:bg-line transition-colors"
-                    title={bbVisible ? 'Hide Bollinger Bands' : 'Show Bollinger Bands'}
-                  >
-                    {bbVisible ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    id="bb-remove"
-                    onClick={() => setBbEnabled(false)}
-                    className="p-1 rounded hover:bg-loss/20 transition-colors"
-                    title="Remove indicator"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-loss" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </>
-              )}
-            </div>
-            <div className="text-xs text-text-muted mt-2 pl-7">
-              Shows price volatility with upper/lower bands at 2 standard deviations
-            </div>
-          </div>
-
-          {/* RSI Indicator */}
-          <div className="mt-4 pt-4 border-t border-line">
-            <div className="text-sm font-medium text-text-primary mb-2">
-              Momentum Indicators
-            </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="rsi-enabled"
-                checked={rsiEnabled}
-                onChange={() => setRsiEnabled(!rsiEnabled)}
-                className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
-                style={{ accentColor: '#8B5CF6' }}
-              />
-              <label
-                htmlFor="rsi-enabled"
-                className="text-sm text-text-primary flex items-center gap-2 flex-1"
-              >
-                <span
-                  className="w-4 h-0.5 rounded"
-                  style={{ backgroundColor: '#8B5CF6' }}
-                />
-                RSI ({rsiPeriod})
-              </label>
-              {rsiEnabled && (
-                <>
-                  <button
-                    id="rsi-visibility"
-                    onClick={() => setRsiVisible(!rsiVisible)}
-                    className="p-1 rounded hover:bg-line transition-colors"
-                    title={rsiVisible ? 'Hide RSI' : 'Show RSI'}
-                  >
-                    {rsiVisible ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    id="rsi-remove"
-                    onClick={() => setRsiEnabled(false)}
-                    className="p-1 rounded hover:bg-loss/20 transition-colors"
-                    title="Remove indicator"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-loss" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </>
-              )}
-            </div>
-            <div className="text-xs text-text-muted mt-2 pl-7">
-              Relative Strength Index - shows overbought ({'>'}70) and oversold ({'<'}30) conditions
-            </div>
-            {/* MACD */}
-            <div className="flex items-center gap-3 mt-3">
-              <input
-                type="checkbox"
-                id="macd-enabled"
-                checked={macdEnabled}
-                onChange={() => setMacdEnabled(!macdEnabled)}
-                className="w-4 h-4 rounded focus:ring-2 focus:ring-brand"
-                style={{ accentColor: '#3B82F6' }}
-              />
-              <label
-                htmlFor="macd-enabled"
-                className="text-sm text-text-primary flex items-center gap-2 flex-1"
-              >
-                <span
-                  className="w-4 h-0.5 rounded"
-                  style={{ backgroundColor: '#3B82F6' }}
-                />
-                MACD (12, 26, 9)
-              </label>
-              {macdEnabled && (
-                <>
-                  <button
-                    id="macd-visibility"
-                    onClick={() => setMacdVisible(!macdVisible)}
-                    className="p-1 rounded hover:bg-line transition-colors"
-                    title={macdVisible ? 'Hide MACD' : 'Show MACD'}
-                  >
-                    {macdVisible ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    id="macd-remove"
-                    onClick={() => setMacdEnabled(false)}
-                    className="p-1 rounded hover:bg-loss/20 transition-colors"
-                    title="Remove indicator"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-loss" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </>
-              )}
-            </div>
-            <div className="text-xs text-text-muted mt-2 pl-7">
-              Moving Average Convergence Divergence - trend and momentum indicator
-            </div>
-          </div>
-
-          {/* Close button */}
-          <div className="mt-4 pt-4 border-t border-line">
-            <button
-              onClick={() => setShowIndicators(false)}
-              className="w-full px-4 py-2 text-sm font-medium text-text-primary bg-table-header hover:bg-line rounded-md transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+        <IndicatorsPanel
+          onClose={() => setShowIndicators(false)}
+          enabledSMAs={enabledSMAs}
+          onToggleSMA={(period) => {
+            if (enabledSMAs.includes(period)) {
+              setEnabledSMAs(prev => prev.filter(p => p !== period));
+              setSmaSettingsOpen(null);
+            } else {
+              setEnabledSMAs(prev => [...prev, period]);
+            }
+          }}
+          smaVisible={smaVisible}
+          onToggleSMAVisibility={(period) => {
+            setSmaVisible(prev => ({ ...prev, [period]: smaVisible[period] === false ? true : false }));
+          }}
+          smaSettingsOpen={smaSettingsOpen}
+          setSmaSettingsOpen={setSmaSettingsOpen}
+          availablePeriods={availablePeriods}
+          timeframe={timeframe}
+          onChangeSMAPeriod={(oldPeriod, newPeriod) => {
+            setEnabledSMAs(prev => prev.map(p => p === oldPeriod ? newPeriod : p));
+            setSmaVisible(prev => {
+              const newState = { ...prev };
+              newState[newPeriod] = prev[oldPeriod];
+              delete newState[oldPeriod];
+              return newState;
+            });
+            setSmaSettingsOpen(null);
+          }}
+          bbEnabled={bbEnabled}
+          onToggleBB={() => setBbEnabled(!bbEnabled)}
+          bbVisible={bbVisible}
+          onToggleBBVisibility={() => setBbVisible(!bbVisible)}
+          rsiEnabled={rsiEnabled}
+          onToggleRSI={() => setRsiEnabled(!rsiEnabled)}
+          rsiVisible={rsiVisible}
+          onToggleRSIVisibility={() => setRsiVisible(!rsiVisible)}
+          rsiPeriod={rsiPeriod}
+          macdEnabled={macdEnabled}
+          onToggleMACD={() => setMacdEnabled(!macdEnabled)}
+          macdVisible={macdVisible}
+          onToggleMACDVisibility={() => setMacdVisible(!macdVisible)}
+        />
       )}
 
       {/* Crosshair Tooltip */}
