@@ -6,7 +6,7 @@ const RETRY_CONFIG = {
   maxRetries: 3,
   baseDelay: 1000, // 1 second
   maxDelay: 10000, // 10 seconds
-  retryableStatuses: [408, 429, 500, 502, 503, 504],
+  retryableStatuses: [408, 500, 502, 503, 504], // Note: 429 excluded - don't retry rate limits
 };
 
 class ApiError extends Error {

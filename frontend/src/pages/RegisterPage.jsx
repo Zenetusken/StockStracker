@@ -51,9 +51,8 @@ function RegisterPage() {
         try {
           const res = await api.post('/api/auth/check-password', { password });
           setPasswordStrength(res.data);
-        } catch (err) {
+        } catch {
           // Silently fail - validation will happen on submit
-          console.error('Password check failed:', err);
         } finally {
           setCheckingStrength(false);
         }

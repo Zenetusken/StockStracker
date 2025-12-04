@@ -43,6 +43,10 @@ coverage/
 tmp/
 temp/
 
+# Python virtual environment
+.venv/
+venv/
+
 # API Keys (though we use /tmp/api-key, be safe)
 api-key
 *.key

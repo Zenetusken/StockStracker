@@ -71,7 +71,7 @@ router.post('/setup', async (req, res) => {
  * POST /api/mfa/enable
  * Enable MFA after verifying with a code
  */
-router.post('/enable', (req, res) => {
+router.post('/enable', async (req, res) => {
   try {
     const { code } = req.body;
 

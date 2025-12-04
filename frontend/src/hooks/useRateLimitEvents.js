@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useToastStore } from '../stores/toastStore';
 
-const SSE_URL = 'http://localhost:3001/api/rate-limits/stream';
+const SSE_URL = '/api/rate-limits/stream';
 
 function useRateLimitEvents() {
   const [connected, setConnected] = useState(false);

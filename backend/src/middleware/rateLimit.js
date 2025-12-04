@@ -8,8 +8,36 @@ import rateLimit from 'express-rate-limit';
 const isDev = process.env.NODE_ENV !== 'production';
 
 /**
+ * Critical endpoints exempt from rate limiting
+ * These are required for basic app functionality
+ */
+const RATE_LIMIT_EXEMPT_PATHS = [
+  // === Core Infrastructure ===
+  '/api/csrf-token',           // Required before any state-changing request
+  '/api/auth/me',              // Auth check on page load
+
+  // === SSE Streams (must exempt to prevent cascade failures) ===
+  '/api/rate-limits/stream',   // Rate limit events SSE
+  '/api/rate-limits/status',   // Rate limit status check
+  '/api/stream/quotes',        // Real-time quote updates SSE
+
+  // === Settings Page ===
+  '/api/settings',             // User preferences load
+  '/api/mfa/status',           // MFA status check
+
+  // === Dashboard Polling (automatic, user doesn't control) ===
+  '/api/market/movers',        // TopMovers - polls every 120s
+  '/api/market/overview',      // MarketOverview - polls every 60s
+  '/api/market/status',        // MarketStatus - polls every 60s
+  '/api/market/calendar',      // EconomicCalendar - dashboard load
+
+  // === Background Services ===
+  '/api/alerts',               // AlertChecker background service
+];
+
+/**
  * General API rate limiter
- * Applies to all API routes
+ * Applies to all API routes except exempt paths
  */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
@@ -17,6 +45,10 @@ export const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,      // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false,       // Disable `X-RateLimit-*` headers
+  skip: (req) => {
+    // Skip rate limiting for critical infrastructure endpoints
+    return RATE_LIMIT_EXEMPT_PATHS.some(path => req.path === path || req.originalUrl === path);
+  },
 });
 
 /**

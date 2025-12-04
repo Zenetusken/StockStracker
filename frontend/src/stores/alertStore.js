@@ -31,8 +31,8 @@ export const useAlertStore = create((set, get) => ({
       const data = await api.get('/alerts/history/all');
       set({ alertHistory: data });
       return data;
-    } catch (error) {
-      console.error('Failed to fetch alert history:', error);
+    } catch {
+      // Silent failure - alert history is supplementary data
       return [];
     }
   },
