@@ -7,6 +7,7 @@ import {
   ChevronUp,
   Sun,
   Moon,
+  Monitor,
   Check,
   Palette,
   Shield,
@@ -48,7 +49,7 @@ export default function SidebarSettingsMenu({ onOpenApiKeysModal }) {
   const logout = useAuthStore((state) => state.logout);
 
   // Theme context
-  const { currentThemeId, themes, changeTheme, isDarkMode, toggleDarkMode } =
+  const { currentThemeId, themes, changeTheme, themeMode, setThemeMode } =
     useTheme();
 
   // API keys status - fetch services and get status
@@ -150,35 +151,34 @@ export default function SidebarSettingsMenu({ onOpenApiKeysModal }) {
               </div>
             </div>
 
-            {/* Dark mode toggle */}
+            {/* Theme mode selector - inline layout for narrow sidebar */}
             <div className="px-3 py-2 border-b border-line">
-              <button
-                onClick={toggleDarkMode}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-card-hover transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  {isDarkMode ? (
-                    <Moon className="w-5 h-5 text-text-secondary" />
-                  ) : (
-                    <Sun className="w-5 h-5 text-amber-500" />
-                  )}
-                  <span className="text-sm text-text-primary">
-                    {isDarkMode ? 'Dark Mode' : 'Light Mode'}
-                  </span>
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                  Theme
+                </span>
+                <div className="flex bg-surface-light rounded-lg p-0.5">
+                  {[
+                    { value: 'light', label: 'Light mode', Icon: Sun },
+                    { value: 'dark', label: 'Dark mode', Icon: Moon },
+                    { value: 'system', label: 'System preference', Icon: Monitor },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      onClick={() => setThemeMode(item.value)}
+                      title={item.label}
+                      aria-label={item.label}
+                      className={`p-2 rounded-md transition-all ${
+                        themeMode === item.value
+                          ? 'bg-brand text-white shadow-sm'
+                          : 'text-text-secondary hover:text-text-primary hover:bg-card-hover'
+                      }`}
+                    >
+                      <item.Icon className="w-4 h-4" />
+                    </button>
+                  ))}
                 </div>
-                {/* Toggle switch */}
-                <div
-                  className={`w-10 h-6 rounded-full transition-colors ${
-                    isDarkMode ? 'bg-brand' : 'bg-gray-300'
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform mt-0.5 ${
-                      isDarkMode ? 'translate-x-4.5 ml-0.5' : 'translate-x-0.5'
-                    }`}
-                  />
-                </div>
-              </button>
+              </div>
             </div>
 
             {/* Color themes section */}
