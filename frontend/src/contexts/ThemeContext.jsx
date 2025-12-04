@@ -4,27 +4,57 @@ import { getTheme, getStoredTheme, applyTheme, getAllThemes, defaultTheme } from
 
 const ThemeContext = createContext(null);
 
+// Get stored theme mode preference (light/dark/system)
+function getStoredThemeMode() {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('stocktracker-theme-mode') || 'system';
+  }
+  return 'system';
+}
+
+// Check if system prefers dark mode
+function getSystemDarkMode() {
+  if (typeof window !== 'undefined') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  return false;
+}
+
 export function ThemeProvider({ children }) {
   const [currentThemeId, setCurrentThemeId] = useState(defaultTheme);
-  
-  // Initialize state lazily from localStorage to ensure it matches initial render if possible
+
+  // Theme mode: 'light' | 'dark' | 'system'
+  const [themeMode, setThemeModeState] = useState(() => getStoredThemeMode());
+
+  // Computed dark mode based on theme mode
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('stocktracker-dark-mode') === 'true';
+    const mode = getStoredThemeMode();
+    if (mode === 'system') {
+      return getSystemDarkMode();
     }
-    return false;
+    return mode === 'dark';
   });
 
   // Initialize theme on mount
   useEffect(() => {
     const storedTheme = getStoredTheme();
     setCurrentThemeId(storedTheme);
-    // We need to know if it's dark mode to apply the correct colors immediately
-    // But isDarkMode state might not be ready if we rely on the lazy init above?
-    // Actually, the lazy init runs synchronously during render, so isDarkMode is ready.
     applyTheme(storedTheme, isDarkMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run once on mount
   }, []);
+
+  // Listen for system theme changes when in system mode
+  useEffect(() => {
+    if (themeMode !== 'system') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e) => {
+      setIsDarkMode(e.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [themeMode]);
 
   // Change theme
   const changeTheme = useCallback((themeId) => {
@@ -32,14 +62,31 @@ export function ThemeProvider({ children }) {
     applyTheme(themeId, isDarkMode);
   }, [isDarkMode]);
 
-  // Toggle dark mode
+  // Toggle dark mode (switches between light and dark, exits system mode)
   const toggleDarkMode = useCallback(() => {
-    setIsDarkMode((prev) => !prev);
-  }, []);
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    setThemeModeState(newDarkMode ? 'dark' : 'light');
+    localStorage.setItem('stocktracker-theme-mode', newDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
 
   // Set dark mode explicitly
   const setDarkMode = useCallback((value) => {
     setIsDarkMode(value);
+    setThemeModeState(value ? 'dark' : 'light');
+    localStorage.setItem('stocktracker-theme-mode', value ? 'dark' : 'light');
+  }, []);
+
+  // Set theme mode (light/dark/system)
+  const setThemeMode = useCallback((mode) => {
+    setThemeModeState(mode);
+    localStorage.setItem('stocktracker-theme-mode', mode);
+
+    if (mode === 'system') {
+      setIsDarkMode(getSystemDarkMode());
+    } else {
+      setIsDarkMode(mode === 'dark');
+    }
   }, []);
 
   // Apply dark mode class whenever isDarkMode changes
@@ -47,10 +94,8 @@ export function ThemeProvider({ children }) {
     const root = document.documentElement;
     if (isDarkMode) {
       root.classList.add('dark');
-      localStorage.setItem('stocktracker-dark-mode', 'true');
     } else {
       root.classList.remove('dark');
-      localStorage.setItem('stocktracker-dark-mode', 'false');
     }
     // Re-apply theme to update colors based on new dark mode state
     applyTheme(currentThemeId, isDarkMode);
@@ -67,6 +112,8 @@ export function ThemeProvider({ children }) {
     isDarkMode,
     toggleDarkMode,
     setDarkMode,
+    themeMode,
+    setThemeMode,
   };
 
   return (
