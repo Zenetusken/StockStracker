@@ -12,6 +12,7 @@ export const useAuthStore = create(
       isLoading: true, // True until initial auth check completes
       error: null,
       mfaRequired: false, // True when MFA verification is pending
+      sessionExpired: false, // True only when a previously authenticated session expires
 
       // === ACTIONS ===
 
@@ -136,6 +137,9 @@ export const useAuthStore = create(
       },
 
       logout: async (skipApiCall = false) => {
+        // Capture auth state BEFORE clearing - needed to determine if this is a real expiration
+        const wasAuthenticated = get().isAuthenticated;
+
         if (!skipApiCall) {
           try {
             await api.post('/auth/logout');
@@ -148,7 +152,9 @@ export const useAuthStore = create(
           isAuthenticated: false,
           isLoading: false,
           error: null,
-          sessionExpired: skipApiCall, // Track if logout was due to session expiration
+          // Only show "session expired" if user WAS authenticated before the 401
+          // This prevents showing the message to first-time visitors who never had a session
+          sessionExpired: skipApiCall && wasAuthenticated,
         });
       },
 
