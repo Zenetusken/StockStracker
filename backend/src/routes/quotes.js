@@ -1,7 +1,15 @@
 import express from 'express';
 import finnhub from '../services/finnhub.js';
+import { requireAuth } from '../middleware/auth.js';
+import { quoteLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
+
+// H6: Apply authentication to all quote endpoints to prevent unauthorized data access
+router.use(requireAuth);
+
+// M8: Rate limit quote endpoints to prevent API abuse
+router.use(quoteLimiter);
 
 /**
  * GET /api/quotes/:symbol

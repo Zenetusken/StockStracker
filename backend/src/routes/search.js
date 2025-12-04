@@ -113,6 +113,26 @@ function calculateRelevanceScore(item, query) {
 router.get('/', async (req, res) => {
   try {
     const { q, mode = 'symbol', type, includeQuotes, limit = 20, source = 'auto' } = req.query;
+
+    // M9: Search query validation to prevent injection attacks
+    if (q !== undefined) {
+      // Validate query is string
+      if (typeof q !== 'string') {
+        return res.status(400).json({ error: 'Query must be a string' });
+      }
+
+      // Length limit (100 characters max)
+      if (q.length > 100) {
+        return res.status(400).json({ error: 'Query too long (max 100 characters)' });
+      }
+
+      // Character whitelist: alphanumeric, spaces, common punctuation for stock symbols
+      // Allows: letters, numbers, spaces, hyphens, periods, ampersands
+      if (!/^[a-zA-Z0-9\s\-\.&]*$/.test(q)) {
+        return res.status(400).json({ error: 'Invalid characters in query' });
+      }
+    }
+
     const shouldIncludeQuotes = includeQuotes === 'true' || includeQuotes === '1';
     const resultLimit = Math.min(parseInt(limit) || 20, 50);
     const searchMode = mode === 'keyword' ? 'keyword' : 'symbol';

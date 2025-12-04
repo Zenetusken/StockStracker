@@ -13,6 +13,7 @@ import helmet from 'helmet';
 import session from 'express-session';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { csrfTokenEndpoint, csrfProtection } from './middleware/csrf.js';
+import { errorHandler } from './middleware/errorHandler.js';
 import db, { initializeDatabase } from './database.js';
 
 const app = express();
@@ -21,13 +22,13 @@ const PORT = process.env.PORT || 3001;
 // Initialize database
 initializeDatabase();
 
-// Security headers - apply first
+// Security headers - apply first (M3: Add missing security headers)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],  // H4: Removed 'unsafe-inline' for XSS protection
+      styleSrc: ["'self'", "'unsafe-inline'"],  // Keep for Tailwind CSS
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "wss:", "https://finnhub.io", "https://www.alphavantage.co"],
       fontSrc: ["'self'"],
@@ -36,6 +37,15 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
+  // M3: Additional security headers
+  hsts: {
+    maxAge: 31536000,  // 1 year
+    includeSubDomains: true,
+    preload: true
+  },
+  frameguard: { action: 'deny' },
+  noSniff: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
 // CORS configuration - environment-based origins
@@ -45,8 +55,15 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, curl)
-    if (!origin) return callback(null, true);
+    // H5: In production, require Origin header to prevent CORS bypass attacks
+    if (!origin) {
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[CORS] Blocked request without Origin header in production');
+        return callback(new Error('Origin header required'), false);
+      }
+      // Allow requests with no origin in development (mobile apps, Postman, curl)
+      return callback(null, true);
+    }
 
     if (ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
@@ -57,7 +74,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
 
 app.use(express.json());
@@ -86,8 +103,9 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',  // HTTPS only in production
     httpOnly: true,                                  // Prevent XSS access to cookie
     sameSite: 'strict',                             // CSRF protection
-    maxAge: 1000 * 60 * 60 * 24                     // 24 hours (reduced from 7 days)
-  }
+    maxAge: 1000 * 60 * 60 * 4                      // M4: 4 hours (reduced from 24)
+  },
+  rolling: true  // M4: Reset expiry on activity
 }));
 
 // Health check endpoint
@@ -167,14 +185,8 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('[Error]', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
+// M2: Error handling middleware (sanitized responses)
+app.use(errorHandler);
 
 // 404 handler
 app.use((req, res) => {

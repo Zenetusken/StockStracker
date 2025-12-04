@@ -64,6 +64,10 @@ export function initializeDatabase() {
   try {
     db.exec(`ALTER TABLE users ADD COLUMN mfa_enabled_at DATETIME DEFAULT NULL`);
   } catch (e) { /* Column already exists */ }
+  // M5: MFA setup TTL - track expiration of unconfirmed MFA setups
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN mfa_setup_expires_at DATETIME DEFAULT NULL`);
+  } catch (e) { /* Column already exists */ }
 
   // Sessions table
   db.exec(`

@@ -1,9 +1,12 @@
 import { authenticator } from 'otplib';
 import QRCode from 'qrcode';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import db from '../database.js';
 import { logSecurityEvent, SecurityEventType, getClientIp } from './securityLogger.js';
 import { encrypt, decrypt } from '../utils/encryption.js';
+
+const BCRYPT_ROUNDS = 10;
 
 /**
  * MFA (Multi-Factor Authentication) Service
@@ -91,11 +94,12 @@ export function verifyToken(token, secret) {
 
 /**
  * Verify a backup code and mark it as used
+ * Supports both legacy plaintext codes and new bcrypt-hashed codes
  * @param {number} userId - User ID
  * @param {string} code - Backup code
- * @returns {boolean} True if code is valid and was used
+ * @returns {Promise<boolean>} True if code is valid and was used
  */
-export function verifyBackupCode(userId, code) {
+export async function verifyBackupCode(userId, code) {
   const user = db.prepare('SELECT mfa_backup_codes FROM users WHERE id = ?').get(userId);
 
   if (!user || !user.mfa_backup_codes) {
@@ -104,24 +108,36 @@ export function verifyBackupCode(userId, code) {
 
   try {
     const codes = JSON.parse(user.mfa_backup_codes);
-    const cleanCode = code.replace(/[\s]/g, '').toUpperCase();
+    const cleanCode = code.replace(/[\s-]/g, '').toUpperCase();
 
-    const codeIndex = codes.findIndex(
-      (c) => c.code === cleanCode && !c.used
-    );
+    // Find matching unused code
+    for (let i = 0; i < codes.length; i++) {
+      if (codes[i].used) continue;
 
-    if (codeIndex === -1) {
-      return false;
+      let isMatch = false;
+
+      // Check if this is a hashed code (has 'hash' property) or legacy plaintext (has 'code' property)
+      if (codes[i].hash) {
+        // New format: bcrypt hashed
+        isMatch = await bcrypt.compare(cleanCode, codes[i].hash);
+      } else if (codes[i].code) {
+        // Legacy format: plaintext (for backward compatibility during migration)
+        isMatch = codes[i].code === cleanCode;
+      }
+
+      if (isMatch) {
+        // Mark code as used
+        codes[i].used = true;
+        codes[i].usedAt = new Date().toISOString();
+
+        db.prepare('UPDATE users SET mfa_backup_codes = ? WHERE id = ?')
+          .run(JSON.stringify(codes), userId);
+
+        return true;
+      }
     }
 
-    // Mark code as used
-    codes[codeIndex].used = true;
-    codes[codeIndex].usedAt = new Date().toISOString();
-
-    db.prepare('UPDATE users SET mfa_backup_codes = ? WHERE id = ?')
-      .run(JSON.stringify(codes), userId);
-
-    return true;
+    return false;
   } catch (error) {
     console.error('[MFA] Error verifying backup code:', error);
     return false;
@@ -149,8 +165,14 @@ export async function setupMFA(userId) {
   const qrCode = await generateQRCode(otpAuthUri);
 
   // Store the secret encrypted (not enabled until verified)
+  // M5: Set 15-minute expiration for unconfirmed MFA setup
   const encryptedSecret = encrypt(secret);
-  db.prepare('UPDATE users SET mfa_secret = ? WHERE id = ?').run(encryptedSecret, userId);
+  db.prepare(`
+    UPDATE users
+    SET mfa_secret = ?,
+        mfa_setup_expires_at = datetime('now', '+15 minutes')
+    WHERE id = ?
+  `).run(encryptedSecret, userId);
 
   return {
     secret,
@@ -169,10 +191,10 @@ export async function setupMFA(userId) {
  * @param {number} userId - User ID
  * @param {string} token - TOTP token to verify
  * @param {Object} req - Express request for logging
- * @returns {Object} Success status and backup codes
+ * @returns {Promise<Object>} Success status and backup codes
  */
-export function enableMFA(userId, token, req = null) {
-  const user = db.prepare('SELECT email, mfa_secret, mfa_enabled FROM users WHERE id = ?').get(userId);
+export async function enableMFA(userId, token, req = null) {
+  const user = db.prepare('SELECT email, mfa_secret, mfa_enabled, mfa_setup_expires_at FROM users WHERE id = ?').get(userId);
 
   if (!user) {
     throw new Error('User not found');
@@ -186,28 +208,41 @@ export function enableMFA(userId, token, req = null) {
     throw new Error('MFA not set up. Call setup first.');
   }
 
+  // M5: Check if MFA setup has expired (15-minute TTL)
+  if (user.mfa_setup_expires_at) {
+    const expiresAt = new Date(user.mfa_setup_expires_at).getTime();
+    if (Date.now() > expiresAt) {
+      // Clear expired setup and require restart
+      db.prepare('UPDATE users SET mfa_secret = NULL, mfa_setup_expires_at = NULL WHERE id = ?')
+        .run(userId);
+      throw new Error('MFA setup expired. Please start setup again.');
+    }
+  }
+
   // Decrypt and verify the token
   const decryptedSecret = decrypt(user.mfa_secret);
   if (!verifyToken(token, decryptedSecret)) {
     throw new Error('Invalid verification code');
   }
 
-  // Generate backup codes
+  // Generate backup codes and hash them for storage
   const backupCodes = generateBackupCodes();
-  const backupCodesData = backupCodes.map((code) => ({
-    code,
-    used: false,
-    usedAt: null,
-  }));
+  const hashedCodesData = await Promise.all(
+    backupCodes.map(async (code) => ({
+      hash: await bcrypt.hash(code.replace(/-/g, ''), BCRYPT_ROUNDS),
+      used: false,
+      usedAt: null,
+    }))
+  );
 
-  // Enable MFA
+  // Enable MFA with hashed backup codes
   db.prepare(`
     UPDATE users
     SET mfa_enabled = 1,
         mfa_backup_codes = ?,
         mfa_enabled_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(JSON.stringify(backupCodesData), userId);
+  `).run(JSON.stringify(hashedCodesData), userId);
 
   // Log the event
   logSecurityEvent(SecurityEventType.MFA_ENABLED, {
@@ -219,7 +254,7 @@ export function enableMFA(userId, token, req = null) {
 
   return {
     success: true,
-    backupCodes,
+    backupCodes,  // Return plaintext codes to user (one-time display)
     message: 'MFA enabled successfully. Save your backup codes securely.',
   };
 }
@@ -289,9 +324,9 @@ export function getRemainingBackupCodesCount(userId) {
  * Regenerate backup codes (invalidates old ones)
  * @param {number} userId - User ID
  * @param {Object} req - Express request for logging
- * @returns {string[]} New backup codes
+ * @returns {Promise<string[]>} New backup codes
  */
-export function regenerateBackupCodes(userId, req = null) {
+export async function regenerateBackupCodes(userId, req = null) {
   const user = db.prepare('SELECT email, mfa_enabled FROM users WHERE id = ?').get(userId);
 
   if (!user) {
@@ -302,15 +337,18 @@ export function regenerateBackupCodes(userId, req = null) {
     throw new Error('MFA is not enabled');
   }
 
+  // Generate new codes and hash them for storage
   const backupCodes = generateBackupCodes();
-  const backupCodesData = backupCodes.map((code) => ({
-    code,
-    used: false,
-    usedAt: null,
-  }));
+  const hashedCodesData = await Promise.all(
+    backupCodes.map(async (code) => ({
+      hash: await bcrypt.hash(code.replace(/-/g, ''), BCRYPT_ROUNDS),
+      used: false,
+      usedAt: null,
+    }))
+  );
 
   db.prepare('UPDATE users SET mfa_backup_codes = ? WHERE id = ?')
-    .run(JSON.stringify(backupCodesData), userId);
+    .run(JSON.stringify(hashedCodesData), userId);
 
   logSecurityEvent(SecurityEventType.ADMIN_ACTION, {
     userId,
@@ -319,7 +357,7 @@ export function regenerateBackupCodes(userId, req = null) {
     action: 'REGENERATE_BACKUP_CODES',
   });
 
-  return backupCodes;
+  return backupCodes;  // Return plaintext codes to user (one-time display)
 }
 
 /**

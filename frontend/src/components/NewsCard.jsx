@@ -109,6 +109,7 @@ function NewsCard({ article }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      data-testid="news-card"
       className="block bg-card hover:bg-card-hover rounded-lg shadow transition-colors overflow-hidden"
     >
       <div className="flex gap-4 p-4">
@@ -129,13 +130,15 @@ function NewsCard({ article }) {
         {/* Article Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2 mb-1">
-            <h3 className="text-text-primary font-semibold line-clamp-2 flex-1">
+            <h3 className="text-text-primary font-semibold line-clamp-2 flex-1" data-testid="news-headline">
               {headline}
             </h3>
             {/* Sentiment Indicator (#98) */}
             <span
               className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${sentimentConfig[sentiment].className}`}
               title={`Sentiment: ${sentimentConfig[sentiment].label}`}
+              data-testid="news-sentiment"
+              data-sentiment={sentiment}
             >
               <SentimentIcon className="w-3 h-3" />
               <span className="hidden sm:inline">{sentimentConfig[sentiment].label}</span>

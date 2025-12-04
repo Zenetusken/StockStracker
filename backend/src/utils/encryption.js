@@ -23,11 +23,14 @@ export function getEncryptionKey() {
   const keyHex = process.env.DB_ENCRYPTION_KEY;
 
   if (!keyHex) {
-    // In development, encryption is optional
-    if (process.env.NODE_ENV !== 'production') {
-      return null;
+    // H8: In production, DB_ENCRYPTION_KEY is required - fail fast
+    if (process.env.NODE_ENV === 'production') {
+      console.error('FATAL: DB_ENCRYPTION_KEY environment variable is required in production.');
+      console.error('Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+      process.exit(1);
     }
-    console.warn('WARNING: DB_ENCRYPTION_KEY not set. API keys will be stored in plaintext.');
+    // In development, encryption is optional (but warn)
+    console.warn('WARNING: DB_ENCRYPTION_KEY not set. Encryption disabled for development.');
     return null;
   }
 

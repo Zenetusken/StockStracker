@@ -144,7 +144,7 @@ function NewsFeed({
   // Loading state
   if (loading) {
     return (
-      <div className="bg-card rounded-lg shadow p-6">
+      <div className="bg-card rounded-lg shadow p-6" data-testid="news-feed-loading">
         <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center gap-2">
           <Newspaper className="w-5 h-5" />
           {title}
@@ -159,7 +159,7 @@ function NewsFeed({
   // Error state
   if (error) {
     return (
-      <div className="bg-card rounded-lg shadow p-6">
+      <div className="bg-card rounded-lg shadow p-6" data-testid="news-feed-error">
         <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center gap-2">
           <Newspaper className="w-5 h-5" />
           {title}
@@ -169,6 +169,7 @@ function NewsFeed({
           <p className="text-text-muted mb-4">{error}</p>
           <button
             onClick={() => fetchNews(true)}
+            data-testid="news-retry-button"
             className="flex items-center gap-2 px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -182,7 +183,7 @@ function NewsFeed({
   // Empty state
   if (displayedNews.length === 0) {
     return (
-      <div className="bg-card rounded-lg shadow p-6">
+      <div className="bg-card rounded-lg shadow p-6" data-testid="news-feed-empty">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
             <Newspaper className="w-5 h-5" />
@@ -191,6 +192,7 @@ function NewsFeed({
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
+            data-testid="news-refresh-button"
             className="p-2 text-text-muted hover:text-text-primary hover:bg-page-bg rounded-lg transition-colors disabled:opacity-50"
             title="Refresh news"
           >
@@ -200,11 +202,12 @@ function NewsFeed({
 
         {/* Category Filters (#101) */}
         {!symbol && showFilters && (
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4" data-testid="news-category-filters">
             {NEWS_CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => handleCategoryChange(cat.id)}
+                data-testid={`news-category-${cat.id}`}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   category === cat.id
                     ? 'bg-brand text-white'
@@ -226,7 +229,7 @@ function NewsFeed({
   }
 
   return (
-    <div className="bg-card rounded-lg shadow p-6">
+    <div className="bg-card rounded-lg shadow p-6" data-testid="news-feed">
       {/* Header with refresh button (#102) */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
@@ -236,6 +239,7 @@ function NewsFeed({
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}
+          data-testid="news-refresh-button"
           className="p-2 text-text-muted hover:text-text-primary hover:bg-page-bg rounded-lg transition-colors disabled:opacity-50"
           title="Refresh news"
         >
@@ -245,11 +249,12 @@ function NewsFeed({
 
       {/* Category Filters (#101) - only for market news */}
       {!symbol && showFilters && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4" data-testid="news-category-filters">
           {NEWS_CATEGORIES.map((cat) => (
             <button
               key={cat.id}
               onClick={() => handleCategoryChange(cat.id)}
+              data-testid={`news-category-${cat.id}`}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 category === cat.id
                   ? 'bg-brand text-white'

@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import db from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
-import { authLimiter, passwordLimiter } from '../middleware/rateLimit.js';
+import { authLimiter, passwordLimiter, mfaLimiter } from '../middleware/rateLimit.js';
 import { authValidators } from '../middleware/validation.js';
 import { validatePassword } from '../utils/passwordValidation.js';
 import { verifyToken, verifyBackupCode } from '../services/mfa.js';
@@ -522,7 +522,7 @@ router.post('/check-password', (req, res) => {
  */
 const MFA_SESSION_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
-router.post('/verify-mfa', authLimiter, async (req, res) => {
+router.post('/verify-mfa', mfaLimiter, async (req, res) => {
   const ipAddress = getClientIp(req);
   const userAgent = req.headers['user-agent'];
 

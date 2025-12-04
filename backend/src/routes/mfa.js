@@ -79,7 +79,7 @@ router.post('/enable', (req, res) => {
       return res.status(400).json({ error: 'Verification code is required' });
     }
 
-    const result = enableMFA(req.session.userId, code, req);
+    const result = await enableMFA(req.session.userId, code, req);
 
     res.json({
       success: true,

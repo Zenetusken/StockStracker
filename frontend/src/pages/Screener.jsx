@@ -340,7 +340,7 @@ function Screener() {
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-testid="screener-page">
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
           <div>
@@ -357,6 +357,7 @@ function Screener() {
           <div className="flex gap-2">
             <button
               onClick={() => setLoadModalOpen(true)}
+              data-testid="screener-load-button"
               className="flex items-center gap-2 px-4 py-2 bg-page-bg text-text-primary hover:bg-card-hover rounded-lg transition-colors"
               title="Load saved screener"
             >
@@ -366,6 +367,7 @@ function Screener() {
             <button
               onClick={() => setSaveModalOpen(true)}
               disabled={activeFilterCount === 0}
+              data-testid="screener-save-button"
               className="flex items-center gap-2 px-4 py-2 bg-brand text-white hover:bg-brand-hover rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Save current screener"
             >
@@ -378,13 +380,13 @@ function Screener() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Filters Sidebar */}
           <div className="lg:col-span-1">
-            <div className="bg-card rounded-lg shadow p-4 sticky top-4">
+            <div className="bg-card rounded-lg shadow p-4 sticky top-4" data-testid="screener-filters">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-text-primary flex items-center gap-2">
                   <Filter className="w-5 h-5" />
                   Filters
                   {activeFilterCount > 0 && (
-                    <span className="px-2 py-0.5 bg-brand text-white text-xs rounded-full">
+                    <span className="px-2 py-0.5 bg-brand text-white text-xs rounded-full" data-testid="active-filter-count">
                       {activeFilterCount}
                     </span>
                   )}
@@ -392,6 +394,7 @@ function Screener() {
                 {activeFilterCount > 0 && (
                   <button
                     onClick={resetFilters}
+                    data-testid="screener-reset-filters"
                     className="text-sm text-text-muted hover:text-text-primary flex items-center gap-1"
                   >
                     <X className="w-4 h-4" />
@@ -468,6 +471,7 @@ function Screener() {
                 <select
                   value={filters.sector}
                   onChange={(e) => setFilters({ ...filters, sector: e.target.value })}
+                  data-testid="screener-sector-filter"
                   className="w-full px-3 py-2 bg-page-bg border border-border rounded text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand"
                 >
                   {SECTORS.map((sector) => (
@@ -489,6 +493,7 @@ function Screener() {
                   value={filters.industry}
                   onChange={(e) => setFilters({ ...filters, industry: e.target.value })}
                   placeholder="e.g. Software, Banks"
+                  data-testid="screener-industry-filter"
                   className="w-full px-3 py-2 bg-page-bg border border-border rounded text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
@@ -619,6 +624,7 @@ function Screener() {
               <button
                 onClick={runScreener}
                 disabled={loading}
+                data-testid="screener-run-button"
                 className="w-full py-3 bg-brand hover:bg-brand-hover text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               >
                 {loading ? (
@@ -638,7 +644,7 @@ function Screener() {
 
           {/* Results */}
           <div className="lg:col-span-3">
-            <div className="bg-card rounded-lg shadow overflow-hidden">
+            <div className="bg-card rounded-lg shadow overflow-hidden" data-testid="screener-results">
               {/* Results Header */}
               <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                 <div className="text-sm text-text-muted">
@@ -695,7 +701,7 @@ function Screener() {
               {/* Results Table */}
               {!loading && !error && results.length > 0 && (
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full" data-testid="screener-results-table">
                     <thead className="bg-page-bg">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">

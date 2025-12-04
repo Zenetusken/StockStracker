@@ -15,6 +15,120 @@ This document provides actionable steps to address all vulnerabilities identifie
 | **C1: MFA Enforcement** | ✅ Complete | Login returns 202 with `mfaRequired: true` for MFA-enabled users. New `/api/auth/verify-mfa` endpoint completes authentication after TOTP verification. Frontend includes `MFAVerificationPage` component with backup code support. |
 | **C2: MFA Secret Encryption** | ✅ Complete | MFA secrets encrypted using AES-256-GCM via `encrypt()` before storage. All verification points use `decrypt()` to retrieve secrets. Migration script available at `backend/scripts/migrate-mfa-secrets.js`. |
 
+### Phase 2: COMPLETED
+
+| Issue | Status | Implementation Details |
+|-------|--------|------------------------|
+| **H1: Hash Backup Codes** | ✅ Complete | Backup codes hashed with bcrypt (10 rounds) before storage. `verifyBackupCode()` uses `bcrypt.compare()` with backward compatibility for legacy plaintext codes. Migration script: `backend/scripts/migrate-backup-codes.js` |
+| **H2: Session Invalidation** | ✅ Complete | Auth middleware checks `password_changed_at` timestamp vs `session.loginTime`. Sessions created before password change are automatically invalidated and destroyed. |
+| **H3: Failed Login Tracking** | ✅ Complete | Already implemented - uses `failed_login_attempts` and `failed_login_lockout_until` columns in users table. |
+| **H4: Fix CSP** | ✅ Complete | Removed `'unsafe-inline'` from `scriptSrc` in helmet CSP configuration. Kept for `styleSrc` (Tailwind CSS compatibility). |
+| **H5: CORS No-Origin** | ✅ Complete | Production mode blocks requests without Origin header. Development allows no-origin for curl/Postman testing. Added `X-CSRF-Token` to allowed headers. |
+| **H6: Auth on Quotes** | ✅ Complete | Added `router.use(requireAuth)` to quotes.js. All quote endpoints now require authentication. |
+| **H7: Watchlist IDOR** | ✅ Complete | Already implemented - all watchlist operations verify `user_id` matches `session.userId`. |
+| **H8: Encryption Key Enforcement** | ✅ Complete | Production mode exits with `process.exit(1)` if `DB_ENCRYPTION_KEY` not set. Development shows warning but allows operation. |
+
+### Phase 3: COMPLETED
+
+| Issue | Status | Implementation Details |
+|-------|--------|------------------------|
+| **M3: Add Missing Security Headers (3.1)** | ✅ Complete | Added HSTS (1 year, includeSubDomains, preload), X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin to helmet configuration. |
+| **M2: Fix Error Information Disclosure (3.2)** | ✅ Complete | Created `backend/src/middleware/errorHandler.js` to sanitize error responses. Production returns generic "Internal server error" for 5xx errors; dev mode shows stack trace. |
+| **M4: Reduce Session Timeout (3.3)** | ✅ Complete | Reduced session cookie maxAge from 24 hours to 4 hours. Added `rolling: true` to reset expiry on user activity. |
+| **M5: Add MFA Setup TTL (3.4)** | ✅ Complete | Added `mfa_setup_expires_at` column to users table. Setup expires after 15 minutes. `enableMFA()` clears expired setup and returns error. |
+| **M8: Rate Limit Quote Endpoints (3.5)** | ✅ Complete | Added `quoteLimiter` (60 req/min in prod, 300 in dev) with per-user keying via `req.session.userId`. Applied to all quote endpoints. |
+| **M9: Add Search Query Validation (3.6)** | ✅ Complete | Added string type check, 100-char length limit, and alphanumeric whitelist (`/^[a-zA-Z0-9\s\-\.&]*$/`) to search endpoint. |
+
+### Phase 4: COMPLETED
+
+| Issue | Status | Implementation Details |
+|-------|--------|------------------------|
+| **L1: Make SSE CORS Origin Configurable (4.1)** | ✅ Complete | Added `CORS_ORIGINS` env var support to `stream.js`. Origins are validated against allowlist. Disallowed origins receive no `Access-Control-Allow-Origin` header. Development mode allows no-origin requests for testing. |
+| **L2: Implement API Key Rotation** | ⏭️ Skipped | No user API key system exists yet. Will implement when user-generated API keys are added. |
+| **L3: Disable Source Maps in Production (4.3)** | ✅ Complete | Added `build.sourcemap: process.env.NODE_ENV !== 'production'` to `vite.config.js`. Production builds generate no `.map` files. |
+| **L4: Remove API Key Reveal (4.4)** | ✅ Complete | Removed Eye/EyeOff icons and `isRevealed` state from `MaskedKeyDisplay.jsx`. Keys always display masked with copy-to-clipboard functionality preserved. |
+
+### Files Modified (Phase 4)
+
+**Backend:**
+- `backend/src/routes/stream.js` - Added configurable CORS origins via `CORS_ORIGINS` env var with origin validation
+
+**Frontend:**
+- `frontend/vite.config.js` - Added `build.sourcemap` configuration to disable source maps in production
+- `frontend/src/components/api-keys/MaskedKeyDisplay.jsx` - Removed reveal button, kept copy functionality only
+- `frontend/src/pages/PortfolioDetail.jsx` - Fixed JSX syntax error (missing closing div tag)
+
+### Test Results (Phase 4)
+
+| Test Case | Result |
+|-----------|--------|
+| SSE CORS allows localhost:5173 origin | ✅ Pass |
+| SSE CORS blocks disallowed origins (no header) | ✅ Pass |
+| Production build generates no .map files | ✅ Pass |
+| MaskedKeyDisplay has no Eye icon imports | ✅ Pass |
+| MaskedKeyDisplay has no isRevealed state | ✅ Pass |
+| Copy-to-clipboard functionality preserved | ✅ Pass |
+
+### Files Modified (Phase 3)
+
+**Backend:**
+- `backend/src/middleware/errorHandler.js` - NEW: Sanitized error handler middleware
+- `backend/src/index.js` - Added security headers (HSTS, frameguard, noSniff, referrerPolicy), reduced session timeout to 4h, added rolling sessions, imported and applied errorHandler
+- `backend/src/middleware/rateLimit.js` - Added `quoteLimiter` export with per-user keying and IPv6 validation disabled
+- `backend/src/routes/quotes.js` - Applied quoteLimiter middleware after requireAuth
+- `backend/src/routes/search.js` - Added query validation (type, length, character whitelist)
+- `backend/src/database.js` - Added `mfa_setup_expires_at` column to users table
+- `backend/src/services/mfa.js` - Added 15-minute TTL to setupMFA(), added expiry check in enableMFA()
+
+### Test Results (Phase 3)
+
+| Test Case | Result |
+|-----------|--------|
+| HSTS header present (max-age=31536000; includeSubDomains; preload) | ✅ Pass |
+| X-Frame-Options: DENY header present | ✅ Pass |
+| X-Content-Type-Options: nosniff header present | ✅ Pass |
+| Referrer-Policy: strict-origin-when-cross-origin header present | ✅ Pass |
+| Search rejects invalid characters (`<script>`) | ✅ Pass |
+| Search rejects queries > 100 characters | ✅ Pass |
+| Session cookie maxAge reduced to 4 hours | ✅ Pass |
+| Session rolling enabled for activity-based renewal | ✅ Pass |
+| quoteLimiter applied to quote endpoints (60 req/min prod) | ✅ Pass |
+| MFA setup expires after 15 minutes | ✅ Pass |
+| Error handler returns sanitized messages in production | ✅ Pass |
+
+### Files Modified (Phase 2)
+
+**Backend:**
+- `backend/src/services/mfa.js` - Added bcrypt import, async `verifyBackupCode()` with `bcrypt.compare()`, async `enableMFA()` and `regenerateBackupCodes()` with `bcrypt.hash()`
+- `backend/src/middleware/auth.js` - Added database import, `password_changed_at` vs `session.loginTime` validation in `requireAuth()`
+- `backend/src/index.js` - Removed `'unsafe-inline'` from CSP `scriptSrc`, added production Origin header requirement for CORS
+- `backend/src/routes/quotes.js` - Added `requireAuth` middleware to all quote endpoints
+- `backend/src/utils/encryption.js` - Added production check with `process.exit(1)` if encryption key missing
+- `backend/scripts/migrate-backup-codes.js` - NEW: Migration script for hashing existing plaintext backup codes
+
+### Test Results (Phase 2)
+
+| Test Case | Result |
+|-----------|--------|
+| bcrypt imported and used for hashing backup codes | ✅ Pass |
+| bcrypt.compare() used for backup code verification | ✅ Pass |
+| Auth middleware checks password_changed_at timestamp | ✅ Pass |
+| Session destroyed when password changed after login | ✅ Pass |
+| Failed login tracking persists in database | ✅ Pass |
+| CSP script-src uses 'self' without unsafe-inline | ✅ Pass |
+| Production mode blocks no-origin requests | ✅ Pass |
+| Quote endpoints return 401 without authentication | ✅ Pass |
+| Watchlist routes validate user ownership | ✅ Pass |
+| Production mode exits if encryption key missing | ✅ Pass |
+| Migration script exists with dry-run support | ✅ Pass |
+
+### Deployment Notes (Phase 2)
+
+Before deploying:
+1. Run backup code migration: `node backend/scripts/migrate-backup-codes.js --dry-run` (preview), then without flag
+2. Existing users with plaintext backup codes will be automatically migrated
+3. Backward compatibility maintained - legacy plaintext codes still work until migrated
+
 ### Files Modified (Phase 1)
 
 **Backend:**

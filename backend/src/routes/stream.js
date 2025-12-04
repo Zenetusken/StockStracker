@@ -36,9 +36,29 @@ function getPollInterval() {
   return isMarketOpen() ? 10000 : 60000;
 }
 
+// L1: Configurable allowed origins for SSE CORS
+// Set CORS_ORIGINS env var with comma-separated list for production
+// Default: 'http://localhost:5173' for development
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim());
+
 // CORS middleware for SSE - must run BEFORE any response
 const sseCorsMw = (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+  const origin = req.headers.origin;
+
+  // Only set CORS header if origin is in allowlist
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    // Allow no-origin requests in development only (for curl/Postman testing)
+    if (process.env.NODE_ENV !== 'production') {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+    }
+    // In production, no-origin requests get no CORS header (blocked)
+  }
+  // Disallowed origins also get no CORS header (blocked by browser)
+
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

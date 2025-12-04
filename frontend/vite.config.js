@@ -13,4 +13,9 @@ export default defineConfig({
       },
     },
   },
+  // L3: Disable source maps in production builds to prevent source code exposure
+  build: {
+    // eslint-disable-next-line no-undef
+    sourcemap: process.env.NODE_ENV !== 'production'
+  }
 })

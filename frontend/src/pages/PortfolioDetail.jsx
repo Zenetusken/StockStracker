@@ -582,6 +582,7 @@ function PortfolioDetail() {
               </button>
             </div>
           </div>
+          </div>
 
           {sortedHoldings.length === 0 ? (
             <div className="p-8 text-center text-text-secondary">
