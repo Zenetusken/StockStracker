@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   TrendingUp,
@@ -6,52 +6,162 @@ import {
   Activity,
   RefreshCw,
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  Building2,
+  Sparkles,
+  Rocket,
+  Eye,
+  Zap,
+  Target,
+  Cpu,
+  Flame,
 } from 'lucide-react';
-import api from '../api/client';
+import { useMarketOverviewStore } from '../stores/marketOverviewStore';
 
 /**
- * Top Movers Component
- * #118: Top gainers list
- * #119: Top losers list
- * #120: Most active by volume
+ * Enhanced Top Movers Component
+ * Displays market movers across multiple categories - ALL using Yahoo's dynamic screeners
+ * No hardcoded symbol lists - all data comes from Yahoo Finance API
+ *
+ * Categories:
+ * - Viral Movers (TRUE top movers - no price/market cap filters)
+ * - Large & Mid Cap (Gainers, Losers, Most Active)
+ * - Small Cap (Gainers, Aggressive)
+ * - Growth Stocks (Undervalued, Tech Growth)
+ * - Most Watched (Trending)
  */
 
-// Tab options
-const TABS = [
-  { id: 'gainers', label: 'Gainers', icon: TrendingUp, color: 'text-gain' },
-  { id: 'losers', label: 'Losers', icon: TrendingDown, color: 'text-loss' },
-  { id: 'mostActive', label: 'Most Active', icon: Activity, color: 'text-brand' },
+// Section definitions with tabs
+// Note: Hot Sectors removed - Yahoo Finance doesn't provide sector-themed stock lists via API
+// All sections below use Yahoo's dynamic screener API (no hardcoded symbol lists)
+const SECTIONS = [
+  {
+    id: 'viral',
+    label: 'Top Movers',
+    icon: Flame,
+    description: 'Highest % gainers/losers across all market caps',
+    tabs: [
+      { id: 'gainers', label: 'Top Gainers', icon: TrendingUp, color: 'text-gain' },
+      { id: 'losers', label: 'Top Losers', icon: TrendingDown, color: 'text-loss' },
+    ],
+  },
+  {
+    id: 'largeCap',
+    label: 'Large & Mid Cap',
+    icon: Building2,
+    description: 'Filtered: price >$5, market cap >$2B',
+    tabs: [
+      { id: 'gainers', label: 'Gainers', icon: TrendingUp, color: 'text-gain' },
+      { id: 'losers', label: 'Losers', icon: TrendingDown, color: 'text-loss' },
+      { id: 'mostActive', label: 'Most Active', icon: Activity, color: 'text-brand' },
+    ],
+  },
+  {
+    id: 'smallCap',
+    label: 'Small Cap',
+    icon: Sparkles,
+    tabs: [
+      { id: 'gainers', label: 'Gainers', icon: TrendingUp, color: 'text-gain' },
+      { id: 'aggressive', label: 'Aggressive', icon: Zap, color: 'text-amber-500' },
+    ],
+  },
+  {
+    id: 'growth',
+    label: 'Growth Stocks',
+    icon: Rocket,
+    tabs: [
+      { id: 'undervalued', label: 'Undervalued', icon: Target, color: 'text-emerald-500' },
+      { id: 'tech', label: 'Tech Growth', icon: Cpu, color: 'text-blue-500' },
+    ],
+  },
+  {
+    id: 'trending',
+    label: 'Most Watched',
+    icon: Eye,
+    tabs: [
+      { id: 'watched', label: 'Popular', icon: Eye, color: 'text-pink-500' },
+    ],
+  },
+  {
+    id: 'canada',
+    label: '🇨🇦 Canada',
+    icon: TrendingUp,
+    description: 'TSX/TSXV/CSE stocks ≥$0.50 (excludes penny stocks)',
+    tabs: [
+      { id: 'gainers', label: 'Top Gainers', icon: TrendingUp, color: 'text-gain' },
+      { id: 'mostActive', label: 'Most Active', icon: Activity, color: 'text-brand' },
+    ],
+  },
 ];
 
 function TopMovers() {
-  const [activeTab, setActiveTab] = useState('gainers');
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
+  // N3 fix: Use store for movers data with caching
+  const data = useMarketOverviewStore((state) => state.movers);
+  const loading = useMarketOverviewStore((state) => state.isLoadingMovers);
+  const error = useMarketOverviewStore((state) => state.error);
+  const fetchMovers = useMarketOverviewStore((state) => state.fetchMovers);
 
-  const fetchMovers = useCallback(async (force = false) => {
-    setLoading(true);
-    try {
-      const url = force ? '/market/movers?fresh=true' : '/market/movers';
-      const result = await api.get(url);
-      setData(result);
-      setLastUpdated(result.timestamp || Date.now());
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch movers:', err);
-      setError('Failed to load market movers');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Local UI state
+  const [expandedSections, setExpandedSections] = useState({ viral: true });
+  const [activeTabs, setActiveTabs] = useState({
+    viral: 'gainers',
+    largeCap: 'gainers',
+    smallCap: 'gainers',
+    growth: 'undervalued',
+    trending: 'watched',
+    canada: 'gainers',
+  });
+  // N3 fix: Track current time in state for pure render (avoids Date.now() during render)
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
+  // Derived value
+  const lastUpdated = data?.timestamp || null;
+
+  // N3 fix: Use ref for stable interval callback
+  const fetchMoversRef = useRef(fetchMovers);
+
+  // N3 fix: Update ref in effect to avoid render-time ref mutation
+  useEffect(() => {
+    fetchMoversRef.current = fetchMovers;
+  }, [fetchMovers]);
 
   useEffect(() => {
+    // Initial fetch
+    const { fetchMovers } = useMarketOverviewStore.getState();
     fetchMovers(false);
-    // Auto-refresh every 2 minutes (uses cache)
-    const interval = setInterval(() => fetchMovers(false), 120000);
-    return () => clearInterval(interval);
-  }, [fetchMovers]);
+
+    // Auto-refresh every 90 seconds (aligned with backend screener cache TTL)
+    const dataInterval = setInterval(() => {
+      fetchMoversRef.current(false);
+    }, 90000);
+
+    // N3 fix: Update currentTime every 30 seconds for "time ago" display
+    const timeInterval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 30000);
+
+    return () => {
+      clearInterval(dataInterval);
+      clearInterval(timeInterval);
+    };
+  }, []);
+
+  // Toggle section expansion
+  const toggleSection = (sectionId) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  };
+
+  // Set active tab for a section
+  const setActiveTab = (sectionId, tabId) => {
+    setActiveTabs(prev => ({
+      ...prev,
+      [sectionId]: tabId,
+    }));
+  };
 
   // Format helpers
   const formatPrice = (val) => {
@@ -73,9 +183,10 @@ function TopMovers() {
     return vol.toString();
   };
 
+  // N3 fix: Use currentTime from state instead of Date.now() for pure render
   const formatTimeAgo = (timestamp) => {
     if (!timestamp) return '';
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    const seconds = Math.floor((currentTime - timestamp) / 1000);
     if (seconds < 60) return 'just now';
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
@@ -83,32 +194,157 @@ function TopMovers() {
     return `${hours}h ago`;
   };
 
-  const activeData = data?.[activeTab] || [];
+  // Get stocks for a specific section and tab
+  const getStocksForTab = (sectionId, tabId) => {
+    return data?.categories?.[sectionId]?.[tabId] || [];
+  };
+
+  // Check if a section has any data
+  const sectionHasData = (sectionId) => {
+    const section = SECTIONS.find(s => s.id === sectionId);
+    if (!section) return false;
+    return section.tabs.some(tab => getStocksForTab(sectionId, tab.id).length > 0);
+  };
+
+  // Render stock list
+  const renderStockList = (stocks, showVolume = false) => {
+    if (!stocks || stocks.length === 0) {
+      return (
+        <div className="text-center py-4 text-text-muted text-sm">
+          No data available
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-1">
+        {stocks.slice(0, 10).map((stock, idx) => (
+          <Link
+            key={stock.symbol}
+            to={`/stock/${stock.symbol}`}
+            className="flex items-center justify-between p-2 rounded-lg hover:bg-page-bg transition-colors"
+          >
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <span className="w-5 h-5 flex items-center justify-center text-xs font-medium text-text-muted bg-page-bg rounded flex-shrink-0">
+                {idx + 1}
+              </span>
+              <div className="min-w-0">
+                <span className="font-semibold text-text-primary text-sm">
+                  {stock.symbol}
+                </span>
+                {stock.name && stock.name !== stock.symbol && (
+                  <p className="text-xs text-text-muted truncate max-w-[120px]">
+                    {stock.name}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-text-secondary">
+                {formatPrice(stock.price)}
+              </span>
+              {showVolume ? (
+                <span className="text-sm font-medium text-brand min-w-[60px] text-right">
+                  {formatVolume(stock.volume)}
+                </span>
+              ) : (
+                <span className={`text-sm font-medium min-w-[60px] text-right ${
+                  stock.changePercent >= 0 ? 'text-gain' : 'text-loss'
+                }`}>
+                  {formatPercent(stock.changePercent)}
+                </span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    );
+  };
+
+  // Render a section
+  const renderSection = (section) => {
+    const isExpanded = expandedSections[section.id];
+    const activeTab = activeTabs[section.id];
+    const hasData = sectionHasData(section.id);
+    const SectionIcon = section.icon;
+    const stocks = getStocksForTab(section.id, activeTab);
+    const showVolume = activeTab === 'mostActive';
+
+    // Get count of gainers for the badge
+    const primaryTabData = getStocksForTab(section.id, section.tabs[0].id);
+    const topGain = primaryTabData[0]?.changePercent;
+
+    return (
+      <div key={section.id} className="border-b border-border last:border-b-0">
+        {/* Section header - clickable to expand/collapse */}
+        <button
+          onClick={() => toggleSection(section.id)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-page-bg/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-text-muted" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-text-muted" />
+            )}
+            <SectionIcon className="w-4 h-4 text-text-muted" />
+            <span className="font-medium text-text-primary">{section.label}</span>
+            {!isExpanded && hasData && topGain != null && (
+              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                topGain >= 0 ? 'bg-gain/10 text-gain' : 'bg-loss/10 text-loss'
+              }`}>
+                {formatPercent(topGain)}
+              </span>
+            )}
+          </div>
+          {!hasData && (
+            <span className="text-xs text-text-muted">No data</span>
+          )}
+        </button>
+
+        {/* Section content */}
+        {isExpanded && (
+          <div className="px-4 pb-3">
+            {/* Tabs */}
+            <div className="flex gap-1 mb-2 overflow-x-auto">
+              {section.tabs.map(tab => {
+                const TabIcon = tab.icon;
+                const tabData = getStocksForTab(section.id, tab.id);
+                const count = tabData.length;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(section.id, tab.id)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+                      activeTab === tab.id
+                        ? `bg-brand/10 ${tab.color}`
+                        : 'text-text-muted hover:text-text-primary hover:bg-page-bg'
+                    }`}
+                  >
+                    <TabIcon className="w-3 h-3" />
+                    {tab.label}
+                    {count > 0 && (
+                      <span className="text-[10px] opacity-60">({count})</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Stock list */}
+            {renderStockList(stocks, showVolume)}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="bg-card rounded-lg shadow">
-      {/* Header with tabs */}
+      {/* Header */}
       <div className="px-4 py-3 border-b border-border">
         <div className="flex items-center justify-between">
-          <div className="flex gap-1">
-            {TABS.map(tab => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? `bg-brand/10 ${tab.color}`
-                      : 'text-text-muted hover:text-text-primary hover:bg-page-bg'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+          <h2 className="font-semibold text-text-primary">Top Market Movers</h2>
           <div className="flex items-center gap-2">
             {lastUpdated && (
               <span className="text-xs text-text-muted">
@@ -128,11 +364,11 @@ function TopMovers() {
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div>
         {loading && !data && (
           <div className="flex items-center justify-center py-8 text-text-muted">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
-            Loading...
+            Loading market movers...
           </div>
         )}
 
@@ -140,7 +376,7 @@ function TopMovers() {
           <div className="text-center py-8">
             <p className="text-loss mb-2">{error}</p>
             <button
-              onClick={fetchMovers}
+              onClick={() => fetchMovers(true)}
               className="text-sm text-brand hover:underline"
             >
               Try again
@@ -148,46 +384,9 @@ function TopMovers() {
           </div>
         )}
 
-        {!loading && !error && activeData.length === 0 && (
-          <div className="text-center py-8 text-text-muted">
-            No data available
-          </div>
-        )}
-
-        {activeData.length > 0 && (
-          <div className="space-y-2">
-            {activeData.slice(0, 5).map((stock, idx) => (
-              <Link
-                key={stock.symbol}
-                to={`/stock/${stock.symbol}`}
-                className="flex items-center justify-between p-2 rounded-lg hover:bg-page-bg transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 flex items-center justify-center text-xs font-medium text-text-muted bg-page-bg rounded">
-                    {idx + 1}
-                  </span>
-                  <span className="font-semibold text-text-primary">
-                    {stock.symbol}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-text-secondary">
-                    {formatPrice(stock.price)}
-                  </span>
-                  {activeTab === 'mostActive' ? (
-                    <span className="text-sm font-medium text-brand">
-                      {formatVolume(stock.volume)}
-                    </span>
-                  ) : (
-                    <span className={`text-sm font-medium ${
-                      stock.changePercent >= 0 ? 'text-gain' : 'text-loss'
-                    }`}>
-                      {formatPercent(stock.changePercent)}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            ))}
+        {!loading && !error && data && (
+          <div>
+            {SECTIONS.map(section => renderSection(section))}
           </div>
         )}
       </div>
