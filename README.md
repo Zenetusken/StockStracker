@@ -8,7 +8,10 @@
 ![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?style=flat&logo=vite&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-**StockTracker** is a privacy-first, self-hosted investment platform built for developers who want ownership of their financial data. It combines real-time market streaming with professional-grade tax accounting, delivering an enterprise-level experience without the monthly subscription fees or privacy trade-offs.
+
+**Institutional-grade analytics meets complete data privacy. Open source, self-hosted, and engineered for the individual investor.**
+
+Built for developers, StockTracker is a local-first platform that merges real-time market streaming via SSE with professional FIFO tax accounting. It delivers an enterprise-grade experience—featuring MFA, audit logging, and advanced analytics—without the monthly subscription fees. All data is stored in your own local SQLite database, ensuring complete privacy and ownership.
 
 <p align="center">
   <img src="docs/UI_SCREENSHOT.png" alt="StockTracker Dashboard" width="800">
@@ -16,28 +19,6 @@
   <em>Dashboard with recently viewed stocks, instant preview panel, and the Jade Requiem theme</em>
 </p>
 
-## Why StockTracker?
-
-**Institutional-grade analytics meets complete data privacy. Open source, self-hosted, and engineered for the individual investor.**
-
-StockTracker combines real-time market streaming with professional-grade tax accounting, delivering an enterprise-level experience without the monthly subscription fees or privacy trade-offs.
-
-### Key Features
-
-- **🛡️ Enterprise Security**: Full Multi-Factor Authentication (TOTP), audit logging, and secure session management.
-- **🧠 Advanced Intelligence**: Sector rotation heatmaps, sentiment analysis, and performance benchmarking.
-- **💼 Pro-Level Accounting**: Automated FIFO tax lots, realized gains reports, and dividend tracking with capital gains calculations.
-- **🚀 Resilient Streaming**: Real-time quotes via SSE with automatic API key rotation and multi-provider fallback.
-- **💻 Privacy First**: Local-first architecture using SQLite (WAL mode). You own 100% of your financial data.
-
-## Tech Stack
-
-| Frontend | Backend | Data |
-|----------|---------|------|
-| React 18 | Node.js + Express | Yahoo Finance |
-| Zustand | SQLite (WAL mode) | Finnhub API |
-| TailwindCSS | express-session | SSE streaming |
-| Lightweight Charts | bcrypt | |
 
 ## Quick Start
 
@@ -51,31 +32,22 @@ cd StockTracker
 
 ### 2. Configure API Keys
 
-```bash
-cp .env.example .env
-```
+**Powered by a Single Free Key**
 
-Edit `.env` and add your API keys:
+StockTracker's intelligent data engine is designed to run flawlessly on a single free Finnhub API key. We handle the optimization so you get institutional-grade data without the overhead.
 
-| Variable | Required | Get Key |
-|----------|----------|---------|
-| `FINNHUB_API_KEY` | Yes | [finnhub.io/register](https://finnhub.io/register) → Dashboard → API Key |
+1. **[Get your free key](https://finnhub.io/register)** (takes < 30 seconds).
+2. Create your `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+3. Paste your key:
+   ```bash
+   FINNHUB_API_KEY=your_key_here
+   SESSION_SECRET=any_random_string
+   ```
 
-**Getting your keys:**
-
-1. **Finnhub** (for real-time quotes, search, news, company profiles)
-   - Go to [finnhub.io/register](https://finnhub.io/register)
-   - Create free account
-   - Copy API key from Dashboard
-   - Free tier: 60 API calls/minute
-
-Your `.env` should look like:
-```bash
-FINNHUB_API_KEY=abc123your_finnhub_key_here
-SESSION_SECRET=any-random-string-for-sessions
-```
-
-> **Note:** Without API keys, the app will have limited functionality. Configure at least Finnhub for real-time quotes.
+That’s it. Your dashboard is live.
 
 ### 3. Start Development
 
@@ -87,28 +59,15 @@ SESSION_SECRET=any-random-string-for-sessions
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:3001
 
-## Project Structure
 
-```
-├── backend/
-│   ├── src/
-│   │   ├── routes/      # API endpoints
-│   │   ├── services/    # Market data, API key management
-│   │   └── database.js  # SQLite schema
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── components/  # React components
-│   │   ├── pages/       # Route pages
-│   │   ├── stores/      # Zustand stores
-│   │   ├── themes/      # Theme definitions
-│   │   └── contexts/    # React contexts
-│   └── package.json
-├── init.sh              # Setup script
-└── start-dev.sh         # Dev server launcher
-```
 
-## License
+## Contributing
+
+**StockTracker is under active development.**
+New features, performance improvements, and analytics tools are pushed daily. Check back often for updates.
+
+We welcome contributions! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to submit pull requests, report issues, and contribute to the project.
+
 
 MIT License - Copyright (c) 2025
 
