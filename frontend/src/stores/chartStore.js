@@ -111,37 +111,84 @@ export const useChartStore = create((set, get) => ({
     return Date.now() - cached.timestamp > ttl;
   },
 
-  getPreferences: (symbol) => {
+  initPreferences: (symbol, defaultTimeframe = '6M', defaultChartType = 'candlestick') => {
+    if (!symbol) return null;
+    const upperSymbol = symbol.toUpperCase();
     const { preferences } = get();
-    const upperSymbol = symbol?.toUpperCase();
 
-    // Check if already loaded in store (single source of truth for session)
-    if (preferences[upperSymbol]) {
-      return preferences[upperSymbol];
+    // Load from localStorage
+    const savedTimeframe = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
+    let savedChartType = localStorage.getItem(`chart_type_${upperSymbol}`);
+
+    // Normalize legacy 'candle' type
+    if (savedChartType === 'candle') {
+      savedChartType = 'candlestick';
     }
 
-    // Load from localStorage and hydrate store for consistency
-    const savedTimeframe = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
-    const savedChartType = localStorage.getItem(`chart_type_${upperSymbol}`);
-    const savedSmaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`);
-    const savedSmaPeriod = localStorage.getItem(`chart_sma_period_${upperSymbol}`);
+    // SMA Migration Logic
+    let savedEnabledSMAs = [];
+    let hasSavedSMAs = false;
+    const savedEnabledSMAsJson = localStorage.getItem(`chart_enabled_smas_${upperSymbol}`);
+    if (savedEnabledSMAsJson) {
+      try {
+        savedEnabledSMAs = JSON.parse(savedEnabledSMAsJson);
+        hasSavedSMAs = true;
+      } catch { /* ignore */ }
+    } else {
+      // Fallback to old format
+      const isSmaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true';
+      const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20;
+      if (isSmaEnabled && smaPeriod) {
+        savedEnabledSMAs = [smaPeriod];
+        hasSavedSMAs = true; // effectively saved
+      }
+    }
 
-    const loadedPrefs = {
-      timeframe: savedTimeframe || '1M',
-      chartType: savedChartType || 'candlestick',
-      smaEnabled: savedSmaEnabled === 'true',
-      smaPeriod: parseInt(savedSmaPeriod) || 20,
+    // Determine values to use: Saved > Default
+    // If we have saved values, we use them.
+    // If we DON'T have saved values, we use the passed defaults.
+    const finalTimeframe = savedTimeframe || defaultTimeframe;
+    const finalChartType = savedChartType || defaultChartType;
+    const finalEnabledSMAs = savedEnabledSMAs;
+
+    const newPrefs = {
+      timeframe: finalTimeframe,
+      chartType: finalChartType,
+      enabledSMAs: finalEnabledSMAs,
+      smaEnabled: finalEnabledSMAs.length > 0,
+      smaPeriod: finalEnabledSMAs.length > 0 ? finalEnabledSMAs[0] : 20,
     };
 
-    // Hydrate store so subsequent accesses use the store (reactive + consistent)
+    // Optimization: If store already has these exact values, do nothing.
+    const current = preferences[upperSymbol];
+    if (current &&
+      current.timeframe === newPrefs.timeframe &&
+      current.chartType === newPrefs.chartType &&
+      JSON.stringify(current.enabledSMAs) === JSON.stringify(newPrefs.enabledSMAs)) {
+      return current;
+    }
+
+    // If we are here, either it's not initialized, OR the defaults changed and we are updating the "non-persisted" state.
+    // However, we must be careful not to overwrite user overrides with defaults if the user *just* changed them in memory but hasn't persisted?
+    // Wait, our setters (setTimeframe etc) persist to localStorage immediately. 
+    // So checking localStorage is safe as the source of truth for "has user override".
+
     set((state) => ({
       preferences: {
         ...state.preferences,
-        [upperSymbol]: loadedPrefs,
+        [upperSymbol]: newPrefs,
       },
     }));
 
-    return loadedPrefs;
+    return newPrefs;
+  },
+
+  getPreferences: (symbol) => {
+    // Determine if we need to initialize (lazy init via getter is risky during render, 
+    // but useful if accessed outside react lifecycle. 
+    // For React components, they should use useChartStore(state => state.preferences[symbol])
+    // This helper remains for non-reactive access if needed, but implementation delegates to init
+    return get().initPreferences(symbol);
   },
 
   isLoadingKey: (cacheKey) => {
@@ -332,16 +379,33 @@ export const useChartStore = create((set, get) => ({
   },
 
   // Helper to ensure complete preferences object (prevents partial updates when store isn't hydrated)
+  // Helper to ensure complete preferences object
   _getExistingPrefs: (state, upperSymbol) => {
     if (state.preferences[upperSymbol]) {
       return state.preferences[upperSymbol];
     }
-    // Load from localStorage if not in store yet
+    // If not in state, trigger initialization logic essentially by returning what initPreferences would
+    // But since we are inside a set() callback, we can't call get().initPreferences() easily without risk.
+    // We'll just replicate the default structure reading.
+    const savedTimeframe = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
+    const savedChartType = localStorage.getItem(`chart_type_${upperSymbol}`);
+
+    let savedEnabledSMAs = [];
+    const savedEnabledSMAsJson = localStorage.getItem(`chart_enabled_smas_${upperSymbol}`);
+    if (savedEnabledSMAsJson) {
+      try { savedEnabledSMAs = JSON.parse(savedEnabledSMAsJson); } catch { }
+    } else {
+      const isSmaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true';
+      const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20;
+      if (isSmaEnabled && smaPeriod) savedEnabledSMAs = [smaPeriod];
+    }
+
     return {
-      timeframe: localStorage.getItem(`chart_timeframe_${upperSymbol}`) || '1M',
-      chartType: localStorage.getItem(`chart_type_${upperSymbol}`) || 'candlestick',
-      smaEnabled: localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true',
-      smaPeriod: parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20,
+      timeframe: savedTimeframe || '6M',
+      chartType: savedChartType || 'candlestick',
+      enabledSMAs: savedEnabledSMAs,
+      smaEnabled: savedEnabledSMAs.length > 0,
+      smaPeriod: savedEnabledSMAs.length > 0 ? savedEnabledSMAs[0] : 20,
     };
   },
 
@@ -373,32 +437,55 @@ export const useChartStore = create((set, get) => ({
     });
   },
 
-  setSmaEnabled: (symbol, enabled) => {
+  setEnabledSMAs: (symbol, enabledSMAs) => {
     const upperSymbol = symbol.toUpperCase();
-    localStorage.setItem(`chart_sma_enabled_${upperSymbol}`, enabled.toString());
+    localStorage.setItem(`chart_enabled_smas_${upperSymbol}`, JSON.stringify(enabledSMAs));
+
+    // Also update legacy fields for backward compatibility
+    const hasAnySMA = enabledSMAs.length > 0;
+    localStorage.setItem(`chart_sma_enabled_${upperSymbol}`, hasAnySMA.toString());
+    if (hasAnySMA) {
+      localStorage.setItem(`chart_sma_period_${upperSymbol}`, enabledSMAs[0].toString());
+    }
+
     set((state) => {
       const existing = get()._getExistingPrefs(state, upperSymbol);
       return {
         preferences: {
           ...state.preferences,
-          [upperSymbol]: { ...existing, smaEnabled: enabled },
+          [upperSymbol]: {
+            ...existing,
+            enabledSMAs,
+            smaEnabled: hasAnySMA,
+            smaPeriod: hasAnySMA ? enabledSMAs[0] : existing.smaPeriod
+          },
         },
       };
     });
   },
 
-  setSmaPeriod: (symbol, period) => {
+  // Legacy support - maps to setEnabledSMAs
+  setSmaEnabled: (symbol, enabled) => {
+    const { preferences } = get();
     const upperSymbol = symbol.toUpperCase();
-    localStorage.setItem(`chart_sma_period_${upperSymbol}`, period.toString());
-    set((state) => {
-      const existing = get()._getExistingPrefs(state, upperSymbol);
-      return {
-        preferences: {
-          ...state.preferences,
-          [upperSymbol]: { ...existing, smaPeriod: period },
-        },
-      };
-    });
+    const existing = preferences[upperSymbol] || get().initPreferences(symbol);
+    const currentPeriod = existing.smaPeriod || 20;
+
+    // If enabling, add the current period if not present
+    // If disabling, remove all
+    let newEnabledSMAs = [];
+    if (enabled) {
+      newEnabledSMAs = [currentPeriod];
+    }
+
+    get().setEnabledSMAs(symbol, newEnabledSMAs);
+  },
+
+  // Legacy support - maps to setEnabledSMAs
+  setSmaPeriod: (symbol, period) => {
+    // When setting a period in legacy mode, we assume single SMA mode
+    // So we replace the list with just this period
+    get().setEnabledSMAs(symbol, [period]);
   },
 
   clearCache: (symbol = null) => {
@@ -424,6 +511,33 @@ export const useChartStore = create((set, get) => ({
     } else {
       set({ error: {} });
     }
+  },
+
+  /**
+   * Clear all per-stock chart preferences (Reset to global defaults)
+   */
+  clearAllPreferences: () => {
+    // 1. Clear from localStorage
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('chart_type_') ||
+        key.startsWith('chart_timeframe_') ||
+        key.startsWith('chart_enabled_smas_') ||
+        key.startsWith('chart_sma_enabled_') ||
+        key.startsWith('chart_sma_period_')
+      )) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+
+    // 2. Reset store state
+    set({ preferences: {} });
+
+    return true;
   },
 }));
 

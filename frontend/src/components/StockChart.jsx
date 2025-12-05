@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { createChart } from 'lightweight-charts';
 import { useChartStore } from '../stores/chartStore';
+import useSettingsStore from '../stores/settingsStore';
 import {
   SMA_CONFIGS,
   calculateSMA,
@@ -77,40 +78,39 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const setStoreChartType = useChartStore((state) => state.setChartType);
   const setStoreSmaEnabled = useChartStore((state) => state.setSmaEnabled);
   const setStoreSmaPeriod = useChartStore((state) => state.setSmaPeriod);
-  const fetchCandles = useChartStore((state) => state.fetchCandles);
 
-  // Use lazy initializers to read preferences directly from localStorage
-  // This avoids the anti-pattern of calling store.set() during render
+  const setStoreEnabledSMAs = useChartStore((state) => state.setEnabledSMAs);
+  const fetchCandles = useChartStore((state) => state.fetchCandles);
+  const { preferences: globalPrefs, isLoaded: settingsLoaded, fetchPreferences: fetchGlobalPrefs } = useSettingsStore();
+
+  // Init store
   const upperSymbol = symbol?.toUpperCase();
-  const [chartType, setChartType] = useState(() => {
-    const saved = localStorage.getItem(`chart_type_${upperSymbol}`);
-    return saved || initialChartType;
-  });
-  const [timeframe, setTimeframe] = useState(() => {
-    const saved = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
-    return saved || initialTimeframe;
-  });
-  // Multiple SMAs: array of enabled periods (e.g., [20, 50])
-  const [enabledSMAs, setEnabledSMAs] = useState(() => {
-    // Check for new format first
-    const savedEnabledSMAs = localStorage.getItem(`chart_enabled_smas_${upperSymbol}`);
-    if (savedEnabledSMAs) {
-      try {
-        return JSON.parse(savedEnabledSMAs);
-      } catch { /* ignore parse errors */ }
+  const initPreferences = useChartStore(state => state.initPreferences);
+  const preferences = useChartStore(state => state.preferences[upperSymbol]);
+
+  // Derive state from store with fallbacks
+  const chartType = preferences?.chartType || initialChartType;
+  const timeframe = preferences?.timeframe || initialTimeframe;
+  const enabledSMAs = preferences?.enabledSMAs || [];
+
+  // Alias setters for compatibility with existing UI code
+  const setTimeframe = (val) => setStoreTimeframe(symbol, val);
+  const setChartType = (val) => setStoreChartType(symbol, val);
+  // Support both function updates (prev => ...) and direct values for setEnabledSMAs
+  const setEnabledSMAs = (updater) => {
+    let newVal;
+    if (typeof updater === 'function') {
+      newVal = updater(enabledSMAs);
+    } else {
+      newVal = updater;
     }
-    // Migrate from old single SMA format if present
-    const smaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true';
-    const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20;
-    if (smaEnabled && smaPeriod) {
-      return [smaPeriod];
-    }
-    return [];
-  });
-  const [availablePeriods, setAvailablePeriods] = useState(() => {
-    const savedTimeframe = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
-    return getAvailableSmaPeriods(savedTimeframe || initialTimeframe);
-  });
+    setStoreEnabledSMAs(symbol, newVal);
+  };
+
+  // Available periods state (local is fine as it's derived from timeframe)
+  const [availablePeriods, setAvailablePeriods] = useState(() =>
+    getAvailableSmaPeriods(timeframe)
+  );
 
   // Memoized SMA calculations - only recalculates when chartData or enabledSMAs change
   // This prevents expensive recalculation when only visibility toggles change
@@ -132,59 +132,23 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   // Track the previous symbol to detect navigation between different stocks
   const prevSymbolRef = useRef(upperSymbol);
 
-  // Sync preferences from localStorage ONLY when navigating to a DIFFERENT symbol
-  // This effect should NOT run on initial mount (prevSymbolRef starts with current symbol)
+  // Ensure global settings are loaded (needed for defaults)
   useEffect(() => {
-    const newUpperSymbol = symbol?.toUpperCase();
-
-    // Skip if this is the initial mount (same symbol) - lazy initializers already handled it
-    if (prevSymbolRef.current === newUpperSymbol) {
-      return;
+    if (!settingsLoaded) {
+      fetchGlobalPrefs();
     }
+  }, [settingsLoaded, fetchGlobalPrefs]);
 
-    // Update the ref for next comparison
-    prevSymbolRef.current = newUpperSymbol;
-
-    // Read preferences for the NEW symbol from localStorage
-    const savedTimeframe = localStorage.getItem(`chart_timeframe_${newUpperSymbol}`);
-    const savedChartType = localStorage.getItem(`chart_type_${newUpperSymbol}`);
-    setTimeframe(savedTimeframe || initialTimeframe);
-    setChartType(savedChartType || initialChartType);
-
-    // Handle SMA migration from old single format
-    const savedEnabledSMAs = localStorage.getItem(`chart_enabled_smas_${newUpperSymbol}`);
-    if (savedEnabledSMAs) {
-      try {
-        setEnabledSMAs(JSON.parse(savedEnabledSMAs));
-      } catch { setEnabledSMAs([]); }
-    } else {
-      const smaEnabled = localStorage.getItem(`chart_sma_enabled_${newUpperSymbol}`) === 'true';
-      const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${newUpperSymbol}`)) || 20;
-      if (smaEnabled && smaPeriod) {
-        setEnabledSMAs([smaPeriod]);
-      } else {
-        setEnabledSMAs([]);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol]);
-
-  // N8 fix: Consolidated preference sync effect
-  // Syncs timeframe, chartType, and SMA settings to store in a single effect
+  // Initialize preferences when symbol changes or defaults update
   useEffect(() => {
-    if (!symbol) return;
+    if (upperSymbol) {
+      // Use global defaults (from settingsStore) or props if settings not loaded yet
+      const defaultTimeframe = globalPrefs?.defaultTimeframe || initialTimeframe;
+      const defaultChartType = globalPrefs?.defaultChartType || initialChartType;
 
-    // Sync timeframe and chart type
-    setStoreTimeframe(symbol, timeframe);
-    setStoreChartType(symbol, chartType);
-
-    // For backward compatibility, sync the first enabled SMA to old store fields
-    const hasAnySMA = enabledSMAs.length > 0;
-    setStoreSmaEnabled(symbol, hasAnySMA);
-    if (hasAnySMA) {
-      setStoreSmaPeriod(symbol, enabledSMAs[0]);
+      initPreferences(upperSymbol, defaultTimeframe, defaultChartType);
     }
-  }, [symbol, timeframe, chartType, enabledSMAs, setStoreTimeframe, setStoreChartType, setStoreSmaEnabled, setStoreSmaPeriod]);
+  }, [upperSymbol, globalPrefs?.defaultTimeframe, globalPrefs?.defaultChartType, initialTimeframe, initialChartType, initPreferences]);
 
   // Update available SMA periods when timeframe changes
   useEffect(() => {
@@ -791,11 +755,11 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       macdSeriesRefs.current = { macd: null, signal: null, histogram: null };
       bbSeriesRefs.current = { upper: null, middle: null, lower: null };
     };
-  // N7 fix: Reduced dependency array from 17 to 13 deps
-  // Visibility states (smaVisible, rsiVisible, macdVisible, bbVisible) now handled via:
-  // - Refs for initial values when creating series
-  // - Separate effects for toggling visibility without chart rebuild
-  // - CSS display for RSI/MACD containers
+    // N7 fix: Reduced dependency array from 17 to 13 deps
+    // Visibility states (smaVisible, rsiVisible, macdVisible, bbVisible) now handled via:
+    // - Refs for initial values when creating series
+    // - Separate effects for toggling visibility without chart rebuild
+    // - CSS display for RSI/MACD containers
   }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, smaDataMap, rsiEnabled, rsiPeriod, macdEnabled, bbEnabled, fetchCandles]);
 
   // Reset zoom handler
@@ -899,11 +863,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                   localStorage.setItem(key, type);
                   setChartType(type);
                 }}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  chartType === type
-                    ? 'bg-card text-text-primary shadow-sm'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${chartType === type
+                  ? 'bg-card text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
               >
                 {type.charAt(0).toUpperCase() + type.slice(1)}
               </button>
@@ -919,22 +882,20 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  timeframe === tf
-                    ? 'bg-card text-text-primary shadow-sm'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${timeframe === tf
+                  ? 'bg-card text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
               >
                 {tf}
               </button>
             ))}
             <button
               onClick={() => setShowDatePicker(!showDatePicker)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                timeframe === 'custom'
-                  ? 'bg-card text-text-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${timeframe === 'custom'
+                ? 'bg-card text-text-primary shadow-sm'
+                : 'text-text-secondary hover:text-text-primary'
+                }`}
               title="Custom date range"
             >
               📅
@@ -946,11 +907,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         <div className="flex gap-2">
           <button
             onClick={() => setShowIndicators(!showIndicators)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-              showIndicators || enabledSMAs.length > 0 || rsiEnabled || macdEnabled || bbEnabled
-                ? 'bg-brand text-white hover:bg-brand-hover'
-                : 'bg-line text-text-primary hover:bg-line-light'
-            }`}
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${showIndicators || enabledSMAs.length > 0 || rsiEnabled || macdEnabled || bbEnabled
+              ? 'bg-brand text-white hover:bg-brand-hover'
+              : 'bg-line text-text-primary hover:bg-line-light'
+              }`}
             title="Technical Indicators"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

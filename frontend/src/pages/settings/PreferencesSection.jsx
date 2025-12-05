@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../api/client';
+import useSettingsStore from '../../stores/settingsStore';
 import { useToast } from '../../components/toast/ToastContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
@@ -14,47 +14,49 @@ import {
   Hash,
   Minus,
   Plus,
+  RefreshCcw,
 } from 'lucide-react';
+import { useChartStore } from '../../stores/chartStore';
 
 function PreferencesSection() {
   const toast = useToast();
   const { themeMode, setThemeMode } = useTheme();
 
-  const [preferences, setPreferences] = useState({
-    theme: 'system',
-    defaultChartType: 'candle',
-    defaultTimeframe: '1D',
-    decimalPlaces: 2,
-    notificationsEnabled: true,
-  });
-  const [prefsLoading, setPrefsLoading] = useState(true);
+  const {
+    preferences,
+    isLoading: prefsLoading,
+    fetchPreferences,
+    savePreferences: updatePreferences,
+    setPreference,
+  } = useSettingsStore();
+
+  const clearAllChartPreferences = useChartStore(state => state.clearAllPreferences);
   const [prefsSaving, setPrefsSaving] = useState(false);
+  const [resettingCharts, setResettingCharts] = useState(false);
 
   // Load preferences
   useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const result = await api.get('/settings');
-        setPreferences(result);
-        // Sync theme mode with ThemeContext
-        if (result.theme && ['light', 'dark', 'system'].includes(result.theme)) {
-          setThemeMode(result.theme);
-        }
-      } catch {
-        toast.error('Failed to load preferences');
-      } finally {
-        setPrefsLoading(false);
-      }
-    };
-    loadPreferences();
-  }, [toast, setThemeMode]);
+    fetchPreferences();
+  }, [fetchPreferences]);
 
-  // Save preferences
-  const savePreferences = async () => {
+  // Sync theme mode with ThemeContext when preferences change
+  useEffect(() => {
+    if (preferences.theme && ['light', 'dark', 'system'].includes(preferences.theme)) {
+      setThemeMode(preferences.theme);
+    }
+  }, [preferences.theme, setThemeMode]);
+
+  // Save preferences wrapper
+  const handleSavePreferences = async () => {
     setPrefsSaving(true);
     try {
-      await api.put('/settings', preferences);
-      toast.success('Preferences saved');
+      // settingsStore.savePreferences maps values back to backend format automatically
+      const result = await updatePreferences(preferences);
+      if (result.success) {
+        toast.success('Preferences saved');
+      } else {
+        toast.error(result.error || 'Failed to save preferences');
+      }
     } catch {
       toast.error('Failed to save preferences');
     } finally {
@@ -82,15 +84,13 @@ function PreferencesSection() {
               </div>
             </div>
             <button
-              onClick={() => setPreferences(p => ({ ...p, notificationsEnabled: !p.notificationsEnabled }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                preferences.notificationsEnabled ? 'bg-brand' : 'bg-gray-400'
-              }`}
+              onClick={() => setPreference('notificationsEnabled', !preferences.notificationsEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${preferences.notificationsEnabled ? 'bg-brand' : 'bg-gray-400'
+                }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  preferences.notificationsEnabled ? 'translate-x-6' : 'translate-x-1'
-                }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${preferences.notificationsEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
               />
             </button>
           </div>
@@ -128,14 +128,13 @@ function PreferencesSection() {
                     key={item.value}
                     type="button"
                     onClick={() => {
-                      setPreferences(p => ({ ...p, theme: item.value }));
+                      setPreference('theme', item.value);
                       setThemeMode(item.value);
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border transition-all ${
-                      themeMode === item.value
-                        ? 'bg-brand text-white border-brand'
-                        : 'bg-page-bg text-text-primary border-border hover:border-brand/50'
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border transition-all ${themeMode === item.value
+                      ? 'bg-brand text-white border-brand'
+                      : 'bg-page-bg text-text-primary border-border hover:border-brand/50'
+                      }`}
                   >
                     <item.Icon className="w-4 h-4" />
                     <span className="text-sm font-medium">{item.label}</span>
@@ -155,10 +154,10 @@ function PreferencesSection() {
               </label>
               <select
                 value={preferences.defaultChartType}
-                onChange={(e) => setPreferences(p => ({ ...p, defaultChartType: e.target.value }))}
+                onChange={(e) => setPreference('defaultChartType', e.target.value)}
                 className="w-full px-3 py-2.5 bg-page-bg border border-border rounded-lg text-text-primary focus:ring-2 focus:ring-brand focus:border-transparent"
               >
-                <option value="candle">Candlestick</option>
+                <option value="candlestick">Candlestick</option>
                 <option value="line">Line</option>
                 <option value="area">Area</option>
               </select>
@@ -175,16 +174,16 @@ function PreferencesSection() {
               </label>
               <select
                 value={preferences.defaultTimeframe}
-                onChange={(e) => setPreferences(p => ({ ...p, defaultTimeframe: e.target.value }))}
+                onChange={(e) => setPreference('defaultTimeframe', e.target.value)}
                 className="w-full px-3 py-2.5 bg-page-bg border border-border rounded-lg text-text-primary focus:ring-2 focus:ring-brand focus:border-transparent"
               >
                 <option value="1D">1 Day</option>
-                <option value="1W">1 Week</option>
+                <option value="5D">5 Days</option>
                 <option value="1M">1 Month</option>
-                <option value="3M">3 Months</option>
+                <option value="6M">6 Months</option>
                 <option value="1Y">1 Year</option>
                 <option value="5Y">5 Years</option>
-                <option value="MAX">All Time</option>
+                <option value="Max">Max</option>
               </select>
               <p className="text-xs text-text-muted mt-1.5">
                 Time period shown by default on stock charts.
@@ -200,7 +199,7 @@ function PreferencesSection() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setPreferences(p => ({ ...p, decimalPlaces: Math.max(0, p.decimalPlaces - 1) }))}
+                  onClick={() => setPreference('decimalPlaces', Math.max(0, preferences.decimalPlaces - 1))}
                   disabled={preferences.decimalPlaces <= 0}
                   className="w-10 h-10 flex items-center justify-center rounded-lg border border-border bg-page-bg text-text-primary hover:bg-card-hover disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -215,7 +214,7 @@ function PreferencesSection() {
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
                       if (!isNaN(val) && val >= 0 && val <= 8) {
-                        setPreferences(p => ({ ...p, decimalPlaces: val }));
+                        setPreference('decimalPlaces', val);
                       }
                     }}
                     className="w-full px-3 py-2.5 bg-page-bg border border-border rounded-lg text-text-primary text-center focus:ring-2 focus:ring-brand focus:border-transparent"
@@ -223,7 +222,7 @@ function PreferencesSection() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setPreferences(p => ({ ...p, decimalPlaces: Math.min(8, p.decimalPlaces + 1) }))}
+                  onClick={() => setPreference('decimalPlaces', Math.min(8, preferences.decimalPlaces + 1))}
                   disabled={preferences.decimalPlaces >= 8}
                   className="w-10 h-10 flex items-center justify-center rounded-lg border border-border bg-page-bg text-text-primary hover:bg-card-hover disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -234,12 +233,41 @@ function PreferencesSection() {
                 Number of decimal places for price display (0-8). Preview: ${(1234.56789).toFixed(preferences.decimalPlaces)}
               </p>
             </div>
+
+            {/* Reset Chart Overrides */}
+            <div className="pt-4 border-t border-border mt-2">
+              <label className="block text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                <RefreshCcw className="w-4 h-4 text-text-muted" />
+                Reset Per-Stock Chart Settings
+              </label>
+              <p className="text-xs text-text-muted mb-3">
+                Clear all custom chart settings (Chart Type, Timeframe) saved for individual stocks.
+                They will revert to the global defaults set above.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to reset all per-stock chart references? This action cannot be undone.')) {
+                    setResettingCharts(true);
+                    setTimeout(() => {
+                      clearAllChartPreferences();
+                      setResettingCharts(false);
+                      toast.success('All per-stock chart settings have been reset');
+                    }, 500);
+                  }
+                }}
+                disabled={resettingCharts}
+                className="px-4 py-2 bg-page-bg border border-border text-text-primary rounded-lg hover:bg-card-hover disabled:opacity-50 text-sm font-medium transition-colors"
+              >
+                {resettingCharts ? 'Resetting...' : 'Reset Per-Stock Overrides'}
+              </button>
+            </div>
           </div>
         )}
 
         <div className="mt-6 pt-4 border-t border-border">
           <button
-            onClick={savePreferences}
+            onClick={handleSavePreferences}
             disabled={prefsSaving || prefsLoading}
             className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand/90 disabled:opacity-50"
           >

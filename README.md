@@ -18,50 +18,17 @@
 
 ## Why StockTracker?
 
-StockTracker isn't just another API wrapper—it's a **production-ready financial platform** engineered for reliability, security, and data ownership.
+**Institutional-grade analytics meets complete data privacy. Open source, self-hosted, and engineered for the individual investor.**
 
-### 🛡️ Enterprise-Grade Security
-Unlike typical demo apps, StockTracker implements rigorous security standards:
-- **Multi-Factor Authentication (MFA)**: Full TOTP support (Google Authenticator, Authy) with emergency backup codes.
-- **Security Audit Logging**: Comprehensive tracking of all security events, suspicious activities, and brute-force attempts.
-- **Session Management**: Secure, server-side session handling with rotation and expiry.
+StockTracker combines real-time market streaming with professional-grade tax accounting, delivering an enterprise-level experience without the monthly subscription fees or privacy trade-offs.
 
-### 🧠 Advanced Portfolio Intelligence
-Go beyond simple price tracking with professional-grade accounting tools:
-- **Tax Lot Accounting**: FIFO-based cost basis tracking for accurate capital gains calculations.
-- **Dividend Tracking**: Monitor income streams and reinvestments.
-- **Realized Gains Reports**: Generate tax-ready reports for sold positions.
-- **Performance Analytics**: Benchmarking against S&P 500 and sector allocation heatmaps.
+### Key Features
 
-### 🚀 Resilient Data Architecture
-Built to survive the "free tier" limitations of financial APIs:
-- **Smart Key Rotation**: Automatically cycles through multiple API keys to bypass rate limits.
-- **Intelligent Caching**: Reduces API calls by 90% while keeping data fresh.
-- **Multi-Provider Fallback**: Seamlessly switches between Yahoo Finance and Finnhub if one fails.
-- **Offline-First Design**: Graceful degradation when network connectivity is lost.
-
-### 💻 Modern Developer Experience
-A perfect reference architecture for full-stack React applications:
-- **Tech Stack**: React 18, Zustand, TailwindCSS, Node.js, Express, SQLite (WAL mode).
-- **Real-Time Updates**: Server-Sent Events (SSE) for live price streaming.
-- **Local-First**: All data lives in your local SQLite database—you own your financial data.
-
-## Institutional Power. Personal Privacy.
-
-### 🧠 The Sentiment Engine.
-Price tells you what happened. Our **Sentiment Engine** tells you what's coming. By decoding the subtle interplay of volatility, breadth, and institutional positioning, it generates a predictive confidence score that helps you size your positions with conviction. It’s not just data; it’s your edge.
-
-### 🔄 Sector Rotation Analysis.
-Smart money leaves footprints. Our **Enterprise-Grade Sector Heatmap** tracks the silent capital flows that precede major trend shifts. Identify when institutions are rotating from risk-on to safety before the broad market rolls over, giving you the foresight to adapt while others react.
-
-### ⚡ Real-Time Opportunity Scanner.
-The market waits for no one. Our **Unified Screener Pipeline** cuts through the noise to surface high-probability setups the moment they appear. Powered by an intelligent, low-latency core, it delivers the kind of instant visibility usually reserved for institutional terminals.
-
-### 💼 Tax-Ready Portfolio Command.
-Stop wrestling with spreadsheets. StockTracker is a **full-featured accounting engine** that automatically tracks FIFO cost basis, calculates short vs. long-term capital gains, and generates tax-ready reports. Know your exact liability before you sell.
-
-### ✨ Engineered for Flow.
-Immerse yourself in the **Jade Requiem** theme, designed specifically to reduce eye strain during deep work. With offline-first architecture, automatic API key rotation, and smart caching, your dashboard stays live and responsive even when the internet—or the API limits—don't.
+- **🛡️ Enterprise Security**: Full Multi-Factor Authentication (TOTP), audit logging, and secure session management.
+- **🧠 Advanced Intelligence**: Sector rotation heatmaps, sentiment analysis, and performance benchmarking.
+- **💼 Pro-Level Accounting**: Automated FIFO tax lots, realized gains reports, and dividend tracking with capital gains calculations.
+- **🚀 Resilient Streaming**: Real-time quotes via SSE with automatic API key rotation and multi-provider fallback.
+- **💻 Privacy First**: Local-first architecture using SQLite (WAL mode). You own 100% of your financial data.
 
 ## Tech Stack
 
