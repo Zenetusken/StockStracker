@@ -18,10 +18,17 @@ import { useNewsStore } from '../stores/newsStore';
 
 const NEWS_CATEGORIES = [
   { id: 'general', label: 'General' },
+  { id: 'canada', label: '🇨🇦 Canada' },
   { id: 'forex', label: 'Forex' },
   { id: 'crypto', label: 'Crypto' },
   { id: 'merger', label: 'M&A' },
 ];
+
+// Helper to detect Canadian stock symbols (TSX, TSXV, CSE)
+function isCanadianStock(symbol) {
+  if (!symbol) return false;
+  return /\.(TO|V|CN)$/i.test(symbol.toUpperCase());
+}
 
 function NewsFeed({
   symbol,
@@ -222,7 +229,23 @@ function NewsFeed({
 
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Newspaper className="w-10 h-10 text-text-muted mb-2" />
-          <p className="text-text-muted">No news articles available</p>
+          {symbol && isCanadianStock(symbol) ? (
+            <>
+              <p className="text-text-muted mb-2">
+                Company-specific news is not available for Canadian stocks.
+              </p>
+              <a
+                href={`https://finance.yahoo.com/quote/${symbol}/news`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand hover:underline text-sm"
+              >
+                View news on Yahoo Finance
+              </a>
+            </>
+          ) : (
+            <p className="text-text-muted">No news articles available</p>
+          )}
         </div>
       </div>
     );

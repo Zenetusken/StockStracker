@@ -76,6 +76,9 @@ export const useNewsStore = create((set, get) => ({
         if (symbol) {
           // Fetch company-specific news
           data = await api.get(`/news/${symbol.toUpperCase()}`);
+        } else if (category === 'canada') {
+          // Fetch Canadian market news via Yahoo Finance
+          data = await api.get('/news/market/canada');
         } else {
           // Fetch general market news with category filter
           data = await api.get(`/news/market/general?category=${category || 'general'}`);
