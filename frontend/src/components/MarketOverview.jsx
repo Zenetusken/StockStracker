@@ -12,6 +12,7 @@ import {
   List,
 } from 'lucide-react';
 import { useMarketOverviewStore } from '../stores/marketOverviewStore';
+import { getMarketStatus } from '../utils/marketStatus';
 import SectorAnalysis from './SectorAnalysis';
 import SectorLeaderboard from './SectorLeaderboard';
 
@@ -21,8 +22,9 @@ import SectorLeaderboard from './SectorLeaderboard';
  * #117: Sector performance heatmap with daily AND YTD performance
  */
 
-// Refresh interval (90 seconds - aligned with backend screener cache TTL for efficiency)
-const REFRESH_INTERVAL = 90000;
+// Dynamic refresh based on market status:
+// - 60 seconds during trading hours (9:30 AM - 4:00 PM ET)
+// - 90 seconds outside trading hours
 
 function MarketOverview() {
   // Use store for caching - data persists across unmount/remount (M1 fix)
@@ -48,16 +50,56 @@ function MarketOverview() {
     fetchOverviewRef.current = fetchOverview;
   }, [fetchOverview]);
 
-  // Initial fetch and auto-refresh
+  // Initial fetch and dynamic auto-refresh based on market status
   useEffect(() => {
     // Initial fetch using getState() for stable reference
     const { fetchOverview: fetch } = useMarketOverviewStore.getState();
     fetch(); // Uses cache if valid
 
-    // Auto-refresh with ref-based callback to avoid stale closures
-    const interval = setInterval(() => fetchOverviewRef.current(true), REFRESH_INTERVAL);
-    return () => clearInterval(interval);
+    // Dynamic auto-refresh: 60s during trading hours, 90s otherwise
+    let dataInterval = null;
+    let currentIntervalMs = 0;
+
+    const setupRefreshInterval = () => {
+      const { isOpen } = getMarketStatus();
+      const newIntervalMs = isOpen ? 60000 : 90000; // 60s during market hours, 90s otherwise
+
+      // Only recreate interval if duration changed
+      if (newIntervalMs !== currentIntervalMs) {
+        if (dataInterval) {
+          clearInterval(dataInterval);
+        }
+        currentIntervalMs = newIntervalMs;
+        dataInterval = setInterval(() => {
+          fetchOverviewRef.current(true);
+        }, currentIntervalMs);
+        console.log(`[MarketOverview] Auto-refresh set to ${currentIntervalMs / 1000}s (market ${isOpen ? 'open' : 'closed'})`);
+      }
+    };
+
+    // Set initial interval
+    setupRefreshInterval();
+
+    // Check market status every minute to adjust interval when market opens/closes
+    const statusCheckInterval = setInterval(setupRefreshInterval, 60000);
+
+    return () => {
+      if (dataInterval) clearInterval(dataInterval);
+      clearInterval(statusCheckInterval);
+    };
   }, []);
+
+  // Data validation logging - verify API responses match displayed values
+  useEffect(() => {
+    if (sectorData?.sectors?.length > 0) {
+      console.log('[MarketOverview] Sector data received:', sectorData.sectors.slice(0, 3).map(s => ({
+        symbol: s.symbol,
+        price: s.price,
+        daily: s.daily?.changePercent?.toFixed(2) + '%',
+        ytd: s.ytd?.changePercent?.toFixed(2) + '%',
+      })));
+    }
+  }, [sectorData]);
 
   // Format helpers
   const formatPrice = (val) => {

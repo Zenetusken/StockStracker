@@ -18,6 +18,7 @@ import {
   Flame,
 } from 'lucide-react';
 import { useMarketOverviewStore } from '../stores/marketOverviewStore';
+import { getMarketStatus } from '../utils/marketStatus';
 
 /**
  * Enhanced Top Movers Component
@@ -131,10 +132,34 @@ function TopMovers() {
     const { fetchMovers } = useMarketOverviewStore.getState();
     fetchMovers(false);
 
-    // Auto-refresh every 90 seconds (aligned with backend screener cache TTL)
-    const dataInterval = setInterval(() => {
-      fetchMoversRef.current(false);
-    }, 90000);
+    // Dynamic auto-refresh based on market status:
+    // - 30 seconds during trading hours (9:30 AM - 4:00 PM ET)
+    // - 90 seconds outside trading hours
+    let dataInterval = null;
+    let currentIntervalMs = 0;
+
+    const setupRefreshInterval = () => {
+      const { isOpen } = getMarketStatus();
+      const newIntervalMs = isOpen ? 30000 : 90000; // 30s during market hours, 90s otherwise
+
+      // Only recreate interval if duration changed
+      if (newIntervalMs !== currentIntervalMs) {
+        if (dataInterval) {
+          clearInterval(dataInterval);
+        }
+        currentIntervalMs = newIntervalMs;
+        dataInterval = setInterval(() => {
+          fetchMoversRef.current(false);
+        }, currentIntervalMs);
+        console.log(`[TopMovers] Auto-refresh set to ${currentIntervalMs / 1000}s (market ${isOpen ? 'open' : 'closed'})`);
+      }
+    };
+
+    // Set initial interval
+    setupRefreshInterval();
+
+    // Check market status every minute to adjust interval when market opens/closes
+    const statusCheckInterval = setInterval(setupRefreshInterval, 60000);
 
     // N3 fix: Update currentTime every 30 seconds for "time ago" display
     const timeInterval = setInterval(() => {
@@ -142,7 +167,8 @@ function TopMovers() {
     }, 30000);
 
     return () => {
-      clearInterval(dataInterval);
+      if (dataInterval) clearInterval(dataInterval);
+      clearInterval(statusCheckInterval);
       clearInterval(timeInterval);
     };
   }, []);

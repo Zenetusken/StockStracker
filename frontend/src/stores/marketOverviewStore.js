@@ -69,10 +69,13 @@ export const useMarketOverviewStore = create((set, get) => ({
       set({ isLoading: true, error: null });
 
       try {
+        // Pass ?fresh=true to bypass backend cache when force refresh requested
+        const freshParam = force ? '?fresh=true' : '';
+
         // Fetch both endpoints in parallel
         const [overviewResult, sectorResult] = await Promise.all([
-          api.get('/market/overview'),
-          api.get('/market/sectors/performance').catch(() => null),
+          api.get(`/market/overview${freshParam}`),
+          api.get(`/market/sectors/performance${freshParam}`).catch(() => null),
         ]);
 
         set({

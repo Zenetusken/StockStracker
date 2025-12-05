@@ -40,6 +40,8 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const macdSeriesRefs = useRef({ macd: null, signal: null, histogram: null });
   // Bollinger Bands refs (overlay on main chart)
   const bbSeriesRefs = useRef({ upper: null, middle: null, lower: null });
+  // Volume histogram ref
+  const volumeSeriesRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tooltipData, setTooltipData] = useState(null);
@@ -55,11 +57,14 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [macdEnabled, setMacdEnabled] = useState(false);
   // Bollinger Bands state
   const [bbEnabled, setBbEnabled] = useState(false);
+  // Volume state (enabled by default)
+  const [volumeEnabled, setVolumeEnabled] = useState(true);
   // Visibility state (separate from enabled - allows hiding without losing settings)
   const [smaVisible, setSmaVisible] = useState({}); // { period: boolean }
   const [rsiVisible, setRsiVisible] = useState(true);
   const [macdVisible, setMacdVisible] = useState(true);
   const [bbVisible, setBbVisible] = useState(true);
+  const [volumeVisible, setVolumeVisible] = useState(true);
 
   // N7 fix: Visibility refs to avoid chart rebuilds on visibility toggle
   // These refs are read inside the main effect but don't trigger re-runs
@@ -67,6 +72,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const rsiVisibleRef = useRef(rsiVisible);
   const macdVisibleRef = useRef(macdVisible);
   const bbVisibleRef = useRef(bbVisible);
+  const volumeVisibleRef = useRef(volumeVisible);
   // Settings state for indicator configuration
   const [smaSettingsOpen, setSmaSettingsOpen] = useState(null); // period of SMA with settings open
   // Chart data state for memoization (allows SMA calc outside effect)
@@ -76,9 +82,6 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   // Get actions from chartStore (preferences now read directly from localStorage)
   const setStoreTimeframe = useChartStore((state) => state.setTimeframe);
   const setStoreChartType = useChartStore((state) => state.setChartType);
-  const setStoreSmaEnabled = useChartStore((state) => state.setSmaEnabled);
-  const setStoreSmaPeriod = useChartStore((state) => state.setSmaPeriod);
-
   const setStoreEnabledSMAs = useChartStore((state) => state.setEnabledSMAs);
   const fetchCandles = useChartStore((state) => state.fetchCandles);
   const { preferences: globalPrefs, isLoaded: settingsLoaded, fetchPreferences: fetchGlobalPrefs } = useSettingsStore();
@@ -129,9 +132,6 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     return map;
   }, [chartDataState, enabledSMAs]);
 
-  // Track the previous symbol to detect navigation between different stocks
-  const prevSymbolRef = useRef(upperSymbol);
-
   // Ensure global settings are loaded (needed for defaults)
   useEffect(() => {
     if (!settingsLoaded) {
@@ -175,6 +175,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     bbVisibleRef.current = bbVisible;
   }, [bbVisible]);
 
+  useEffect(() => {
+    volumeVisibleRef.current = volumeVisible;
+  }, [volumeVisible]);
+
   // N7 fix: Toggle SMA series visibility without chart rebuild
   useEffect(() => {
     const seriesMap = smaSeriesRefs.current;
@@ -203,6 +207,18 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       // Series might not exist yet
     }
   }, [bbVisible]);
+
+  // Toggle volume series visibility without chart rebuild
+  useEffect(() => {
+    const volumeSeries = volumeSeriesRef.current;
+    if (!volumeSeries) return;
+
+    try {
+      volumeSeries.applyOptions({ visible: volumeVisible });
+    } catch {
+      // Series might not exist yet
+    }
+  }, [volumeVisible]);
 
   // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {
@@ -297,6 +313,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             high: data.h[i],
             low: data.l[i],
             close: data.c[i],
+            volume: data.v?.[i] || 0,
           }))
           .filter(d => d.open != null && d.close != null); // Only filter out null values
 
@@ -381,6 +398,45 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         }
 
         seriesRef.current = seriesInstance;
+
+        // Add volume histogram at bottom 20% of chart
+        volumeSeriesRef.current = null;
+        if (volumeEnabled && chartData.some(d => d.volume > 0)) {
+          const volumeSeries = chartInstance.addHistogramSeries({
+            color: '#26a69a',
+            priceFormat: {
+              type: 'volume',
+            },
+            priceScaleId: 'volume',
+            scaleMargins: {
+              top: 0.8,
+              bottom: 0,
+            },
+          });
+
+          // Configure volume price scale
+          chartInstance.priceScale('volume').applyOptions({
+            scaleMargins: {
+              top: 0.8,
+              bottom: 0,
+            },
+          });
+
+          // Transform volume data with color based on price direction
+          const volumeData = chartData.map((d, i) => {
+            const prevClose = i > 0 ? chartData[i - 1].close : d.open;
+            const isUp = d.close >= prevClose;
+            return {
+              time: d.time,
+              value: d.volume,
+              color: isUp ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)',
+            };
+          });
+
+          volumeSeries.setData(volumeData);
+          volumeSeries.applyOptions({ visible: volumeVisibleRef.current });
+          volumeSeriesRef.current = volumeSeries;
+        }
 
         // Add multiple SMA indicators (visibility handled via separate effect)
         // Use memoized smaDataMap for pre-calculated SMA data (H2 performance fix)
@@ -672,7 +728,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                   smaValues[period] = smaData.value;
                 }
               }
-              setTooltipData({ time: param.time, ...seriesData, smaValues });
+              // Look up volume from chartData
+              const volumePoint = chartData.find(d => d.time === param.time);
+              const volume = volumePoint?.volume || 0;
+              setTooltipData({ time: param.time, ...seriesData, smaValues, volume });
             } else {
               setTooltipData(null);
             }
@@ -754,13 +813,14 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       macdChartRef.current = null;
       macdSeriesRefs.current = { macd: null, signal: null, histogram: null };
       bbSeriesRefs.current = { upper: null, middle: null, lower: null };
+      volumeSeriesRef.current = null;
     };
     // N7 fix: Reduced dependency array from 17 to 13 deps
     // Visibility states (smaVisible, rsiVisible, macdVisible, bbVisible) now handled via:
     // - Refs for initial values when creating series
     // - Separate effects for toggling visibility without chart rebuild
     // - CSS display for RSI/MACD containers
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, smaDataMap, rsiEnabled, rsiPeriod, macdEnabled, bbEnabled, fetchCandles]);
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, smaDataMap, rsiEnabled, rsiPeriod, macdEnabled, bbEnabled, volumeEnabled, fetchCandles]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -1040,6 +1100,10 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           onToggleMACD={() => setMacdEnabled(!macdEnabled)}
           macdVisible={macdVisible}
           onToggleMACDVisibility={() => setMacdVisible(!macdVisible)}
+          volumeEnabled={volumeEnabled}
+          onToggleVolume={() => setVolumeEnabled(!volumeEnabled)}
+          volumeVisible={volumeVisible}
+          onToggleVolumeVisibility={() => setVolumeVisible(!volumeVisible)}
         />
       )}
 
@@ -1074,6 +1138,20 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
                   <span className="text-text-muted">Close:</span>
                   <span className="font-medium text-text-primary">${tooltipData.close.toFixed(2)}</span>
                 </div>
+                {tooltipData.volume !== undefined && tooltipData.volume > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-text-muted">Volume:</span>
+                    <span className="font-medium text-text-primary">
+                      {tooltipData.volume >= 1e9
+                        ? `${(tooltipData.volume / 1e9).toFixed(2)}B`
+                        : tooltipData.volume >= 1e6
+                        ? `${(tooltipData.volume / 1e6).toFixed(2)}M`
+                        : tooltipData.volume >= 1e3
+                        ? `${(tooltipData.volume / 1e3).toFixed(2)}K`
+                        : tooltipData.volume.toLocaleString()}
+                    </span>
+                  </div>
+                )}
               </>
             )}
             {tooltipData.value !== undefined && (

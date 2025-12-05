@@ -127,20 +127,19 @@ export const useChartStore = create((set, get) => ({
 
     // SMA Migration Logic
     let savedEnabledSMAs = [];
-    let hasSavedSMAs = false;
     const savedEnabledSMAsJson = localStorage.getItem(`chart_enabled_smas_${upperSymbol}`);
     if (savedEnabledSMAsJson) {
       try {
         savedEnabledSMAs = JSON.parse(savedEnabledSMAsJson);
-        hasSavedSMAs = true;
-      } catch { /* ignore */ }
+      } catch {
+        // Ignore parse errors
+      }
     } else {
       // Fallback to old format
       const isSmaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true';
       const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20;
       if (isSmaEnabled && smaPeriod) {
         savedEnabledSMAs = [smaPeriod];
-        hasSavedSMAs = true; // effectively saved
       }
     }
 
@@ -393,7 +392,11 @@ export const useChartStore = create((set, get) => ({
     let savedEnabledSMAs = [];
     const savedEnabledSMAsJson = localStorage.getItem(`chart_enabled_smas_${upperSymbol}`);
     if (savedEnabledSMAsJson) {
-      try { savedEnabledSMAs = JSON.parse(savedEnabledSMAsJson); } catch { }
+      try {
+        savedEnabledSMAs = JSON.parse(savedEnabledSMAsJson);
+      } catch {
+        // Ignore parse errors
+      }
     } else {
       const isSmaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true';
       const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20;
