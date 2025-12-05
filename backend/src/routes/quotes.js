@@ -246,4 +246,56 @@ router.get('/:symbol/news', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/quotes/:symbol/analysts
+ * Get analyst ratings and recommendations via Yahoo Finance
+ * Returns: { recommendations, trend, upgrades }
+ */
+router.get('/:symbol/analysts', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    if (!symbol) {
+      return res.status(400).json({ error: 'Symbol is required' });
+    }
+
+    const ratings = await yahooFinanceService.getAnalystRatings(symbol.toUpperCase());
+
+    if (!ratings) {
+      return res.status(404).json({ error: 'Analyst ratings not found' });
+    }
+
+    res.json(ratings);
+  } catch (error) {
+    console.error('Error fetching analyst ratings:', error);
+    res.status(500).json({ error: 'Failed to fetch analyst ratings' });
+  }
+});
+
+/**
+ * GET /api/quotes/:symbol/insiders
+ * Get insider activity and institutional ownership via Yahoo Finance
+ * Returns: { transactions, institutions, breakdown }
+ */
+router.get('/:symbol/insiders', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    if (!symbol) {
+      return res.status(400).json({ error: 'Symbol is required' });
+    }
+
+    const insiders = await yahooFinanceService.getInsiderActivity(symbol.toUpperCase());
+
+    if (!insiders) {
+      return res.status(404).json({ error: 'Insider activity not found' });
+    }
+
+    res.json(insiders);
+  } catch (error) {
+    console.error('Error fetching insider activity:', error);
+    res.status(500).json({ error: 'Failed to fetch insider activity' });
+  }
+});
+
 export default router;

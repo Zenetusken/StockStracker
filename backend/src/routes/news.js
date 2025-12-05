@@ -41,11 +41,12 @@ router.get('/:symbol', async (req, res) => {
       from = sevenDaysAgo.toISOString().split('T')[0];
     }
 
-    // For non-US stocks (Canadian, etc.), Finnhub often fails
-    // Return empty array gracefully instead of 500 error
+    // For non-US stocks (Canadian, etc.), use Yahoo Finance instead of Finnhub
+    // Finnhub has limited support for international stocks
     if (isNonUSSymbol(symbol)) {
-      console.log(`[News] Skipping Finnhub for non-US symbol: ${symbol}`);
-      return res.json([]);
+      console.log(`[News] Using Yahoo for non-US symbol: ${symbol}`);
+      const yahooNews = await yahoo.getCompanyNews(symbol.toUpperCase(), 15);
+      return res.json(yahooNews || []);
     }
 
     const news = await finnhub.getCompanyNews(symbol, from, to);

@@ -123,13 +123,13 @@ router.get('/quotes', requireAuth, async (req, res) => {
       let batchQuotes = {};
       let provider = 'yahoo';
 
-      // PRIMARY: Use Yahoo Finance batch endpoint (1 API call for all symbols)
+      // PRIMARY: Use Yahoo Finance V2 batch endpoint (includes volume data)
       if (!yahooFinanceService.isRateLimited()) {
         try {
-          batchQuotes = await yahooFinanceService.getBatchQuotes(symbolList);
-          console.log(`[SSE] Yahoo batch: ${Object.keys(batchQuotes).length}/${symbolList.length} quotes`);
+          batchQuotes = await yahooFinanceService.getBatchQuotesV2(symbolList);
+          console.log(`[SSE] Yahoo batch (V2): ${Object.keys(batchQuotes).length}/${symbolList.length} quotes`);
         } catch (yahooErr) {
-          console.log(`[SSE] Yahoo batch failed: ${yahooErr.message}, falling back to Finnhub`);
+          console.log(`[SSE] Yahoo batch V2 failed: ${yahooErr.message}, falling back to Finnhub`);
         }
       }
 

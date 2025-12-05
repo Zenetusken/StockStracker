@@ -306,12 +306,23 @@ class FinnhubService {
         }
       }
 
-      // 3. If we have a profile, return it
+      // 3. If we have a profile but no logo, try Clearbit as fallback
+      if (baseProfile && !baseProfile.logo && baseProfile.weburl) {
+        try {
+          const domain = new URL(baseProfile.weburl).hostname.replace(/^www\./, '');
+          baseProfile.logo = `https://logo.clearbit.com/${domain}`;
+          baseProfile._logoSource = 'clearbit';
+        } catch {
+          // Invalid URL, skip logo derivation
+        }
+      }
+
+      // 4. If we have a profile, return it
       if (baseProfile) {
         return baseProfile;
       }
 
-      // 4. Return minimal profile as fallback
+      // 5. Return minimal profile as fallback
       console.log(`⚠ No full profile data available for ${upperSymbol}, returning minimal profile`);
       return {
         name: upperSymbol,
@@ -649,6 +660,7 @@ class FinnhubService {
       low: quoteData.l,
       open: quoteData.o,
       timestamp: quoteData.t,
+      volume: quoteData.v || null,
       lastUpdate: Date.now()
     };
   }

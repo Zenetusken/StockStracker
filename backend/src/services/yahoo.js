@@ -12,6 +12,138 @@ import { getKeyProvider } from './api-keys/index.js';
 const YAHOO_BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
 /**
+ * Yahoo Finance Crumb Manager
+ * Handles authentication for endpoints that require crumb (quoteSummary, etc.)
+ * Yahoo requires a crumb token + cookies for certain API endpoints
+ */
+class YahooCrumbManager {
+  constructor() {
+    this.crumb = null;
+    this.cookies = null;
+    this.crumbExpiry = 0;
+    this.crumbTTL = 60 * 60 * 1000; // 1 hour TTL
+    this.fetchPromise = null; // For deduplication
+  }
+
+  /**
+   * Check if we have a valid crumb
+   */
+  isValid() {
+    return this.crumb && this.cookies && Date.now() < this.crumbExpiry;
+  }
+
+  /**
+   * Fetch a fresh crumb and cookies from Yahoo Finance
+   * Uses consent page to get cookies, then fetches crumb
+   */
+  async fetchCrumb() {
+    // If already fetching, wait for that promise
+    if (this.fetchPromise) {
+      return this.fetchPromise;
+    }
+
+    this.fetchPromise = (async () => {
+      try {
+        console.log('[Yahoo] Fetching fresh crumb...');
+
+        // Step 1: Get cookies from Yahoo Finance
+        // Use fc.yahoo.com which is lightweight and sets the required cookies
+        const cookieResponse = await fetch('https://fc.yahoo.com', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          },
+          redirect: 'manual', // Don't follow redirects, we just want cookies
+        });
+
+        // Extract cookies from Set-Cookie headers
+        const setCookies = cookieResponse.headers.getSetCookie?.() || [];
+        if (setCookies.length === 0) {
+          // Fallback: try raw header
+          const rawCookie = cookieResponse.headers.get('set-cookie');
+          if (rawCookie) {
+            setCookies.push(rawCookie);
+          }
+        }
+
+        // Build cookie string (just the cookie names and values)
+        const cookieParts = setCookies.map(c => c.split(';')[0]).filter(Boolean);
+
+        if (cookieParts.length === 0) {
+          // Try alternative: fetch finance.yahoo.com
+          const altResponse = await fetch('https://finance.yahoo.com/', {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            redirect: 'follow',
+          });
+
+          const altCookies = altResponse.headers.getSetCookie?.() || [];
+          for (const c of altCookies) {
+            const part = c.split(';')[0];
+            if (part) cookieParts.push(part);
+          }
+        }
+
+        this.cookies = cookieParts.join('; ');
+
+        // Step 2: Fetch crumb using the cookies
+        const crumbResponse = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Cookie': this.cookies,
+          },
+        });
+
+        if (!crumbResponse.ok) {
+          console.error(`[Yahoo] Crumb fetch failed: ${crumbResponse.status}`);
+          return false;
+        }
+
+        this.crumb = await crumbResponse.text();
+
+        if (!this.crumb || this.crumb.includes('error') || this.crumb.includes('html')) {
+          console.error('[Yahoo] Invalid crumb received:', this.crumb?.substring(0, 50));
+          this.crumb = null;
+          return false;
+        }
+
+        this.crumbExpiry = Date.now() + this.crumbTTL;
+        console.log(`✓ Yahoo crumb obtained (expires in 1h)`);
+        return true;
+      } catch (error) {
+        console.error('[Yahoo] Crumb fetch error:', error.message);
+        return false;
+      } finally {
+        this.fetchPromise = null;
+      }
+    })();
+
+    return this.fetchPromise;
+  }
+
+  /**
+   * Get valid crumb and cookies, fetching new ones if needed
+   * @returns {Object|null} { crumb, cookies } or null if failed
+   */
+  async getAuth() {
+    if (this.isValid()) {
+      return { crumb: this.crumb, cookies: this.cookies };
+    }
+
+    const success = await this.fetchCrumb();
+    if (success) {
+      return { crumb: this.crumb, cookies: this.cookies };
+    }
+
+    return null;
+  }
+}
+
+// Singleton crumb manager
+const crumbManager = new YahooCrumbManager();
+
+/**
  * Convert Yahoo Finance data to Finnhub-compatible candle format
  */
 function convertToCandles(yahooData) {
@@ -489,7 +621,7 @@ class YahooFinanceService {
   }
 
   /**
-   * Get company profile from Yahoo Finance
+   * Get company profile from Yahoo Finance using authenticated quoteSummary endpoint
    * @param {string} symbol - Stock symbol
    * @returns {Object|null} Company profile data
    */
@@ -506,14 +638,23 @@ class YahooFinanceService {
     try {
       await this.throttle();
 
+      // Get authentication (crumb + cookies) for quoteSummary endpoint
+      const auth = await crumbManager.getAuth();
+
+      if (!auth) {
+        console.warn(`[Yahoo] Failed to get crumb for profile ${symbol}, trying fallback...`);
+        return await this._getProfileFallback(symbol);
+      }
+
       // Use quoteSummary endpoint for profile data with additional modules for financial metrics
       // assetProfile has description, fullTimeEmployees, sector, industry
       const modules = 'assetProfile,summaryProfile,price,summaryDetail,defaultKeyStatistics';
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
 
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Cookie': auth.cookies,
         },
         timeout: 10000,
       });
@@ -533,20 +674,45 @@ class YahooFinanceService {
       }
 
       if (!response.ok) {
-        return null;
+        console.warn(`[Yahoo] Profile request failed (${response.status}) for ${symbol}, trying fallback...`);
+        return await this._getProfileFallback(symbol);
       }
 
       const data = await response.json();
+
+      // Check for crumb errors - invalidate and retry with fallback
+      if (data.quoteSummary?.error?.code === 'Unauthorized') {
+        console.warn(`[Yahoo] Invalid crumb for ${symbol}, clearing cache and using fallback...`);
+        crumbManager.crumb = null;
+        crumbManager.crumbExpiry = 0;
+        return await this._getProfileFallback(symbol);
+      }
+
       const result = data.quoteSummary?.result?.[0];
 
       if (!result) {
-        return null;
+        return await this._getProfileFallback(symbol);
       }
 
       const assetProfile = result.assetProfile || {};
       const price = result.price || {};
       const summaryDetail = result.summaryDetail || {};
       const keyStats = result.defaultKeyStatistics || {};
+
+      // Derive logo from company website using Clearbit
+      let logo = null;
+      let logoSource = null;
+      if (assetProfile.website) {
+        try {
+          const domain = new URL(assetProfile.website).hostname.replace(/^www\./, '');
+          logo = `https://logo.clearbit.com/${domain}`;
+          logoSource = 'clearbit';
+        } catch {
+          // Invalid URL, skip logo derivation
+        }
+      }
+
+      console.log(`✓ Yahoo profile (authenticated) for ${symbol}`);
 
       return {
         name: price.longName || price.shortName || symbol,
@@ -558,7 +724,8 @@ class YahooFinanceService {
         finnhubIndustry: assetProfile.industry || null,
         weburl: assetProfile.website,
         marketCapitalization: price.marketCap?.raw ? price.marketCap.raw / 1e6 : null, // Convert to millions like Finnhub
-        logo: null, // Yahoo doesn't provide logo URLs easily
+        logo, // Derived from company website via Clearbit
+        _logoSource: logoSource,
         // Financial metrics (#92)
         peRatio: summaryDetail.trailingPE?.raw || keyStats.trailingPE?.raw || null,
         forwardPE: summaryDetail.forwardPE?.raw || keyStats.forwardPE?.raw || null,
@@ -574,7 +741,61 @@ class YahooFinanceService {
         // Note: IPO date not available from Yahoo Finance profile
       };
     } catch (error) {
+      if (error.isRateLimited) throw error;
       console.error(`[Yahoo] Profile error for ${symbol}:`, error.message);
+      return await this._getProfileFallback(symbol);
+    }
+  }
+
+  /**
+   * Fallback profile using chart API data (doesn't require authentication)
+   * Provides basic profile data when quoteSummary fails
+   * @param {string} symbol - Stock symbol
+   * @returns {Object|null} Basic profile data
+   */
+  async _getProfileFallback(symbol) {
+    try {
+      console.log(`[Yahoo] Using chart API fallback for ${symbol} profile...`);
+
+      // Use chart API which doesn't require authentication
+      const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol.toUpperCase())}?range=1mo&interval=1d`;
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        timeout: 10000,
+      });
+
+      this.recordApiCall();
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      const meta = data?.chart?.result?.[0]?.meta;
+
+      if (!meta) {
+        return null;
+      }
+
+      console.log(`✓ Yahoo profile fallback for ${symbol} (chart API)`);
+
+      return {
+        name: meta.shortName || meta.longName || symbol,
+        ticker: symbol.toUpperCase(),
+        exchange: meta.exchangeName || meta.fullExchangeName,
+        currency: meta.currency,
+        // From chart meta
+        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || null,
+        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || null,
+        // Mark as minimal so frontend can show indicator
+        _minimal: true,
+        _source: 'chart-fallback',
+      };
+    } catch (error) {
+      console.error(`[Yahoo] Profile fallback error for ${symbol}:`, error.message);
       return null;
     }
   }
@@ -1023,11 +1244,16 @@ class YahooFinanceService {
                 }
 
                 const data = await response.json();
-                const meta = data?.chart?.result?.[0]?.meta;
+                const result = data?.chart?.result?.[0];
+                const meta = result?.meta;
+                const indicators = result?.indicators?.quote?.[0];
 
                 if (!meta || meta.regularMarketPrice == null) {
                   return null;
                 }
+
+                // Open price is in indicators.quote, not in meta
+                const openPrice = indicators?.open?.[0] ?? meta.regularMarketOpen ?? null;
 
                 return {
                   symbol: symbol.toUpperCase(),
@@ -1036,10 +1262,13 @@ class YahooFinanceService {
                     pc: meta.chartPreviousClose || meta.previousClose,
                     h: meta.regularMarketDayHigh,
                     l: meta.regularMarketDayLow,
-                    o: meta.regularMarketOpen,
+                    o: openPrice,
                     v: meta.regularMarketVolume || 0, // REAL VOLUME from chart API!
                     t: meta.regularMarketTime || Math.floor(Date.now() / 1000),
                     name: meta.shortName || meta.longName || symbol,
+                    // Additional data from chart meta for profile fallback
+                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
                   },
                 };
               } catch (error) {
@@ -1083,14 +1312,23 @@ class YahooFinanceService {
     try {
       await this.throttle();
 
-      // Use quoteSummary with topHoldings module
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(etfSymbol)}?modules=topHoldings`;
+      // Get authentication (crumb + cookies) for quoteSummary endpoint
+      const auth = await crumbManager.getAuth();
+
+      if (!auth) {
+        console.warn(`[Yahoo] Failed to get crumb for ETF holdings ${etfSymbol}`);
+        return [];
+      }
+
+      // Use quoteSummary with topHoldings module (requires authentication)
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(etfSymbol)}?modules=topHoldings&crumb=${encodeURIComponent(auth.crumb)}`;
 
       console.log(`[Yahoo] Fetching ETF holdings for ${etfSymbol}...`);
 
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Cookie': auth.cookies,
         },
         timeout: 10000,
       });
@@ -1112,6 +1350,15 @@ class YahooFinanceService {
       }
 
       const data = await response.json();
+
+      // Check for crumb errors
+      if (data.quoteSummary?.error?.code === 'Unauthorized') {
+        console.warn(`[Yahoo] Invalid crumb for ETF holdings ${etfSymbol}`);
+        crumbManager.crumb = null;
+        crumbManager.crumbExpiry = 0;
+        return [];
+      }
+
       const topHoldings = data?.quoteSummary?.result?.[0]?.topHoldings;
 
       if (!topHoldings || !topHoldings.holdings) {
@@ -1230,13 +1477,18 @@ class YahooFinanceService {
    * Get trending tickers with full quote data (cached)
    * Combines getTrendingTickers() + getBatchQuotesV2() with 15-min caching
    * Returns ready-to-use mover data with volume and % change
+   * @param {boolean} forceRefresh - Bypass cache when true (for manual refresh)
    * @returns {Array} Array of { symbol, name, price, change, changePercent, volume } objects
    */
-  async getTrendingTickersWithQuotes() {
-    // Check cache first
-    if (this.trendingCache && Date.now() - this.trendingCacheTime < this.trendingCacheTTL) {
+  async getTrendingTickersWithQuotes(forceRefresh = false) {
+    // Check cache first (skip if forceRefresh requested)
+    if (!forceRefresh && this.trendingCache && Date.now() - this.trendingCacheTime < this.trendingCacheTTL) {
       console.log('[Yahoo] Trending cache hit');
       return this.trendingCache;
+    }
+
+    if (forceRefresh) {
+      console.log('[Yahoo] Trending force refresh');
     }
 
     // Use deduplication for concurrent requests
@@ -1284,6 +1536,306 @@ class YahooFinanceService {
         return [];
       }
     });
+  }
+
+  /**
+   * Get company-specific news using Yahoo Finance search endpoint
+   * Works for both US and Canadian stocks (unlike Finnhub)
+   * @param {string} symbol - Stock symbol (e.g., 'AAPL', 'SHOP.TO')
+   * @param {number} count - Number of news articles to return (default 10)
+   * @returns {Array} Array of news articles in Finnhub-compatible format
+   */
+  async getCompanyNews(symbol, count = 10) {
+    // Proactive rate limit check
+    if (this.isRateLimited()) {
+      console.log(`[Yahoo] Rate limited, skipping company news for ${symbol}`);
+      return [];
+    }
+
+    try {
+      await this.throttle();
+
+      // Get company name from profile for better search results
+      // Yahoo search works on keywords, not ticker symbols (especially for .TO/.V/.CN)
+      let searchTerm = symbol;
+      try {
+        const profile = await this.getProfile(symbol);
+        if (profile?.shortName) {
+          searchTerm = profile.shortName;
+        } else if (profile?.longName) {
+          searchTerm = profile.longName;
+        } else {
+          // Fallback: strip exchange suffix for cleaner search
+          searchTerm = symbol.replace(/\.(TO|V|CN|L|PA|DE|AX|HK|SS|SZ)$/i, '');
+        }
+      } catch {
+        // Profile fetch failed, use symbol without exchange suffix
+        searchTerm = symbol.replace(/\.(TO|V|CN|L|PA|DE|AX|HK|SS|SZ)$/i, '');
+      }
+
+      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchTerm)}&quotesCount=0&newsCount=${count}`;
+
+      console.log(`[Yahoo] Fetching company news for ${symbol} (searching: "${searchTerm}")...`);
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        timeout: 10000,
+      });
+
+      // Track the API call
+      this.recordApiCall();
+
+      if (response.status === 429) {
+        console.error(`[Yahoo] Company news rate limited for ${symbol}`);
+        const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
+        this.recordRateLimit(retryAfter);
+        return [];
+      }
+
+      if (!response.ok) {
+        console.error(`[Yahoo] Company news HTTP error: ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      const news = data.news || [];
+
+      if (news.length === 0) {
+        console.warn(`[Yahoo] No news found for ${symbol}`);
+        return [];
+      }
+
+      // Transform to Finnhub-compatible format
+      const articles = news.map(item => ({
+        id: item.uuid,
+        headline: item.title,
+        summary: null, // Not available from Yahoo search
+        source: item.publisher,
+        url: item.link,
+        image: item.thumbnail?.resolutions?.[0]?.url || null,
+        datetime: item.providerPublishTime,
+        related: (item.relatedTickers || []).join(','),
+        category: 'company',
+      }));
+
+      console.log(`✓ Yahoo company news: ${articles.length} articles for ${symbol}`);
+      return articles;
+    } catch (error) {
+      console.error(`[Yahoo] Company news error for ${symbol}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get analyst ratings and recommendations using authenticated quoteSummary
+   * @param {string} symbol - Stock symbol
+   * @returns {Object} { recommendations: {...}, upgrades: [...] }
+   */
+  async getAnalystRatings(symbol) {
+    // Proactive rate limit check
+    if (this.isRateLimited()) {
+      console.log(`[Yahoo] Rate limited, skipping analyst ratings for ${symbol}`);
+      return null;
+    }
+
+    try {
+      await this.throttle();
+
+      // Get authentication for quoteSummary endpoint
+      const auth = await crumbManager.getAuth();
+
+      if (!auth) {
+        console.warn(`[Yahoo] Failed to get crumb for analyst ratings ${symbol}`);
+        return null;
+      }
+
+      const modules = 'recommendationTrend,upgradeDowngradeHistory';
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
+
+      console.log(`[Yahoo] Fetching analyst ratings for ${symbol}...`);
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Cookie': auth.cookies,
+        },
+        timeout: 10000,
+      });
+
+      this.recordApiCall();
+
+      if (response.status === 429) {
+        console.error(`[Yahoo] Analyst ratings rate limited for ${symbol}`);
+        const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
+        this.recordRateLimit(retryAfter);
+        return null;
+      }
+
+      if (!response.ok) {
+        console.error(`[Yahoo] Analyst ratings HTTP error: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+
+      // Check for crumb errors
+      if (data.quoteSummary?.error?.code === 'Unauthorized') {
+        console.warn(`[Yahoo] Invalid crumb for analyst ratings ${symbol}`);
+        crumbManager.crumb = null;
+        crumbManager.crumbExpiry = 0;
+        return null;
+      }
+
+      const result = data.quoteSummary?.result?.[0];
+      if (!result) {
+        return null;
+      }
+
+      const recommendationTrend = result.recommendationTrend?.trend || [];
+      const upgradeDowngradeHistory = result.upgradeDowngradeHistory?.history || [];
+
+      // Get current period recommendations (period: "0m")
+      const currentRecommendations = recommendationTrend.find(r => r.period === '0m') || {};
+
+      console.log(`✓ Yahoo analyst ratings for ${symbol}: ${upgradeDowngradeHistory.length} upgrades/downgrades`);
+
+      return {
+        recommendations: {
+          strongBuy: currentRecommendations.strongBuy || 0,
+          buy: currentRecommendations.buy || 0,
+          hold: currentRecommendations.hold || 0,
+          sell: currentRecommendations.sell || 0,
+          strongSell: currentRecommendations.strongSell || 0,
+          total: (currentRecommendations.strongBuy || 0) +
+                 (currentRecommendations.buy || 0) +
+                 (currentRecommendations.hold || 0) +
+                 (currentRecommendations.sell || 0) +
+                 (currentRecommendations.strongSell || 0),
+        },
+        trend: recommendationTrend.map(t => ({
+          period: t.period,
+          strongBuy: t.strongBuy || 0,
+          buy: t.buy || 0,
+          hold: t.hold || 0,
+          sell: t.sell || 0,
+          strongSell: t.strongSell || 0,
+        })),
+        upgrades: upgradeDowngradeHistory.slice(0, 20).map(u => ({
+          firm: u.firm,
+          toGrade: u.toGrade,
+          fromGrade: u.fromGrade,
+          action: u.action, // 'upgrade', 'downgrade', 'main', 'init', 'reiterated'
+          date: u.epochGradeDate,
+        })),
+      };
+    } catch (error) {
+      console.error(`[Yahoo] Analyst ratings error for ${symbol}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get insider activity and institutional ownership using authenticated quoteSummary
+   * @param {string} symbol - Stock symbol
+   * @returns {Object} { transactions: [...], institutions: [...], breakdown: {...} }
+   */
+  async getInsiderActivity(symbol) {
+    // Proactive rate limit check
+    if (this.isRateLimited()) {
+      console.log(`[Yahoo] Rate limited, skipping insider activity for ${symbol}`);
+      return null;
+    }
+
+    try {
+      await this.throttle();
+
+      // Get authentication for quoteSummary endpoint
+      const auth = await crumbManager.getAuth();
+
+      if (!auth) {
+        console.warn(`[Yahoo] Failed to get crumb for insider activity ${symbol}`);
+        return null;
+      }
+
+      const modules = 'insiderTransactions,institutionOwnership,majorHoldersBreakdown';
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
+
+      console.log(`[Yahoo] Fetching insider activity for ${symbol}...`);
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Cookie': auth.cookies,
+        },
+        timeout: 10000,
+      });
+
+      this.recordApiCall();
+
+      if (response.status === 429) {
+        console.error(`[Yahoo] Insider activity rate limited for ${symbol}`);
+        const retryAfter = parseInt(response.headers.get('Retry-After')) || 60;
+        this.recordRateLimit(retryAfter);
+        return null;
+      }
+
+      if (!response.ok) {
+        console.error(`[Yahoo] Insider activity HTTP error: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+
+      // Check for crumb errors
+      if (data.quoteSummary?.error?.code === 'Unauthorized') {
+        console.warn(`[Yahoo] Invalid crumb for insider activity ${symbol}`);
+        crumbManager.crumb = null;
+        crumbManager.crumbExpiry = 0;
+        return null;
+      }
+
+      const result = data.quoteSummary?.result?.[0];
+      if (!result) {
+        return null;
+      }
+
+      const insiderTransactions = result.insiderTransactions?.transactions || [];
+      const institutionOwnership = result.institutionOwnership?.ownershipList || [];
+      const majorHoldersBreakdown = result.majorHoldersBreakdown || {};
+
+      console.log(`✓ Yahoo insider activity for ${symbol}: ${insiderTransactions.length} transactions, ${institutionOwnership.length} institutions`);
+
+      return {
+        transactions: insiderTransactions.slice(0, 20).map(t => ({
+          name: t.filerName,
+          relation: t.filerRelation,
+          transactionType: t.transactionText,
+          shares: t.shares?.raw || 0,
+          value: t.value?.raw || 0,
+          date: t.startDate?.raw,
+          ownership: t.ownership,
+        })),
+        institutions: institutionOwnership.slice(0, 10).map(i => ({
+          name: i.organization,
+          shares: i.position?.raw || 0,
+          value: i.value?.raw || 0,
+          pctHeld: i.pctHeld?.raw || 0,
+          change: i.pctChange?.raw || 0,
+          reportDate: i.reportDate?.raw,
+        })),
+        breakdown: {
+          insidersPercentHeld: majorHoldersBreakdown.insidersPercentHeld?.raw || 0,
+          institutionsPercentHeld: majorHoldersBreakdown.institutionsPercentHeld?.raw || 0,
+          institutionsFloatPercentHeld: majorHoldersBreakdown.institutionsFloatPercentHeld?.raw || 0,
+          institutionsCount: majorHoldersBreakdown.institutionsCount?.raw || 0,
+        },
+      };
+    } catch (error) {
+      console.error(`[Yahoo] Insider activity error for ${symbol}:`, error.message);
+      return null;
+    }
   }
 }
 
