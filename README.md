@@ -46,32 +46,22 @@ A perfect reference architecture for full-stack React applications:
 - **Real-Time Updates**: Server-Sent Events (SSE) for live price streaming.
 - **Local-First**: All data lives in your local SQLite database—you own your financial data.
 
-## Features
+## Institutional Power. Personal Privacy.
 
-### Core Trading Tools
-- **Real-time Quotes** - Live price updates via Server-Sent Events (SSE)
-- **Interactive Charts** - Candlestick/line/area charts with technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
-- **Watchlist Management** - Custom icons, colors, drag-and-drop ordering, CSV export
-- **Search Preview** - Live quote preview on hover with keyboard navigation
+### 🧠 The Sentiment Engine.
+Price tells you what happened. Our **Sentiment Engine** tells you what's coming. By decoding the subtle interplay of volatility, breadth, and institutional positioning, it generates a predictive confidence score that helps you size your positions with conviction. It’s not just data; it’s your edge.
 
-### Portfolio Management
-- **Full Transaction Tracking** - Buy, sell, dividend, and stock split support
-- **Tax Lot Accounting** - FIFO-based cost basis with short-term/long-term capital gains
-- **Realized Gains Report** - Track and export your tax-relevant transactions
-- **Performance Analytics** - Portfolio value charts, allocation pie charts, benchmark comparison vs S&P 500
-- **Top/Bottom Performers** - Quickly identify your best and worst holdings
+### 🔄 Sector Rotation Analysis.
+Smart money leaves footprints. Our **Enterprise-Grade Sector Heatmap** tracks the silent capital flows that precede major trend shifts. Identify when institutions are rotating from risk-on to safety before the broad market rolls over, giving you the foresight to adapt while others react.
 
-### Market Intelligence
-- **Market Overview Dashboard** - Major indices, top gainers/losers, most active stocks
-- **Sector Heatmap** - Visual sector performance at a glance
-- **Economic Calendar** - Upcoming market events with related stock links
-- **Stock Screener** - Filter stocks by market cap, P/E ratio, sector, and more
+### ⚡ Real-Time Opportunity Scanner.
+The market waits for no one. Our **Unified Screener Pipeline** cuts through the noise to surface high-probability setups the moment they appear. Powered by an intelligent, low-latency core, it delivers the kind of instant visibility usually reserved for institutional terminals.
 
-### User Experience
-- **Beautiful Themes** - Multiple professionally designed themes including Jade Requiem
-- **Offline Detection** - Graceful handling when network is unavailable
-- **Accessibility** - Skip-to-main, keyboard navigation, ARIA labels
-- **API Key Management** - User-managed API keys with real-time rate limit tracking
+### 💼 Tax-Ready Portfolio Command.
+Stop wrestling with spreadsheets. StockTracker is a **full-featured accounting engine** that automatically tracks FIFO cost basis, calculates short vs. long-term capital gains, and generates tax-ready reports. Know your exact liability before you sell.
+
+### ✨ Engineered for Flow.
+Immerse yourself in the **Jade Requiem** theme, designed specifically to reduce eye strain during deep work. With offline-first architecture, automatic API key rotation, and smart caching, your dashboard stays live and responsive even when the internet—or the API limits—don't.
 
 ## Tech Stack
 
