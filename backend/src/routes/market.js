@@ -67,15 +67,21 @@ const SCREENER_CACHE_TTL = 300000; // 5 minutes
  * Also caches smaller slices (25 → 10) for efficiency
  * @param {string} type - Screener type (day_gainers, day_losers, etc.)
  * @param {number} count - Number of results to fetch
+ * @param {boolean} forceRefresh - Bypass cache when true (for manual refresh)
  * @returns {Array} Screener results
  */
-async function getCachedScreener(type, count) {
+async function getCachedScreener(type, count, forceRefresh = false) {
   const cacheKey = `${type}:${count}`;
   const cached = screenerCache.get(cacheKey);
 
-  if (cached && Date.now() - cached.timestamp < SCREENER_CACHE_TTL) {
+  // Skip cache if forceRefresh requested
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < SCREENER_CACHE_TTL) {
     console.log(`[Market] Screener cache hit: ${cacheKey}`);
     return cached.data;
+  }
+
+  if (forceRefresh) {
+    console.log(`[Market] Screener force refresh: ${cacheKey}`);
   }
 
   // Fetch fresh data
@@ -156,12 +162,17 @@ let pendingOverviewRequest = null;
  * Fetch index quotes individually (Yahoo batch/spark doesn't support ^symbols)
  * Uses Yahoo getQuote which supports index symbols like ^GSPC, ^DJI, ^VIX
  * @param {Array} indexConfigs - Array of {symbol, name, displaySymbol, isIndex}
+ * @param {boolean} forceRefresh - Bypass cache when true (for manual refresh)
  * @returns {Object} Map of symbol -> enriched quote data
  */
-async function getIndexQuotes(indexConfigs) {
-  // Check cache first
-  if (batchIndicesCache && Date.now() - batchIndicesCacheTime < CACHE_TTL) {
+async function getIndexQuotes(indexConfigs, forceRefresh = false) {
+  // Check cache first (skip if forceRefresh)
+  if (!forceRefresh && batchIndicesCache && Date.now() - batchIndicesCacheTime < CACHE_TTL) {
     return batchIndicesCache;
+  }
+
+  if (forceRefresh) {
+    console.log('[Market] Index quotes force refresh');
   }
 
   const enrichedQuotes = {};
@@ -203,12 +214,17 @@ async function getIndexQuotes(indexConfigs) {
  * Batch fetch quotes for sectors (ETFs only - not index symbols)
  * Uses Yahoo batch endpoint (1 API call for all symbols)
  * @param {string[]} symbols - Array of stock symbols
+ * @param {boolean} forceRefresh - Bypass cache when true (for manual refresh)
  * @returns {Object} Map of symbol -> enriched quote data
  */
-async function getSectorQuotes(symbols) {
-  // Check cache first
-  if (batchSectorsCache && Date.now() - batchSectorsCacheTime < CACHE_TTL) {
+async function getSectorQuotes(symbols, forceRefresh = false) {
+  // Check cache first (skip if forceRefresh)
+  if (!forceRefresh && batchSectorsCache && Date.now() - batchSectorsCacheTime < CACHE_TTL) {
     return batchSectorsCache;
+  }
+
+  if (forceRefresh) {
+    console.log('[Market] Sector quotes force refresh');
   }
 
   let batchQuotes = {};
@@ -312,16 +328,46 @@ async function fetchYTDData() {
         }
       }
 
-      const ytdOpenPrice = opens[firstYTDIndex];
+      // Detect stock splits: look for large single-day drops (>40%) in the data
+      // Yahoo Finance doesn't immediately back-adjust historical data after splits
+      let splitRatio = 1;
+      for (let i = firstYTDIndex + 1; i < closes.length; i++) {
+        const prevClose = closes[i - 1];
+        const currClose = closes[i];
+        if (prevClose && currClose && prevClose > 0) {
+          const dayChange = (currClose - prevClose) / prevClose;
+          // Detect ~50% drop (2:1 split) or ~67% drop (3:1 split)
+          if (dayChange < -0.40 && dayChange > -0.75) {
+            // Calculate split ratio: e.g., -50% = ratio of 2
+            const detectedRatio = Math.round(prevClose / currClose);
+            if (detectedRatio >= 2) {
+              splitRatio *= detectedRatio;
+              console.log(`[Market] Detected ${detectedRatio}:1 split for ${sector.symbol} (${prevClose.toFixed(2)} -> ${currClose.toFixed(2)})`);
+            }
+          }
+        }
+      }
+
+      let ytdOpenPrice = opens[firstYTDIndex];
       const currentPrice = closes[closes.length - 1];
+
+      // Apply split adjustment to historical opening price
+      if (splitRatio > 1) {
+        const adjustedOpen = ytdOpenPrice / splitRatio;
+        console.log(`[Market] Adjusting ${sector.symbol} YTD open: $${ytdOpenPrice.toFixed(2)} / ${splitRatio} = $${adjustedOpen.toFixed(2)}`);
+        ytdOpenPrice = adjustedOpen;
+      }
 
       if (ytdOpenPrice && currentPrice) {
         const ytdChangePercent = ((currentPrice - ytdOpenPrice) / ytdOpenPrice) * 100;
+        // Data validation logging - verify YTD calculation
+        console.log(`[Market] YTD ${sector.symbol}: open=$${ytdOpenPrice.toFixed(2)}, current=$${currentPrice.toFixed(2)}, change=${ytdChangePercent.toFixed(2)}%${splitRatio > 1 ? ' (split-adjusted)' : ''}`);
         ytdData[sector.symbol] = {
           ytdChangePercent: Math.round(ytdChangePercent * 100) / 100,
           ytdChange: Math.round((currentPrice - ytdOpenPrice) * 100) / 100,
           ytdOpenPrice: Math.round(ytdOpenPrice * 100) / 100,
           currentPrice: Math.round(currentPrice * 100) / 100,
+          splitAdjusted: splitRatio > 1,
         };
       }
     } catch (error) {
@@ -473,11 +519,13 @@ router.get('/sectors', async (req, res) => {
  */
 router.get('/sectors/performance', async (req, res) => {
   try {
-    console.log('[Market] Fetching sector performance with YTD data...');
+    const forceRefresh = req.query.fresh === 'true';
+    console.log(`[Market] Fetching sector performance with YTD data... (force=${forceRefresh})`);
 
     // Fetch both daily quotes and YTD data in parallel
+    // Pass forceRefresh to bypass cache when user clicks refresh
     const [sectorQuotes, ytdData] = await Promise.all([
-      getSectorQuotes(SECTOR_ETFS.map(s => s.symbol)),
+      getSectorQuotes(SECTOR_ETFS.map(s => s.symbol), forceRefresh),
       fetchYTDData(),
     ]);
 
@@ -561,8 +609,8 @@ router.get('/sectors/performance', async (req, res) => {
  * Sector classification for rotation analysis
  * Cyclical sectors tend to outperform in expansions, defensive in contractions
  */
-const CYCLICAL_SECTORS = ['XLK', 'XLY', 'XLF', 'XLI', 'XLB', 'XLE']; // Tech, Consumer Disc, Financials, Industrials, Materials, Energy
-const DEFENSIVE_SECTORS = ['XLV', 'XLP', 'XLU', 'XLRE', 'XLC']; // Healthcare, Consumer Staples, Utilities, Real Estate, Communication
+const CYCLICAL_SECTORS = ['XLK', 'XLY', 'XLF', 'XLI', 'XLB', 'XLE', 'XLC']; // Tech, Consumer Disc, Financials, Industrials, Materials, Energy, Communication
+const DEFENSIVE_SECTORS = ['XLV', 'XLP', 'XLU', 'XLRE']; // Healthcare, Consumer Staples, Utilities, Real Estate
 
 /**
  * Calculate production-ready market sentiment using multiple factors:
@@ -941,7 +989,8 @@ function generateSectorAnalysis(sectors, breadth) {
   );
 
   if (divergentSectors.length > 0) {
-    const examples = divergentSectors.slice(0, 2).map(s => {
+    // Show all divergent sectors - the filter (>=5 rank difference) already limits scope
+    const examples = divergentSectors.map(s => {
       const direction = s.rank.daily < s.rank.ytd ? 'surging' : 'fading';
       return `${s.name} (${direction} today)`;
     });
@@ -1113,22 +1162,26 @@ function generateSectorAnalysis(sectors, breadth) {
  */
 router.get('/overview', async (req, res) => {
   try {
+    const forceRefresh = req.query.fresh === 'true';
+
     // If already fetching, wait for pending result (prevents duplicate API calls)
-    if (pendingOverviewRequest) {
+    // Skip deduplication if force refresh requested
+    if (!forceRefresh && pendingOverviewRequest) {
       console.log('[Market] Returning deduplicated overview request');
       const result = await pendingOverviewRequest;
       return res.json(result);
     }
 
-    console.log('[Market] Fetching market overview (batch + YTD)...');
+    console.log(`[Market] Fetching market overview (batch + YTD)... (force=${forceRefresh})`);
 
     // Start the request and store promise for deduplication
     pendingOverviewRequest = (async () => {
       try {
         // Fetch indices, sectors, AND YTD data in parallel for enhanced sentiment
+        // Pass forceRefresh to bypass cache when user clicks refresh
         const [indicesQuotes, sectorsQuotes, ytdData] = await Promise.all([
-          getIndexQuotes(MAJOR_INDICES),
-          getSectorQuotes(SECTOR_ETFS.map(s => s.symbol)),
+          getIndexQuotes(MAJOR_INDICES, forceRefresh),
+          getSectorQuotes(SECTOR_ETFS.map(s => s.symbol), forceRefresh),
           fetchYTDData().catch(err => {
             // YTD is optional - gracefully degrade if unavailable
             console.log('[Market] YTD fetch failed, sentiment will use daily factors only:', err.message);
@@ -1281,12 +1334,13 @@ router.get('/movers/enhanced', async (req, res) => {
     console.log('[Market] Fetching top movers (HYBRID: trending + actives + screeners)...');
     try {
       // Fetch ALL sources in parallel for maximum coverage
+      // Pass forceRefresh to bypass caches when user clicks refresh
       const [trendingMovers, mostActivesData, dayGainersLarge, smallCapGainersLarge, dayLosersLarge] = await Promise.all([
-        yahooFinanceService.getTrendingTickersWithQuotes(), // Extreme viral movers
-        getCachedScreener('most_actives', 50),              // High volume (often big moves)
-        getCachedScreener('day_gainers', 75),               // Large/mid cap gainers
-        getCachedScreener('small_cap_gainers', 50),         // Small cap gainers
-        getCachedScreener('day_losers', 50),                // Losers
+        yahooFinanceService.getTrendingTickersWithQuotes(forceRefresh), // Extreme viral movers
+        getCachedScreener('most_actives', 50, forceRefresh),            // High volume (often big moves)
+        getCachedScreener('day_gainers', 75, forceRefresh),             // Large/mid cap gainers
+        getCachedScreener('small_cap_gainers', 50, forceRefresh),       // Small cap gainers
+        getCachedScreener('day_losers', 50, forceRefresh),              // Losers
       ]);
 
       // MERGE all gainers and deduplicate by symbol (keep highest % change)
@@ -1360,12 +1414,12 @@ router.get('/movers/enhanced', async (req, res) => {
 
     // Batch 1: Large cap screeners (uses unified screener cache)
     // Note: day_gainers:75 and day_losers:50 already fetched by viral movers above
-    // getCachedScreener will use cached 25-slice for efficiency
+    // getCachedScreener will use cached 25-slice for efficiency (unless forceRefresh)
     console.log('[Market] Fetching large cap movers from unified cache...');
     const [largeCap1, largeCap2, largeCap3] = await Promise.all([
-      getCachedScreener('day_gainers', 25),  // Uses cached slice from 75 results
-      getCachedScreener('day_losers', 25),   // Uses cached slice from 50 results
-      getCachedScreener('most_actives', 25),
+      getCachedScreener('day_gainers', 25, forceRefresh),  // Uses cached slice from 75 results
+      getCachedScreener('day_losers', 25, forceRefresh),   // Uses cached slice from 50 results
+      getCachedScreener('most_actives', 25, forceRefresh),
     ]);
     categories.largeCap.gainers = largeCap1 || [];
     categories.largeCap.losers = largeCap2 || [];
@@ -1374,11 +1428,11 @@ router.get('/movers/enhanced', async (req, res) => {
     // Batch 2: Small cap and growth screeners (uses unified screener cache)
     console.log('[Market] Fetching small cap and growth movers from unified cache...');
     const [smallCapGainers, aggressiveSmallCaps, undervaluedGrowth, techGrowth, mostWatched] = await Promise.all([
-      getCachedScreener('small_cap_gainers', 25),
-      getCachedScreener('aggressive_small_caps', 25),
-      getCachedScreener('undervalued_growth_stocks', 25),
-      getCachedScreener('growth_technology_stocks', 25),
-      getCachedScreener('most_watched_tickers', 25),
+      getCachedScreener('small_cap_gainers', 25, forceRefresh),
+      getCachedScreener('aggressive_small_caps', 25, forceRefresh),
+      getCachedScreener('undervalued_growth_stocks', 25, forceRefresh),
+      getCachedScreener('growth_technology_stocks', 25, forceRefresh),
+      getCachedScreener('most_watched_tickers', 25, forceRefresh),
     ]);
     categories.smallCap.gainers = smallCapGainers || [];
     categories.smallCap.aggressive = aggressiveSmallCaps || [];
@@ -1392,8 +1446,8 @@ router.get('/movers/enhanced', async (req, res) => {
     console.log('[Market] Fetching Canadian movers (TSX/TSXV/CSE, min $0.50)...');
     try {
       const [caGainers, caActive] = await Promise.all([
-        getCachedScreener('day_gainers_ca', 50),  // Fetch more to filter
-        getCachedScreener('most_actives_ca', 30),
+        getCachedScreener('day_gainers_ca', 50, forceRefresh),  // Fetch more to filter
+        getCachedScreener('most_actives_ca', 30, forceRefresh),
       ]);
 
       // Filter out penny stocks under $0.50 (often illiquid with misleading % changes)
