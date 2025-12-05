@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { createChart } from 'lightweight-charts';
 import { useChartStore } from '../stores/chartStore';
 import {
@@ -59,8 +59,18 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [rsiVisible, setRsiVisible] = useState(true);
   const [macdVisible, setMacdVisible] = useState(true);
   const [bbVisible, setBbVisible] = useState(true);
+
+  // N7 fix: Visibility refs to avoid chart rebuilds on visibility toggle
+  // These refs are read inside the main effect but don't trigger re-runs
+  const smaVisibleRef = useRef(smaVisible);
+  const rsiVisibleRef = useRef(rsiVisible);
+  const macdVisibleRef = useRef(macdVisible);
+  const bbVisibleRef = useRef(bbVisible);
   // Settings state for indicator configuration
   const [smaSettingsOpen, setSmaSettingsOpen] = useState(null); // period of SMA with settings open
+  // Chart data state for memoization (allows SMA calc outside effect)
+  const [chartDataState, setChartDataState] = useState(null);
+  const chartDataKeyRef = useRef(''); // Track current data key to prevent stale updates
 
   // Get preferences and actions from chartStore
   const getPreferences = useChartStore((state) => state.getPreferences);
@@ -84,6 +94,23 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   });
   const [availablePeriods, setAvailablePeriods] = useState(() => getAvailableSmaPeriods(preferences.timeframe || initialTimeframe));
 
+  // Memoized SMA calculations - only recalculates when chartData or enabledSMAs change
+  // This prevents expensive recalculation when only visibility toggles change
+  const smaDataMap = useMemo(() => {
+    if (!chartDataState || chartDataState.length === 0) return new Map();
+
+    const map = new Map();
+    // Calculate ALL enabled SMAs, regardless of visibility
+    // Visibility is only checked when adding series, not when calculating
+    enabledSMAs.forEach(period => {
+      const data = calculateSMA(chartDataState, period);
+      if (data.length > 0) {
+        map.set(period, data);
+      }
+    });
+    return map;
+  }, [chartDataState, enabledSMAs]);
+
   // Sync preferences from store when symbol changes
   useEffect(() => {
     const prefs = getPreferences(symbol);
@@ -99,23 +126,22 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     }
   }, [symbol, initialTimeframe, initialChartType, getPreferences]);
 
-  // Sync preferences to store when they change
+  // N8 fix: Consolidated preference sync effect
+  // Syncs timeframe, chartType, and SMA settings to store in a single effect
   useEffect(() => {
+    if (!symbol) return;
+
+    // Sync timeframe and chart type
     setStoreTimeframe(symbol, timeframe);
-  }, [symbol, timeframe, setStoreTimeframe]);
-
-  useEffect(() => {
     setStoreChartType(symbol, chartType);
-  }, [symbol, chartType, setStoreChartType]);
 
-  // For backward compatibility, sync the first enabled SMA to old store fields
-  useEffect(() => {
+    // For backward compatibility, sync the first enabled SMA to old store fields
     const hasAnySMA = enabledSMAs.length > 0;
     setStoreSmaEnabled(symbol, hasAnySMA);
     if (hasAnySMA) {
       setStoreSmaPeriod(symbol, enabledSMAs[0]);
     }
-  }, [symbol, enabledSMAs, setStoreSmaEnabled, setStoreSmaPeriod]);
+  }, [symbol, timeframe, chartType, enabledSMAs, setStoreTimeframe, setStoreChartType, setStoreSmaEnabled, setStoreSmaPeriod]);
 
   // Update available SMA periods when timeframe changes
   useEffect(() => {
@@ -124,6 +150,52 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     // Filter out any enabled SMAs that are no longer available
     setEnabledSMAs(prev => prev.filter(p => periods.includes(p)));
   }, [timeframe]);
+
+  // N7 fix: Sync visibility refs (allows main effect to read current values without deps)
+  useEffect(() => {
+    smaVisibleRef.current = smaVisible;
+  }, [smaVisible]);
+
+  useEffect(() => {
+    rsiVisibleRef.current = rsiVisible;
+  }, [rsiVisible]);
+
+  useEffect(() => {
+    macdVisibleRef.current = macdVisible;
+  }, [macdVisible]);
+
+  useEffect(() => {
+    bbVisibleRef.current = bbVisible;
+  }, [bbVisible]);
+
+  // N7 fix: Toggle SMA series visibility without chart rebuild
+  useEffect(() => {
+    const seriesMap = smaSeriesRefs.current;
+    if (!seriesMap || seriesMap.size === 0) return;
+
+    seriesMap.forEach((series, period) => {
+      const isVisible = smaVisible[period] !== false; // default true
+      try {
+        series.applyOptions({ visible: isVisible });
+      } catch {
+        // Series might not exist yet
+      }
+    });
+  }, [smaVisible]);
+
+  // N7 fix: Toggle BB series visibility without chart rebuild
+  useEffect(() => {
+    const { upper, middle, lower } = bbSeriesRefs.current;
+    if (!upper || !middle || !lower) return;
+
+    try {
+      upper.applyOptions({ visible: bbVisible });
+      middle.applyOptions({ visible: bbVisible });
+      lower.applyOptions({ visible: bbVisible });
+    } catch {
+      // Series might not exist yet
+    }
+  }, [bbVisible]);
 
   // Main chart effect with local isActive variable for proper cleanup
   useEffect(() => {
@@ -226,6 +298,14 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           throw new Error('No data available for selected time range');
         }
 
+        // Store chartData in state for memoized SMA calculations
+        // Only update if data actually changed to prevent unnecessary re-renders
+        const newDataKey = `${symbol}:${resolution}:${from}:${to}`;
+        if (chartDataKeyRef.current !== newDataKey) {
+          chartDataKeyRef.current = newDataKey;
+          setChartDataState(chartData);
+        }
+
         if (!isActive || !container) return;
 
         // Get fresh dimensions
@@ -295,35 +375,38 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
 
         seriesRef.current = seriesInstance;
 
-        // Add multiple SMA indicators (only if visible)
+        // Add multiple SMA indicators (visibility handled via separate effect)
+        // Use memoized smaDataMap for pre-calculated SMA data (H2 performance fix)
         smaSeriesRefs.current.clear();
         for (const period of enabledSMAs) {
-          // Skip if visibility is toggled off
-          if (smaVisible[period] === false) continue;
-
           const config = SMA_CONFIGS.find(c => c.period === period);
           if (!config) continue;
 
-          const smaData = calculateSMA(chartData, period);
+          // Use memoized SMA data if available, otherwise calculate (first render)
+          const smaData = smaDataMap.get(period) || calculateSMA(chartData, period);
           if (smaData.length > 0) {
+            // N7 fix: Create series with initial visibility from ref
+            const isVisible = smaVisibleRef.current[period] !== false;
             const smaSeries = chartInstance.addLineSeries({
               color: config.color,
               lineWidth: 2,
               title: `SMA(${period})`,
               priceLineVisible: false,
               lastValueVisible: true,
+              visible: isVisible,
             });
             smaSeries.setData(smaData);
             smaSeriesRefs.current.set(period, smaSeries);
           }
         }
 
-        // Add Bollinger Bands if enabled and visible
+        // Add Bollinger Bands if enabled (visibility handled via separate effect)
         bbSeriesRefs.current = { upper: null, middle: null, lower: null };
-        if (bbEnabled && bbVisible && chartData.length >= 20) {
+        if (bbEnabled && chartData.length >= 20) {
+          const bbIsVisible = bbVisibleRef.current;
           const { upper, middle, lower } = calculateBollingerBands(chartData, 20, 2);
 
-          // Upper band (purple, dashed)
+          // Upper band (purple, dashed) - N7 fix: initial visibility from ref
           if (upper.length > 0) {
             const upperSeries = chartInstance.addLineSeries({
               color: '#8B5CF6',
@@ -332,12 +415,13 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
               title: 'BB Upper',
               priceLineVisible: false,
               lastValueVisible: false,
+              visible: bbIsVisible,
             });
             upperSeries.setData(upper);
             bbSeriesRefs.current.upper = upperSeries;
           }
 
-          // Middle band (SMA 20, purple solid)
+          // Middle band (SMA 20, purple solid) - N7 fix: initial visibility from ref
           if (middle.length > 0) {
             const middleSeries = chartInstance.addLineSeries({
               color: '#8B5CF6',
@@ -345,12 +429,13 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
               title: 'BB Middle',
               priceLineVisible: false,
               lastValueVisible: true,
+              visible: bbIsVisible,
             });
             middleSeries.setData(middle);
             bbSeriesRefs.current.middle = middleSeries;
           }
 
-          // Lower band (purple, dashed)
+          // Lower band (purple, dashed) - N7 fix: initial visibility from ref
           if (lower.length > 0) {
             const lowerSeries = chartInstance.addLineSeries({
               color: '#8B5CF6',
@@ -359,6 +444,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
               title: 'BB Lower',
               priceLineVisible: false,
               lastValueVisible: false,
+              visible: bbIsVisible,
             });
             lowerSeries.setData(lower);
             bbSeriesRefs.current.lower = lowerSeries;
@@ -368,9 +454,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         // Fit content
         chartInstance.timeScale().fitContent();
 
-        // Create RSI subplot if enabled and visible
+        // Create RSI subplot if enabled (visibility controlled via CSS display)
         const rsiContainer = rsiContainerRef.current;
-        if (rsiEnabled && rsiVisible && rsiContainer && chartData.length >= rsiPeriod + 1) {
+        if (rsiEnabled && rsiContainer && chartData.length >= rsiPeriod + 1) {
           const rsiWidth = rsiContainer.clientWidth || width;
           const rsiHeight = 150;
 
@@ -458,9 +544,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
           rsiChart.timeScale().fitContent();
         }
 
-        // Create MACD subplot if enabled and visible
+        // Create MACD subplot if enabled (visibility controlled via CSS display)
         const macdContainer = macdContainerRef.current;
-        if (macdEnabled && macdVisible && macdContainer && chartData.length >= 35) { // Need 26 + 9 points minimum
+        if (macdEnabled && macdContainer && chartData.length >= 35) { // Need 26 + 9 points minimum
           const macdWidth = macdContainer.clientWidth || width;
           const macdHeight = 150;
 
@@ -662,7 +748,12 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       macdSeriesRefs.current = { macd: null, signal: null, histogram: null };
       bbSeriesRefs.current = { upper: null, middle: null, lower: null };
     };
-  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, smaVisible, rsiEnabled, rsiVisible, rsiPeriod, macdEnabled, macdVisible, bbEnabled, bbVisible, fetchCandles]);
+  // N7 fix: Reduced dependency array from 17 to 13 deps
+  // Visibility states (smaVisible, rsiVisible, macdVisible, bbVisible) now handled via:
+  // - Refs for initial values when creating series
+  // - Separate effects for toggling visibility without chart rebuild
+  // - CSS display for RSI/MACD containers
+  }, [symbol, chartType, timeframe, isFullscreen, customStartDate, customEndDate, enabledSMAs, smaDataMap, rsiEnabled, rsiPeriod, macdEnabled, bbEnabled, fetchCandles]);
 
   // Reset zoom handler
   const handleResetZoom = () => {
@@ -1008,9 +1099,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         style={{ height: isFullscreen ? `${window.innerHeight - 150}px` : '500px' }}
       />
 
-      {/* RSI Subplot Container */}
+      {/* RSI Subplot Container - N7 fix: Use CSS display for visibility toggle */}
       {rsiEnabled && (
-        <div className="mt-2">
+        <div className="mt-2" style={{ display: rsiVisible ? 'block' : 'none' }}>
           <div className="text-xs text-text-muted mb-1 flex items-center gap-2">
             <span className="font-medium">RSI({rsiPeriod})</span>
             <span className="text-loss">70 Overbought</span>
@@ -1024,9 +1115,9 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
         </div>
       )}
 
-      {/* MACD Subplot Container */}
+      {/* MACD Subplot Container - N7 fix: Use CSS display for visibility toggle */}
       {macdEnabled && (
-        <div className="mt-2">
+        <div className="mt-2" style={{ display: macdVisible ? 'block' : 'none' }}>
           <div className="text-xs text-text-muted mb-1 flex items-center gap-2">
             <span className="font-medium">MACD (12, 26, 9)</span>
             <span style={{ color: '#3B82F6' }}>MACD Line</span>

@@ -39,6 +39,8 @@ function AllocationPieChart({ holdings, totalValue, cashBalance }) {
   const [loadingSectors, setLoadingSectors] = useState(false);
 
   // Fetch sector data for holdings
+  // N5 fix: sectorData intentionally excluded from deps - used only to check what's missing
+  // Adding it would create infinite loop since the effect updates sectorData
   useEffect(() => {
     const fetchSectorData = async () => {
       if (holdings.length === 0) return;
@@ -61,6 +63,7 @@ function AllocationPieChart({ holdings, totalValue, cashBalance }) {
     };
 
     fetchSectorData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holdings]);
 
   // Calculate allocation data by holding

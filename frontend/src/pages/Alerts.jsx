@@ -10,8 +10,7 @@ function Alerts() {
     loading,
     error,
     notificationPermission,
-    fetchAlerts,
-    fetchAlertHistory,
+    // N1 fix: fetchAlerts/fetchAlertHistory accessed via getState() in useEffect
     createAlert,
     updateAlert,
     deleteAlert,
@@ -71,10 +70,12 @@ function Alerts() {
     resetForm();
   };
 
+  // N1 fix: Use getState() to avoid infinite re-runs from unstable function references
   useEffect(() => {
+    const { fetchAlerts, fetchAlertHistory } = useAlertStore.getState();
     fetchAlerts();
     fetchAlertHistory();
-  }, [fetchAlerts, fetchAlertHistory]);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -4,6 +4,8 @@ import { Trash2, TrendingUp, TrendingDown, Minus, Edit2, MoreVertical, ArrowUpDo
 import Layout from '../components/Layout';
 import { useQuotes } from '../stores/quoteStore';
 import { useWatchlistStore } from '../stores/watchlistStore';
+import { formatPrice, formatPercentChange, formatNumber } from '../utils/formatters';
+import { handleApiError } from '../utils/errorHandler';
 import RenameWatchlistModal from '../components/RenameWatchlistModal';
 import DeleteWatchlistModal from '../components/DeleteWatchlistModal';
 import {
@@ -23,8 +25,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Sortable row component
-function SortableRow({ item, quote, formatPrice, formatPercentChange, formatNumber, navigate, handleRemoveSymbol, removingSymbol }) {
+// Sortable row component - uses imported formatters directly (L1 fix: reduced prop drilling)
+function SortableRow({ item, quote, navigate, handleRemoveSymbol, removingSymbol }) {
   const {
     attributes,
     listeners,
@@ -202,8 +204,8 @@ function WatchlistDetail() {
       setRemovingSymbol(symbol);
       await removeSymbolFromStore(id, symbol);
     } catch (err) {
-      console.error('Error removing symbol:', err);
-      alert('Failed to remove symbol');
+      // Use centralized error handler for consistent UX feedback (M4 integration)
+      handleApiError(err, 'Remove symbol', { service: 'watchlist-remove' });
     } finally {
       setRemovingSymbol(null);
     }
@@ -405,27 +407,7 @@ function WatchlistDetail() {
     }
   };
 
-  // Format number with K/M/B suffix
-  const formatNumber = (num) => {
-    if (!num) return '-';
-    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-    if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
-    return num.toFixed(0);
-  };
-
-  // Format price
-  const formatPrice = (price) => {
-    if (!price) return '-';
-    return '$' + price.toFixed(2);
-  };
-
-  // Format percent change
-  const formatPercentChange = (change) => {
-    if (!change) return '-';
-    const sign = change > 0 ? '+' : '';
-    return sign + change.toFixed(2) + '%';
-  };
+  // Formatters now imported from utils/formatters.js (L1 fix)
 
   if (loading || (!watchlist && !error)) {
     return (
@@ -655,9 +637,6 @@ function WatchlistDetail() {
                         key={item.symbol}
                         item={item}
                         quote={quote}
-                        formatPrice={formatPrice}
-                        formatPercentChange={formatPercentChange}
-                        formatNumber={formatNumber}
                         navigate={navigate}
                         handleRemoveSymbol={handleRemoveSymbol}
                         removingSymbol={removingSymbol}

@@ -4,6 +4,9 @@ import api from '../api/client';
 const CACHE_TTL = 30000; // 30 seconds for list
 const DETAIL_CACHE_TTL = 60000; // 60 seconds for details
 
+// Request deduplication: prevents concurrent duplicate API calls (H4 fix)
+const pendingRequests = new Map();
+
 export const useWatchlistStore = create((set, get) => ({
   // === STATE ===
   watchlists: [],
@@ -64,52 +67,78 @@ export const useWatchlistStore = create((set, get) => ({
   // === ACTIONS ===
 
   fetchWatchlists: async (force = false) => {
-    const { isCacheValid, isLoading } = get();
+    const { isCacheValid } = get();
     if (!force && isCacheValid()) return get().watchlists;
-    if (isLoading) return get().watchlists;
 
-    set({ isLoading: true, error: null });
-    try {
-      const data = await api.get('/watchlists');
-      set({
-        watchlists: data,
-        isLoading: false,
-        lastFetch: Date.now(),
-      });
-      return data;
-    } catch (error) {
-      set({ isLoading: false, error: error.message });
-      throw error;
+    // Request deduplication: return pending request if one exists
+    const pendingKey = 'watchlists';
+    if (pendingRequests.has(pendingKey)) {
+      return pendingRequests.get(pendingKey);
     }
+
+    // Create and store the promise
+    const requestPromise = (async () => {
+      set({ isLoading: true, error: null });
+      try {
+        const data = await api.get('/watchlists');
+        set({
+          watchlists: data,
+          isLoading: false,
+          lastFetch: Date.now(),
+        });
+        return data;
+      } catch (error) {
+        set({ isLoading: false, error: error.message });
+        throw error;
+      } finally {
+        pendingRequests.delete(pendingKey);
+      }
+    })();
+
+    pendingRequests.set(pendingKey, requestPromise);
+    return requestPromise;
   },
 
   fetchWatchlistDetail: async (id, force = false) => {
-    const { isDetailCacheValid, isLoadingDetail } = get();
+    const { isDetailCacheValid } = get();
     if (!force && isDetailCacheValid(id)) return get().getWatchlistDetail(id);
-    if (isLoadingDetail[id]) return get().getWatchlistDetail(id);
 
-    set((state) => ({
-      isLoadingDetail: { ...state.isLoadingDetail, [id]: true },
-      error: null,
-    }));
-
-    try {
-      const data = await api.get(`/watchlists/${id}`);
-      set((state) => ({
-        watchlistDetails: {
-          ...state.watchlistDetails,
-          [id]: { data, timestamp: Date.now() },
-        },
-        isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
-      }));
-      return data;
-    } catch (error) {
-      set((state) => ({
-        isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
-        error: error.message,
-      }));
-      throw error;
+    // Request deduplication: return pending request if one exists
+    const pendingKey = `watchlist-detail-${id}`;
+    if (pendingRequests.has(pendingKey)) {
+      return pendingRequests.get(pendingKey);
     }
+
+    // Create and store the promise
+    const requestPromise = (async () => {
+      set((state) => ({
+        isLoadingDetail: { ...state.isLoadingDetail, [id]: true },
+        error: null,
+      }));
+
+      try {
+        const data = await api.get(`/watchlists/${id}`);
+        set((state) => ({
+          watchlistDetails: {
+            ...state.watchlistDetails,
+            [id]: { data, timestamp: Date.now() },
+          },
+          isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
+        }));
+        return data;
+      } catch (error) {
+        set((state) => ({
+          isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
+          error: error.message,
+        }));
+        throw error;
+      } finally {
+        pendingRequests.delete(pendingKey);
+      }
+    })();
+
+    pendingRequests.set(pendingKey, requestPromise);
+    return requestPromise;
   },
 
   createWatchlist: async (name, color = '#3B82F6', icon = 'list') => {

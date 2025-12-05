@@ -21,7 +21,7 @@ const CHART_TYPE_REVERSE_MAP = {
   area: 'area',
 };
 
-export const useSettingsStore = create((set, get) => ({
+export const useSettingsStore = create((set) => ({
   // === STATE ===
   preferences: {
     theme: 'system', // 'light' | 'dark' | 'system'
@@ -129,11 +129,8 @@ export const useSettingsStore = create((set, get) => ({
     });
   },
 
-  // === SELECTORS ===
-  getDefaultChartType: () => get().preferences.defaultChartType,
-  getDefaultTimeframe: () => get().preferences.defaultTimeframe,
-  getDecimalPlaces: () => get().preferences.decimalPlaces,
-  getThemePreference: () => get().preferences.theme,
+  // N12 fix: Removed verbose single-property getters
+  // Components should use direct state access: useSettingsStore((state) => state.preferences.theme)
 }));
 
 export default useSettingsStore;

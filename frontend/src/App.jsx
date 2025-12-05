@@ -21,6 +21,8 @@ import SkipToMain from './components/SkipToMain';
 import MobileBottomNav from './components/MobileBottomNav';
 import useRateLimitEvents from './hooks/useRateLimitEvents';
 import { useAuthStore } from './stores/authStore';
+import { subscribeToQuoteUpdates } from './stores/quoteStore';
+import { useChartStore } from './stores/chartStore';
 import { api } from './api/client';
 
 // Protected Route wrapper
@@ -47,6 +49,14 @@ function RateLimitEventsProvider({ children }) {
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
   const logout = useAuthStore((state) => state.logout);
+
+  // Bridge quote updates to chart store (decoupled via pub/sub)
+  useEffect(() => {
+    const unsubscribe = subscribeToQuoteUpdates((updates) => {
+      useChartStore.getState().updateCurrentCandlesBulk(updates);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     // Set up session expired handler

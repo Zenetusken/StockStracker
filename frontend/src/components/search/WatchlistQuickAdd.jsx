@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Check, Star, ChevronDown } from 'lucide-react';
-import api from '../../api/client';
 import { useWatchlistStore } from '../../stores/watchlistStore';
 
 /**
@@ -8,9 +7,11 @@ import { useWatchlistStore } from '../../stores/watchlistStore';
  * Used in search results to allow one-click watchlist additions
  */
 function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
+  // N6 fix: Use store instead of local state and direct API calls
+  const watchlists = useWatchlistStore((state) => state.watchlists);
+  const loading = useWatchlistStore((state) => state.isLoading);
+
   const [isOpen, setIsOpen] = useState(false);
-  const [watchlists, setWatchlists] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -34,8 +35,10 @@ function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
   }, [isOpen]);
 
   // Fetch watchlists when dropdown opens
+  // N6 fix: Use store fetchWatchlists with caching
   useEffect(() => {
     if (isOpen && watchlists.length === 0) {
+      const { fetchWatchlists } = useWatchlistStore.getState();
       fetchWatchlists();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Only fetch when opening if empty
@@ -52,20 +55,6 @@ function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
       return () => clearTimeout(timer);
     }
   }, [success]);
-
-  const fetchWatchlists = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await api.get('/watchlists');
-      setWatchlists(data);
-    } catch (err) {
-      console.error('Error fetching watchlists:', err);
-      setError('Failed to load');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAddToWatchlist = async (watchlistId, watchlistName) => {
     setAdding(true);
@@ -160,7 +149,8 @@ function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    fetchWatchlists();
+                    // N6 fix: Use store fetchWatchlists with force flag
+                    useWatchlistStore.getState().fetchWatchlists(true);
                   }}
                   className="mt-2 text-xs text-brand hover:underline"
                 >

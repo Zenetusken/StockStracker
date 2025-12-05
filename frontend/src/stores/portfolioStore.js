@@ -4,6 +4,9 @@ import api from '../api/client';
 const CACHE_TTL = 30000; // 30 seconds for list
 const DETAIL_CACHE_TTL = 60000; // 60 seconds for details
 
+// Request deduplication: prevents concurrent duplicate API calls (H4 fix)
+const pendingRequests = new Map();
+
 export const usePortfolioStore = create((set, get) => ({
   // === STATE ===
   portfolios: [],
@@ -49,52 +52,78 @@ export const usePortfolioStore = create((set, get) => ({
   // === ACTIONS ===
 
   fetchPortfolios: async (force = false) => {
-    const { isCacheValid, isLoading } = get();
+    const { isCacheValid } = get();
     if (!force && isCacheValid()) return get().portfolios;
-    if (isLoading) return get().portfolios;
 
-    set({ isLoading: true, error: null });
-    try {
-      const data = await api.get('/portfolios');
-      set({
-        portfolios: data,
-        isLoading: false,
-        lastFetch: Date.now(),
-      });
-      return data;
-    } catch (error) {
-      set({ isLoading: false, error: error.message });
-      throw error;
+    // Request deduplication: return pending request if one exists
+    const pendingKey = 'portfolios';
+    if (pendingRequests.has(pendingKey)) {
+      return pendingRequests.get(pendingKey);
     }
+
+    // Create and store the promise
+    const requestPromise = (async () => {
+      set({ isLoading: true, error: null });
+      try {
+        const data = await api.get('/portfolios');
+        set({
+          portfolios: data,
+          isLoading: false,
+          lastFetch: Date.now(),
+        });
+        return data;
+      } catch (error) {
+        set({ isLoading: false, error: error.message });
+        throw error;
+      } finally {
+        pendingRequests.delete(pendingKey);
+      }
+    })();
+
+    pendingRequests.set(pendingKey, requestPromise);
+    return requestPromise;
   },
 
   fetchPortfolioDetail: async (id, force = false) => {
-    const { isDetailCacheValid, isLoadingDetail } = get();
+    const { isDetailCacheValid } = get();
     if (!force && isDetailCacheValid(id)) return get().getPortfolioDetail(id);
-    if (isLoadingDetail[id]) return get().getPortfolioDetail(id);
 
-    set((state) => ({
-      isLoadingDetail: { ...state.isLoadingDetail, [id]: true },
-      error: null,
-    }));
-
-    try {
-      const data = await api.get(`/portfolios/${id}`);
-      set((state) => ({
-        portfolioDetails: {
-          ...state.portfolioDetails,
-          [id]: { data, timestamp: Date.now() },
-        },
-        isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
-      }));
-      return data;
-    } catch (error) {
-      set((state) => ({
-        isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
-        error: error.message,
-      }));
-      throw error;
+    // Request deduplication: return pending request if one exists
+    const pendingKey = `portfolio-detail-${id}`;
+    if (pendingRequests.has(pendingKey)) {
+      return pendingRequests.get(pendingKey);
     }
+
+    // Create and store the promise
+    const requestPromise = (async () => {
+      set((state) => ({
+        isLoadingDetail: { ...state.isLoadingDetail, [id]: true },
+        error: null,
+      }));
+
+      try {
+        const data = await api.get(`/portfolios/${id}`);
+        set((state) => ({
+          portfolioDetails: {
+            ...state.portfolioDetails,
+            [id]: { data, timestamp: Date.now() },
+          },
+          isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
+        }));
+        return data;
+      } catch (error) {
+        set((state) => ({
+          isLoadingDetail: { ...state.isLoadingDetail, [id]: false },
+          error: error.message,
+        }));
+        throw error;
+      } finally {
+        pendingRequests.delete(pendingKey);
+      }
+    })();
+
+    pendingRequests.set(pendingKey, requestPromise);
+    return requestPromise;
   },
 
   createPortfolio: async (name, description = '', cashBalance = 0, isPaperTrading = false) => {
@@ -161,11 +190,7 @@ export const usePortfolioStore = create((set, get) => ({
     try {
       await api.delete(`/portfolios/${id}`);
       // Remove from details cache
-      set((state) => {
-        const newDetails = { ...state.portfolioDetails };
-        delete newDetails[id];
-        return { portfolioDetails: newDetails };
-      });
+      get()._invalidateDetail(id);
     } catch (error) {
       // Rollback
       set({
@@ -182,11 +207,7 @@ export const usePortfolioStore = create((set, get) => ({
       const data = await api.post(`/portfolios/${portfolioId}/transactions`, transaction);
 
       // Invalidate the portfolio detail cache to force refresh
-      set((state) => {
-        const newDetails = { ...state.portfolioDetails };
-        delete newDetails[portfolioId];
-        return { portfolioDetails: newDetails };
-      });
+      get()._invalidateDetail(portfolioId);
 
       // Update portfolio cash balance in the list
       if (data.portfolio) {
@@ -212,11 +233,7 @@ export const usePortfolioStore = create((set, get) => ({
       const data = await api.put(`/portfolios/${portfolioId}/transactions/${transactionId}`, updates);
 
       // Invalidate the portfolio detail cache to force refresh
-      set((state) => {
-        const newDetails = { ...state.portfolioDetails };
-        delete newDetails[portfolioId];
-        return { portfolioDetails: newDetails };
-      });
+      get()._invalidateDetail(portfolioId);
 
       return data;
     } catch (error) {
@@ -231,11 +248,7 @@ export const usePortfolioStore = create((set, get) => ({
       const data = await api.delete(`/portfolios/${portfolioId}/transactions/${transactionId}`);
 
       // Invalidate the portfolio detail cache to force refresh
-      set((state) => {
-        const newDetails = { ...state.portfolioDetails };
-        delete newDetails[portfolioId];
-        return { portfolioDetails: newDetails };
-      });
+      get()._invalidateDetail(portfolioId);
 
       return data;
     } catch (error) {
@@ -281,6 +294,14 @@ export const usePortfolioStore = create((set, get) => ({
 
   invalidateCache: () => {
     set({ lastFetch: null, portfolioDetails: {} });
+  },
+
+  // L3 fix: Helper to invalidate a single portfolio's detail cache
+  _invalidateDetail: (id) => {
+    set((state) => {
+      const { [id]: _, ...rest } = state.portfolioDetails;
+      return { portfolioDetails: rest };
+    });
   },
 
   clearError: () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, Plus, TrendingUp, TrendingDown, DollarSign, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -18,10 +18,13 @@ function Portfolio() {
     fetchPortfolios();
   }, [fetchPortfolios]);
 
-  // Calculate total value across all portfolios
-  const totalValue = portfolios.reduce((sum, p) => sum + (p.total_value || 0), 0);
-  const totalGainLoss = portfolios.reduce((sum, p) => sum + (p.total_gain_loss || 0), 0);
-  const totalGainLossPercent = totalValue > 0 ? (totalGainLoss / (totalValue - totalGainLoss)) * 100 : 0;
+  // N11 fix: Memoize computed values to avoid recalculating on every render
+  const { totalValue, totalGainLoss, totalGainLossPercent } = useMemo(() => {
+    const value = portfolios.reduce((sum, p) => sum + (p.total_value || 0), 0);
+    const gainLoss = portfolios.reduce((sum, p) => sum + (p.total_gain_loss || 0), 0);
+    const percent = value > 0 ? (gainLoss / (value - gainLoss)) * 100 : 0;
+    return { totalValue: value, totalGainLoss: gainLoss, totalGainLossPercent: percent };
+  }, [portfolios]);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-US', {

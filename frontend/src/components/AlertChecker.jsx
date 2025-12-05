@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAlertStore } from '../stores/alertStore';
 import { useQuoteStore } from '../stores/quoteStore';
 import { useToastStore } from '../stores/toastStore';
@@ -24,10 +24,15 @@ function AlertChecker() {
 
   // Track previous quote values to detect changes
   const prevQuotesRef = useRef({});
+  // Track previously subscribed symbols for proper cleanup (M3 fix)
+  const prevSymbolsRef = useRef([]);
 
-  // Get unique symbols from active alerts
-  const activeAlerts = alerts.filter(a => a.is_active);
-  const alertSymbols = [...new Set(activeAlerts.map(a => a.symbol.toUpperCase()))];
+  // Get unique symbols from active alerts - memoized for stable reference (M3 fix)
+  const activeAlerts = useMemo(() => alerts.filter(a => a.is_active), [alerts]);
+  const alertSymbols = useMemo(
+    () => [...new Set(activeAlerts.map(a => a.symbol.toUpperCase()))],
+    [activeAlerts]
+  );
 
   // Fetch alerts on mount if user is logged in
   useEffect(() => {
@@ -36,15 +41,34 @@ function AlertChecker() {
     }
   }, [user, fetchAlerts]);
 
-  // Subscribe to alert symbols
+  // Subscribe to alert symbols - uses ref for stable cleanup (M3 fix)
   useEffect(() => {
-    if (alertSymbols.length === 0) return;
+    const currentSymbols = alertSymbols;
+    const prevSymbols = prevSymbolsRef.current;
 
-    subscribe(alertSymbols);
+    // Check if symbols actually changed
+    const currentSorted = [...currentSymbols].sort().join(',');
+    const prevSorted = [...prevSymbols].sort().join(',');
+
+    if (currentSorted !== prevSorted) {
+      // Unsubscribe from previous symbols
+      if (prevSymbols.length > 0) {
+        unsubscribe(prevSymbols);
+      }
+      // Subscribe to new symbols
+      if (currentSymbols.length > 0) {
+        subscribe(currentSymbols);
+      }
+      prevSymbolsRef.current = currentSymbols;
+    }
+
     return () => {
-      unsubscribe(alertSymbols);
+      // Cleanup on unmount - unsubscribe from tracked symbols
+      if (prevSymbolsRef.current.length > 0) {
+        unsubscribe(prevSymbolsRef.current);
+      }
     };
-  }, [alertSymbols.join(','), subscribe, unsubscribe]);
+  }, [alertSymbols, subscribe, unsubscribe]);
 
   // Trigger alert notification (defined first so it can be used by checkAlerts)
   const triggerAlert = useCallback((alert, quote, message) => {

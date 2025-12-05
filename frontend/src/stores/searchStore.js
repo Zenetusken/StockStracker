@@ -53,10 +53,8 @@ export const useSearchStore = create((set, get) => ({
   recentQuotes: {}, // { [symbol]: quote }
 
   // === SELECTORS ===
-
-  getResults: () => get().results,
-  getTrending: () => get().trending,
-  getRecentSearches: () => get().recentSearches,
+  // N9 fix: Removed unnecessary getters (getResults, getTrending, getRecentSearches)
+  // Components should use direct state access: useSearchStore((state) => state.results)
 
   isTrendingStale: () => {
     const { trending } = get();

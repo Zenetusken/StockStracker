@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { SearchPreviewPanel, WatchlistQuickAdd } from './search';
 import useKeyboardNavigation from '../hooks/useKeyboardNavigation';
 import { useSearchStore } from '../stores/searchStore';
+import api from '../api/client';
 
 // Delay before showing preview panel (ms) - set to 0 for immediate show
 const PREVIEW_DELAY = 0;
@@ -15,15 +16,6 @@ const isMac = () => {
 
 // Generate unique ID for accessibility
 const generateId = () => `search-${Math.random().toString(36).substr(2, 9)}`;
-
-// Popular stocks to suggest when no results found
-const POPULAR_STOCKS = [
-  { symbol: 'AAPL', description: 'Apple Inc' },
-  { symbol: 'GOOGL', description: 'Alphabet Inc Class A' },
-  { symbol: 'MSFT', description: 'Microsoft Corporation' },
-  { symbol: 'AMZN', description: 'Amazon.com Inc' },
-  { symbol: 'TSLA', description: 'Tesla Inc' },
-];
 
 // Search filter options
 const SEARCH_MODES = [
@@ -58,11 +50,14 @@ const formatChange = (change, percentChange) => {
 const SearchBar = forwardRef(function SearchBar(props, ref) {
   const navigate = useNavigate();
 
-  // Get search store methods and state
-  const searchStore = useSearchStore((state) => state.search);
-  const fetchStoreSuggestions = useSearchStore((state) => state.fetchSuggestions);
-  const fetchStoreRecentQuotes = useSearchStore((state) => state.fetchRecentQuotes);
-  const addRecentSearch = useSearchStore((state) => state.addRecentSearch);
+  // Get search store actions via getState() - these are stable references (H3 fix)
+  // Using getState() for actions avoids re-renders and effect dependency issues
+  const searchStore = useCallback((...args) => useSearchStore.getState().search(...args), []);
+  const fetchStoreSuggestions = useCallback((...args) => useSearchStore.getState().fetchSuggestions(...args), []);
+  const fetchStoreRecentQuotes = useCallback(() => useSearchStore.getState().fetchRecentQuotes(), []);
+  const addRecentSearch = useCallback((...args) => useSearchStore.getState().addRecentSearch(...args), []);
+
+  // Subscribe to state that needs to trigger re-renders
   const storeRecentSearches = useSearchStore((state) => state.recentSearches);
   const storeRecentQuotes = useSearchStore((state) => state.recentQuotes);
 
@@ -78,6 +73,7 @@ const SearchBar = forwardRef(function SearchBar(props, ref) {
   const [typeFilter, setTypeFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [suggestionHint, setSuggestionHint] = useState('');
+  const [trendingStocks, setTrendingStocks] = useState([]);
   const searchRef = useRef(null);
   const inputRef = useRef(null);
   const filterRef = useRef(null);
@@ -134,6 +130,42 @@ const SearchBar = forwardRef(function SearchBar(props, ref) {
     }
     fetchStoreRecentQuotes();
   }, [isOpen, storeRecentSearches, query, fetchStoreRecentQuotes]);
+
+  // Fetch trending stocks for suggestions (100% dynamic from API)
+  // N4 fix: Add cleanup for AbortController and unmount guard
+  useEffect(() => {
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const fetchTrending = async () => {
+      try {
+        const data = await api.get('/search/trending?limit=5', { signal: controller.signal });
+        // Only update state if still mounted
+        if (isMounted) {
+          // Combine gainers (preferred) with most active as fallback
+          const stocks = [...(data.gainers || []), ...(data.mostActive || [])]
+            .slice(0, 5)
+            .map(stock => ({
+              symbol: stock.symbol,
+              description: stock.description || stock.name || stock.symbol,
+            }));
+          setTrendingStocks(stocks);
+        }
+      } catch (err) {
+        // N4 fix: Don't log warning for aborted requests
+        if (err.name !== 'AbortError') {
+          console.warn('Failed to fetch trending stocks:', err);
+        }
+        // Leave trendingStocks empty - no hardcoded fallback
+      }
+    };
+    fetchTrending();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, []);
 
   // Handle click outside to close dropdown and filters
   useEffect(() => {
@@ -649,26 +681,28 @@ const SearchBar = forwardRef(function SearchBar(props, ref) {
                 </p>
               </div>
 
-              {/* Popular Stocks Suggestions */}
-              <div>
-                <div className="px-4 py-2 text-xs font-semibold text-text-secondary uppercase">
-                  Popular Stocks
+              {/* Trending Stocks Suggestions (100% dynamic from API) */}
+              {trendingStocks.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 text-xs font-semibold text-text-secondary uppercase">
+                    Trending Stocks
+                  </div>
+                  {trendingStocks.map((stock) => (
+                    <button
+                      key={stock.symbol}
+                      onClick={() => handleSelectSymbol(stock.symbol, stock.description)}
+                      className="w-full px-4 py-3 text-left hover:bg-card-hover transition-colors border-b border-line-light last:border-b-0"
+                    >
+                      <div className="font-semibold text-text-primary">
+                        {stock.symbol}
+                      </div>
+                      <div className="text-sm text-text-secondary">
+                        {stock.description}
+                      </div>
+                    </button>
+                  ))}
                 </div>
-                {POPULAR_STOCKS.map((stock) => (
-                  <button
-                    key={stock.symbol}
-                    onClick={() => handleSelectSymbol(stock.symbol, stock.description)}
-                    className="w-full px-4 py-3 text-left hover:bg-card-hover transition-colors border-b border-line-light last:border-b-0"
-                  >
-                    <div className="font-semibold text-text-primary">
-                      {stock.symbol}
-                    </div>
-                    <div className="text-sm text-text-secondary">
-                      {stock.description}
-                    </div>
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
           )}
 

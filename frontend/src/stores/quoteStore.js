@@ -1,7 +1,23 @@
 import { create } from 'zustand';
-import { useEffect, useMemo, useRef } from 'react';
-import { useChartStore } from './chartStore';
+import { useShallow } from 'zustand/react/shallow';
+import { useEffect, useMemo, useRef, useCallback } from 'react';
 import api from '../api/client';
+
+// === PUB/SUB FOR QUOTE UPDATES ===
+// Allows other stores (e.g., chartStore) to subscribe to quote updates
+// without creating a direct dependency between stores
+const quoteUpdateSubscribers = new Set();
+
+/**
+ * Subscribe to real-time quote updates from SSE.
+ * Used by chartStore to update live candles without direct coupling.
+ * @param {Function} callback - Called with array of { symbol, quote } updates
+ * @returns {Function} Unsubscribe function
+ */
+export const subscribeToQuoteUpdates = (callback) => {
+  quoteUpdateSubscribers.add(callback);
+  return () => quoteUpdateSubscribers.delete(callback);
+};
 
 // SSE requires full URL for EventSource (cannot use api client)
 const SSE_BASE_URL = '/api/stream/quotes';
@@ -255,11 +271,17 @@ export const useQuoteStore = create((set, get) => ({
         if (data.type === 'quote_update' && data.quotes) {
           get().updateQuotes(data.quotes);
 
-          // Update chart candles with live quote data
-          const chartStore = useChartStore.getState();
+          // Notify subscribers (e.g., chartStore) of quote updates
+          // This decouples quoteStore from chartStore
           const validUpdates = data.quotes.filter(item => item.symbol && item.quote);
-          if (validUpdates.length > 0) {
-            chartStore.updateCurrentCandlesBulk(validUpdates);
+          if (validUpdates.length > 0 && quoteUpdateSubscribers.size > 0) {
+            quoteUpdateSubscribers.forEach(callback => {
+              try {
+                callback(validUpdates);
+              } catch (err) {
+                console.error('[QuoteStore] Subscriber callback error:', err);
+              }
+            });
           }
         }
       } catch (err) {
@@ -405,29 +427,35 @@ export function useQuotes(symbols) {
     [symbolsKey]
   );
 
-  // Get quotes in Finnhub format for WatchlistDetail compatibility
-  const quotes = useQuoteStore((state) => {
-    const result = {};
-    normalizedSymbols.forEach((sym) => {
-      const quote = state.quotes[sym];
-      if (quote) {
-        // Map enrichQuote format to Finnhub format
-        result[sym] = {
-          c: quote.current,
-          d: quote.change,
-          dp: quote.percentChange,
-          h: quote.high,
-          l: quote.low,
-          o: quote.open,
-          pc: quote.previousClose,
-          v: quote.volume,
-          name: quote.name || sym,
-          lastUpdate: quote.lastUpdate,
-        };
-      }
-    });
-    return result;
-  });
+  // Create a stable selector function that only re-renders when quote values change (M2 fix)
+  const quoteSelector = useCallback(
+    (state) => {
+      const result = {};
+      normalizedSymbols.forEach((sym) => {
+        const quote = state.quotes[sym];
+        if (quote) {
+          // Map enrichQuote format to Finnhub format
+          result[sym] = {
+            c: quote.current,
+            d: quote.change,
+            dp: quote.percentChange,
+            h: quote.high,
+            l: quote.low,
+            o: quote.open,
+            pc: quote.previousClose,
+            v: quote.volume,
+            name: quote.name || sym,
+            lastUpdate: quote.lastUpdate,
+          };
+        }
+      });
+      return result;
+    },
+    [normalizedSymbols]
+  );
+
+  // Use shallow comparison to prevent re-renders when quote objects are equal (M2 fix)
+  const quotes = useQuoteStore(useShallow(quoteSelector));
 
   const connected = useQuoteStore((state) => state.connected);
   const reconnecting = useQuoteStore((state) => state.reconnecting);

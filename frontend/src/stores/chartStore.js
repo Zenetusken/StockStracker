@@ -115,23 +115,33 @@ export const useChartStore = create((set, get) => ({
     const { preferences } = get();
     const upperSymbol = symbol?.toUpperCase();
 
-    // First check store, then localStorage
+    // Check if already loaded in store (single source of truth for session)
     if (preferences[upperSymbol]) {
       return preferences[upperSymbol];
     }
 
-    // Load from localStorage
+    // Load from localStorage and hydrate store for consistency
     const savedTimeframe = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
     const savedChartType = localStorage.getItem(`chart_type_${upperSymbol}`);
     const savedSmaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`);
     const savedSmaPeriod = localStorage.getItem(`chart_sma_period_${upperSymbol}`);
 
-    return {
+    const loadedPrefs = {
       timeframe: savedTimeframe || '1M',
       chartType: savedChartType || 'candlestick',
       smaEnabled: savedSmaEnabled === 'true',
       smaPeriod: parseInt(savedSmaPeriod) || 20,
     };
+
+    // Hydrate store so subsequent accesses use the store (reactive + consistent)
+    set((state) => ({
+      preferences: {
+        ...state.preferences,
+        [upperSymbol]: loadedPrefs,
+      },
+    }));
+
+    return loadedPrefs;
   },
 
   isLoadingKey: (cacheKey) => {

@@ -74,6 +74,8 @@ class ApiClient {
     const url = `${this.baseUrl}${endpoint}`;
     const method = options.method || 'GET';
     const skipRetry = options.skipRetry || false;
+    // N2 fix: Extract signal for AbortController support
+    const { signal } = options;
 
     // Build headers with CSRF token for state-changing requests
     const headers = {
@@ -89,6 +91,7 @@ class ApiClient {
     const config = {
       credentials: 'include',
       headers,
+      signal, // N2 fix: Pass abort signal to fetch
       ...options,
     };
 
@@ -100,6 +103,11 @@ class ApiClient {
     let attempt = 0;
 
     while (attempt <= (skipRetry ? 0 : RETRY_CONFIG.maxRetries)) {
+      // N2 fix: Check if aborted before each attempt
+      if (signal?.aborted) {
+        throw new DOMException('Request aborted', 'AbortError');
+      }
+
       try {
         let response = await fetch(url, config);
 
@@ -160,6 +168,11 @@ class ApiClient {
 
         return data;
       } catch (error) {
+        // N2 fix: Don't retry aborted requests
+        if (error.name === 'AbortError') {
+          throw error;
+        }
+
         if (error instanceof ApiError) {
           // Don't retry 401 errors
           if (error.status === 401) {
