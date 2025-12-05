@@ -1,29 +1,9 @@
 import express from 'express';
 import finnhub from '../services/finnhub.js';
+import yahoo from '../services/yahoo.js';
 import symbolService from '../services/symbols.js';
 
 const router = express.Router();
-
-/**
- * Well-known symbols with high market cap that should be boosted in results.
- * These are major US companies that users commonly search for.
- */
-const WELL_KNOWN_SYMBOLS = new Set([
-  // Mega-cap tech
-  'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NVDA', 'TSLA',
-  // Major tech
-  'NFLX', 'AMD', 'INTC', 'CRM', 'ORCL', 'ADBE', 'CSCO', 'IBM', 'QCOM',
-  // Finance
-  'JPM', 'BAC', 'WFC', 'GS', 'MS', 'V', 'MA', 'AXP', 'BRK.A', 'BRK.B',
-  // Healthcare
-  'JNJ', 'UNH', 'PFE', 'MRK', 'ABBV', 'LLY', 'TMO', 'ABT',
-  // Consumer
-  'WMT', 'HD', 'PG', 'KO', 'PEP', 'COST', 'MCD', 'NKE', 'SBUX', 'DIS',
-  // Energy & Industrial
-  'XOM', 'CVX', 'BA', 'CAT', 'GE', 'UPS', 'HON',
-  // ETFs
-  'SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'VOO', 'VEA', 'VWO', 'EFA', 'AGG',
-]);
 
 /**
  * Calculate relevance score for a search result.
@@ -37,7 +17,6 @@ const WELL_KNOWN_SYMBOLS = new Set([
  * - Description word match: +100
  * - Description contains query: +50
  * - Common Stock type: +30
- * - Well-known symbol: +25
  * - Shorter symbol (more recognizable): +10 * (10 - length)
  */
 function calculateRelevanceScore(item, query) {
@@ -75,11 +54,6 @@ function calculateRelevanceScore(item, query) {
     score += 30;
   }
   // ETP (ETFs) get no bonus but aren't penalized
-
-  // Well-known symbol boost
-  if (WELL_KNOWN_SYMBOLS.has(item.symbol.toUpperCase())) {
-    score += 25;
-  }
 
   // Shorter symbols are often more recognizable
   // Bonus: +10 for each character under 5
@@ -413,35 +387,10 @@ function isMarketOpen() {
 }
 
 /**
- * Trending symbols cache - stores calculated movers with timestamps
- * Adaptive TTL: 2 minutes during market hours, 10 minutes after hours
- */
-const trendingCache = {
-  data: null,
-  timestamp: 0,
-  fetching: false, // Prevent concurrent fetches
-  getTTL: () => isMarketOpen() ? 2 * 60 * 1000 : 10 * 60 * 1000, // 2min market, 10min after
-};
-
-/**
- * Symbols to track for trending/movers
- * Reduced to 15 most-watched symbols to minimize API calls
- * (was 33 symbols = 33 API calls per refresh)
- */
-const TRENDING_SYMBOLS = [
-  // Mega-cap tech (most watched - 7 symbols)
-  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
-  // Major sectors (4 symbols)
-  'JPM', 'JNJ', 'XOM', 'WMT',
-  // ETFs (3 symbols) - broad market coverage
-  'SPY', 'QQQ', 'IWM',
-  // Additional high-volume (1 symbol)
-  'AMD',
-];
-
-/**
  * GET /api/search/trending
- * Get trending stocks - top gainers and losers
+ * Get trending stocks from Yahoo Finance (100% dynamic - no hardcoded symbols)
+ * Uses Yahoo's trending_tickers screener for real-time trending data
+ *
  * Query params:
  *   - limit (number, default 5 per category)
  *   - refresh (boolean, force refresh cache)
@@ -451,88 +400,43 @@ const TRENDING_SYMBOLS = [
  *   - losers: Top stocks by negative % change
  *   - mostActive: Stocks with highest absolute % change
  *   - timestamp: When data was fetched
+ *   - source: 'yahoo' (dynamic)
  */
 router.get('/trending', async (req, res) => {
   try {
-    const { limit = 5, refresh } = req.query;
-    const resultLimit = Math.min(parseInt(limit) || 5, 10);
-    const forceRefresh = refresh === 'true' || refresh === '1';
+    const { limit = 5 } = req.query;
+    const resultLimit = Math.min(parseInt(limit) || 5, 15);
 
     const now = Date.now();
-    const cacheTTL = trendingCache.getTTL();
+    const startTime = Date.now();
 
-    // Check cache - use adaptive TTL based on market hours
-    if (!forceRefresh && trendingCache.data && (now - trendingCache.timestamp) < cacheTTL) {
-      console.log(`[Trending] Returning cached data (age: ${Math.round((now - trendingCache.timestamp) / 1000)}s, TTL: ${cacheTTL / 1000}s)`);
-      const cached = trendingCache.data;
+    console.log(`[Trending] Fetching dynamic trending from Yahoo (market ${isMarketOpen() ? 'open' : 'closed'})...`);
+
+    // Fetch trending tickers with quotes from Yahoo Finance (cached internally)
+    const trendingData = await yahoo.getTrendingTickersWithQuotes();
+    const fetchTime = Date.now() - startTime;
+
+    if (!trendingData || trendingData.length === 0) {
+      console.log('[Trending] No data from Yahoo, returning empty');
       return res.json({
-        gainers: cached.gainers.slice(0, resultLimit),
-        losers: cached.losers.slice(0, resultLimit),
-        mostActive: cached.mostActive.slice(0, resultLimit),
-        timestamp: cached.timestamp,
-        cached: true,
+        gainers: [],
+        losers: [],
+        mostActive: [],
+        timestamp: now,
+        source: 'yahoo',
         marketOpen: isMarketOpen(),
       });
     }
 
-    // Prevent concurrent fetches - if already fetching, wait and return cache
-    if (trendingCache.fetching && trendingCache.data) {
-      console.log('[Trending] Already fetching, returning stale cache');
-      const cached = trendingCache.data;
-      return res.json({
-        gainers: cached.gainers.slice(0, resultLimit),
-        losers: cached.losers.slice(0, resultLimit),
-        mostActive: cached.mostActive.slice(0, resultLimit),
-        timestamp: cached.timestamp,
-        cached: true,
-        stale: true,
-      });
-    }
-
-    trendingCache.fetching = true;
-    console.log(`[Trending] Fetching fresh quotes for ${TRENDING_SYMBOLS.length} symbols (market ${isMarketOpen() ? 'open' : 'closed'})...`);
-    const startTime = Date.now();
-
-    // Fetch quotes for all trending symbols
-    const quotes = await finnhub.getQuotes(TRENDING_SYMBOLS);
-    const fetchTime = Date.now() - startTime;
-
-    // Get symbol details from local database if available
-    const hasLocalData = symbolService.hasSyncedData();
-
-    // Calculate % change and build results
-    const movers = [];
-
-    for (const symbol of TRENDING_SYMBOLS) {
-      const quote = quotes[symbol];
-      if (!quote || !quote.c || quote.c <= 0 || !quote.pc || quote.pc <= 0) {
-        continue;
-      }
-
-      const change = quote.c - quote.pc;
-      const percentChange = (change / quote.pc) * 100;
-
-      // Get company name from local database
-      let description = symbol;
-      if (hasLocalData) {
-        const symbolInfo = symbolService.getBySymbol(symbol);
-        if (symbolInfo) {
-          description = symbolInfo.description;
-        }
-      }
-
-      movers.push({
-        symbol,
-        description,
-        price: parseFloat(quote.c.toFixed(2)),
-        change: parseFloat(change.toFixed(2)),
-        percentChange: parseFloat(percentChange.toFixed(2)),
-        high: quote.h,
-        low: quote.l,
-        open: quote.o,
-        previousClose: quote.pc,
-      });
-    }
+    // Transform Yahoo data to expected format
+    const movers = trendingData.map(stock => ({
+      symbol: stock.symbol,
+      description: stock.name || stock.symbol,
+      price: stock.price,
+      change: stock.change,
+      percentChange: stock.changePercent,
+      volume: stock.volume,
+    }));
 
     // Sort for gainers (highest positive % change)
     const gainers = [...movers]
@@ -548,31 +452,18 @@ router.get('/trending', async (req, res) => {
     const mostActive = [...movers]
       .sort((a, b) => Math.abs(b.percentChange) - Math.abs(a.percentChange));
 
-    const trendingData = {
-      gainers,
-      losers,
-      mostActive,
-      timestamp: now,
-      fetchTime,
-    };
-
-    // Update cache and reset fetching flag
-    trendingCache.data = trendingData;
-    trendingCache.timestamp = now;
-    trendingCache.fetching = false;
-
-    console.log(`[Trending] Found ${gainers.length} gainers, ${losers.length} losers in ${fetchTime}ms (${TRENDING_SYMBOLS.length} API calls)`);
+    console.log(`[Trending] Found ${gainers.length} gainers, ${losers.length} losers from ${movers.length} trending stocks in ${fetchTime}ms`);
 
     res.json({
       gainers: gainers.slice(0, resultLimit),
       losers: losers.slice(0, resultLimit),
       mostActive: mostActive.slice(0, resultLimit),
       timestamp: now,
-      cached: false,
+      source: 'yahoo',
       fetchTime,
+      marketOpen: isMarketOpen(),
     });
   } catch (error) {
-    trendingCache.fetching = false; // Reset on error
     console.error('Error fetching trending stocks:', error);
     res.status(500).json({ error: 'Failed to fetch trending stocks' });
   }

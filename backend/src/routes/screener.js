@@ -4,28 +4,37 @@ import yahooFinanceService from '../services/yahoo.js';
 
 const router = express.Router();
 
-// Optimized stock universe - 50 most liquid stocks (reduced from 90+ for API efficiency)
-// Yahoo Finance is used as primary provider (no API key, 100/day limit vs Finnhub's 60/min)
-const SCREENER_UNIVERSE = [
-  // Mega Cap Tech (10)
-  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'AVGO', 'ORCL', 'ADBE',
-  // Large Cap Tech (5)
-  'CRM', 'AMD', 'INTC', 'CSCO', 'QCOM',
-  // Financials (7)
-  'JPM', 'BAC', 'WFC', 'GS', 'V', 'MA', 'AXP',
-  // Healthcare (7)
-  'UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'PFE', 'TMO',
-  // Consumer (7)
-  'WMT', 'PG', 'KO', 'PEP', 'COST', 'HD', 'MCD',
-  // Industrial (5)
-  'CAT', 'BA', 'HON', 'UPS', 'RTX',
-  // Energy (4)
-  'XOM', 'CVX', 'COP', 'SLB',
-  // Communication (3)
-  'DIS', 'NFLX', 'CMCSA',
-  // Utilities (2)
-  'NEE', 'DUK',
-];
+/**
+ * Get dynamic stock universe from Yahoo Finance screeners
+ * Combines most_actives + day_gainers for a diverse, liquid stock list
+ * No hardcoded symbols - 100% dynamic from Yahoo Finance API
+ */
+async function getDynamicUniverse() {
+  try {
+    // Fetch from Yahoo's predefined screeners (these return liquid, actively traded stocks)
+    const [mostActives, gainers] = await Promise.all([
+      yahooFinanceService.getMarketMovers('most_actives', 30),
+      yahooFinanceService.getMarketMovers('day_gainers', 20),
+    ]);
+
+    // Combine and deduplicate symbols
+    const symbolSet = new Set();
+    const stocks = [];
+
+    for (const stock of [...mostActives, ...gainers]) {
+      if (!symbolSet.has(stock.symbol)) {
+        symbolSet.add(stock.symbol);
+        stocks.push(stock);
+      }
+    }
+
+    console.log(`[Screener] Dynamic universe: ${stocks.length} stocks from Yahoo screeners`);
+    return stocks;
+  } catch (error) {
+    console.error('[Screener] Failed to fetch dynamic universe:', error.message);
+    return [];
+  }
+}
 
 // Sector mapping
 const SECTORS = [
@@ -457,19 +466,26 @@ router.get('/', async (req, res) => {
 
     console.log('[Screener] Running with filters:', filters);
 
-    // PRE-BATCH: Fetch all quotes in 1-3 API calls (instead of 50 individual calls)
-    // This populates the quote cache so getProfile() hits cache for quotes
-    await preBatchQuotes(SCREENER_UNIVERSE);
+    // Get dynamic stock universe from Yahoo Finance (no hardcoded lists)
+    const universe = await getDynamicUniverse();
+
+    if (universe.length === 0) {
+      console.log('[Screener] No stocks in dynamic universe');
+      return res.json({ count: 0, filters, results: [], source: 'yahoo-dynamic' });
+    }
+
+    // Extract symbols and pre-batch quotes
+    const symbols = universe.map(s => s.symbol);
+    await preBatchQuotes(symbols);
 
     // Fetch profiles for all stocks in universe (with caching)
-    // Quotes will be served from cache populated by preBatchQuotes
     const profiles = await Promise.all(
-      SCREENER_UNIVERSE.map(symbol => getProfile(symbol))
+      symbols.map(symbol => getProfile(symbol))
     );
 
     // Filter stocks based on criteria
     const results = profiles
-      .filter(profile => matchesFilters(profile, filters))
+      .filter(profile => profile && matchesFilters(profile, filters))
       .slice(0, parseInt(limit));
 
     console.log(`[Screener] Found ${results.length} stocks matching filters`);
@@ -477,6 +493,7 @@ router.get('/', async (req, res) => {
     res.json({
       count: results.length,
       filters,
+      source: 'yahoo-dynamic',
       results: results.map(profile => ({
         symbol: profile.symbol,
         name: profile.name,
@@ -515,10 +532,20 @@ router.get('/sectors', (req, res) => {
 
 /**
  * GET /api/screener/universe
- * Get list of stocks in screener universe
+ * Get list of stocks in screener universe (dynamic from Yahoo Finance)
  */
-router.get('/universe', (req, res) => {
-  res.json(SCREENER_UNIVERSE);
+router.get('/universe', async (req, res) => {
+  try {
+    const universe = await getDynamicUniverse();
+    res.json({
+      count: universe.length,
+      source: 'yahoo-dynamic',
+      symbols: universe.map(s => s.symbol),
+    });
+  } catch (error) {
+    console.error('[Screener] Universe error:', error);
+    res.status(500).json({ error: 'Failed to fetch universe' });
+  }
 });
 
 export default router;

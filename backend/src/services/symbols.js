@@ -2,27 +2,6 @@ import db from '../database.js';
 import finnhub from './finnhub.js';
 
 /**
- * Well-known symbols with high market cap that should be boosted in results.
- * These are major US companies that users commonly search for.
- */
-const WELL_KNOWN_SYMBOLS = new Set([
-  // Mega-cap tech
-  'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NVDA', 'TSLA',
-  // Major tech
-  'NFLX', 'AMD', 'INTC', 'CRM', 'ORCL', 'ADBE', 'CSCO', 'IBM', 'QCOM',
-  // Finance
-  'JPM', 'BAC', 'WFC', 'GS', 'MS', 'V', 'MA', 'AXP', 'BRK.A', 'BRK.B',
-  // Healthcare
-  'JNJ', 'UNH', 'PFE', 'MRK', 'ABBV', 'LLY', 'TMO', 'ABT',
-  // Consumer
-  'WMT', 'HD', 'PG', 'KO', 'PEP', 'COST', 'MCD', 'NKE', 'SBUX', 'DIS',
-  // Energy & Industrial
-  'XOM', 'CVX', 'BA', 'CAT', 'GE', 'UPS', 'HON',
-  // ETFs
-  'SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'VOO', 'VEA', 'VWO', 'EFA', 'AGG',
-]);
-
-/**
  * Symbol Service
  * Manages the local symbol database for fast offline-first search.
  */
@@ -495,7 +474,8 @@ class SymbolService {
       const insertMany = db.transaction((symbolBatch) => {
         for (const sym of symbolBatch) {
           const searchText = `${sym.symbol} ${sym.description || ''}`.toLowerCase();
-          const popularityScore = WELL_KNOWN_SYMBOLS.has(sym.symbol) ? 100 : 0;
+          // Popularity score is 0 by default - no hardcoded boosting
+          const popularityScore = 0;
 
           this.insertSymbol.run(
             sym.symbol,
@@ -596,11 +576,6 @@ class SymbolService {
     // Type prioritization
     if (item.type === 'Common Stock') {
       score += 30;
-    }
-
-    // Well-known symbol boost
-    if (WELL_KNOWN_SYMBOLS.has(item.symbol.toUpperCase())) {
-      score += 25;
     }
 
     // Shorter symbols are often more recognizable
