@@ -1,5 +1,5 @@
 import { ExternalLink, Clock, Newspaper, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * NewsCard Component
@@ -42,6 +42,7 @@ function analyzeSentiment(headline = '', summary = '') {
 }
 
 function NewsCard({ article }) {
+  const navigate = useNavigate();
   const {
     headline,
     summary,
@@ -151,18 +152,22 @@ function NewsCard({ article }) {
             </p>
           )}
 
-          {/* Related Symbols (#99) */}
+          {/* Related Symbols (#99) - using buttons to avoid nested <a> tags */}
           {relatedSymbols.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
               {relatedSymbols.slice(0, 5).map((symbol) => (
-                <Link
+                <button
                   key={symbol}
-                  to={`/stock/${symbol}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="px-2 py-0.5 bg-brand/10 text-brand rounded text-xs font-medium hover:bg-brand/20 transition-colors"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(`/stock/${symbol}`);
+                  }}
+                  className="px-2 py-0.5 bg-brand/10 text-brand rounded text-xs font-medium hover:bg-brand/20 transition-colors cursor-pointer"
                 >
                   ${symbol}
-                </Link>
+                </button>
               ))}
               {relatedSymbols.length > 5 && (
                 <span className="px-2 py-0.5 text-text-muted text-xs">

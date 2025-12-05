@@ -331,60 +331,74 @@ export const useChartStore = create((set, get) => ({
     }
   },
 
+  // Helper to ensure complete preferences object (prevents partial updates when store isn't hydrated)
+  _getExistingPrefs: (state, upperSymbol) => {
+    if (state.preferences[upperSymbol]) {
+      return state.preferences[upperSymbol];
+    }
+    // Load from localStorage if not in store yet
+    return {
+      timeframe: localStorage.getItem(`chart_timeframe_${upperSymbol}`) || '1M',
+      chartType: localStorage.getItem(`chart_type_${upperSymbol}`) || 'candlestick',
+      smaEnabled: localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true',
+      smaPeriod: parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20,
+    };
+  },
+
   setTimeframe: (symbol, timeframe) => {
     const upperSymbol = symbol.toUpperCase();
     localStorage.setItem(`chart_timeframe_${upperSymbol}`, timeframe);
-    set((state) => ({
-      preferences: {
-        ...state.preferences,
-        [upperSymbol]: {
-          ...state.preferences[upperSymbol],
-          timeframe,
+    set((state) => {
+      const existing = get()._getExistingPrefs(state, upperSymbol);
+      return {
+        preferences: {
+          ...state.preferences,
+          [upperSymbol]: { ...existing, timeframe },
         },
-      },
-    }));
+      };
+    });
   },
 
   setChartType: (symbol, chartType) => {
     const upperSymbol = symbol.toUpperCase();
     localStorage.setItem(`chart_type_${upperSymbol}`, chartType);
-    set((state) => ({
-      preferences: {
-        ...state.preferences,
-        [upperSymbol]: {
-          ...state.preferences[upperSymbol],
-          chartType,
+    set((state) => {
+      const existing = get()._getExistingPrefs(state, upperSymbol);
+      return {
+        preferences: {
+          ...state.preferences,
+          [upperSymbol]: { ...existing, chartType },
         },
-      },
-    }));
+      };
+    });
   },
 
   setSmaEnabled: (symbol, enabled) => {
     const upperSymbol = symbol.toUpperCase();
     localStorage.setItem(`chart_sma_enabled_${upperSymbol}`, enabled.toString());
-    set((state) => ({
-      preferences: {
-        ...state.preferences,
-        [upperSymbol]: {
-          ...state.preferences[upperSymbol],
-          smaEnabled: enabled,
+    set((state) => {
+      const existing = get()._getExistingPrefs(state, upperSymbol);
+      return {
+        preferences: {
+          ...state.preferences,
+          [upperSymbol]: { ...existing, smaEnabled: enabled },
         },
-      },
-    }));
+      };
+    });
   },
 
   setSmaPeriod: (symbol, period) => {
     const upperSymbol = symbol.toUpperCase();
     localStorage.setItem(`chart_sma_period_${upperSymbol}`, period.toString());
-    set((state) => ({
-      preferences: {
-        ...state.preferences,
-        [upperSymbol]: {
-          ...state.preferences[upperSymbol],
-          smaPeriod: period,
+    set((state) => {
+      const existing = get()._getExistingPrefs(state, upperSymbol);
+      return {
+        preferences: {
+          ...state.preferences,
+          [upperSymbol]: { ...existing, smaPeriod: period },
         },
-      },
-    }));
+      };
+    });
   },
 
   clearCache: (symbol = null) => {

@@ -72,27 +72,45 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
   const [chartDataState, setChartDataState] = useState(null);
   const chartDataKeyRef = useRef(''); // Track current data key to prevent stale updates
 
-  // Get preferences and actions from chartStore
-  const getPreferences = useChartStore((state) => state.getPreferences);
+  // Get actions from chartStore (preferences now read directly from localStorage)
   const setStoreTimeframe = useChartStore((state) => state.setTimeframe);
   const setStoreChartType = useChartStore((state) => state.setChartType);
   const setStoreSmaEnabled = useChartStore((state) => state.setSmaEnabled);
   const setStoreSmaPeriod = useChartStore((state) => state.setSmaPeriod);
   const fetchCandles = useChartStore((state) => state.fetchCandles);
 
-  // Get preferences from store (handles localStorage internally)
-  const preferences = getPreferences(symbol);
-  const [chartType, setChartType] = useState(preferences.chartType || initialChartType);
-  const [timeframe, setTimeframe] = useState(preferences.timeframe || initialTimeframe);
+  // Use lazy initializers to read preferences directly from localStorage
+  // This avoids the anti-pattern of calling store.set() during render
+  const upperSymbol = symbol?.toUpperCase();
+  const [chartType, setChartType] = useState(() => {
+    const saved = localStorage.getItem(`chart_type_${upperSymbol}`);
+    return saved || initialChartType;
+  });
+  const [timeframe, setTimeframe] = useState(() => {
+    const saved = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
+    return saved || initialTimeframe;
+  });
   // Multiple SMAs: array of enabled periods (e.g., [20, 50])
   const [enabledSMAs, setEnabledSMAs] = useState(() => {
-    // Migrate from old single SMA format if present
-    if (preferences.smaEnabled && preferences.smaPeriod) {
-      return [preferences.smaPeriod];
+    // Check for new format first
+    const savedEnabledSMAs = localStorage.getItem(`chart_enabled_smas_${upperSymbol}`);
+    if (savedEnabledSMAs) {
+      try {
+        return JSON.parse(savedEnabledSMAs);
+      } catch { /* ignore parse errors */ }
     }
-    return preferences.enabledSMAs || [];
+    // Migrate from old single SMA format if present
+    const smaEnabled = localStorage.getItem(`chart_sma_enabled_${upperSymbol}`) === 'true';
+    const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${upperSymbol}`)) || 20;
+    if (smaEnabled && smaPeriod) {
+      return [smaPeriod];
+    }
+    return [];
   });
-  const [availablePeriods, setAvailablePeriods] = useState(() => getAvailableSmaPeriods(preferences.timeframe || initialTimeframe));
+  const [availablePeriods, setAvailablePeriods] = useState(() => {
+    const savedTimeframe = localStorage.getItem(`chart_timeframe_${upperSymbol}`);
+    return getAvailableSmaPeriods(savedTimeframe || initialTimeframe);
+  });
 
   // Memoized SMA calculations - only recalculates when chartData or enabledSMAs change
   // This prevents expensive recalculation when only visibility toggles change
@@ -111,20 +129,45 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
     return map;
   }, [chartDataState, enabledSMAs]);
 
-  // Sync preferences from store when symbol changes
+  // Track the previous symbol to detect navigation between different stocks
+  const prevSymbolRef = useRef(upperSymbol);
+
+  // Sync preferences from localStorage ONLY when navigating to a DIFFERENT symbol
+  // This effect should NOT run on initial mount (prevSymbolRef starts with current symbol)
   useEffect(() => {
-    const prefs = getPreferences(symbol);
-    setTimeframe(prefs.timeframe || initialTimeframe);
-    setChartType(prefs.chartType || initialChartType);
-    // Handle migration from old single SMA format
-    if (prefs.enabledSMAs) {
-      setEnabledSMAs(prefs.enabledSMAs);
-    } else if (prefs.smaEnabled && prefs.smaPeriod) {
-      setEnabledSMAs([prefs.smaPeriod]);
-    } else {
-      setEnabledSMAs([]);
+    const newUpperSymbol = symbol?.toUpperCase();
+
+    // Skip if this is the initial mount (same symbol) - lazy initializers already handled it
+    if (prevSymbolRef.current === newUpperSymbol) {
+      return;
     }
-  }, [symbol, initialTimeframe, initialChartType, getPreferences]);
+
+    // Update the ref for next comparison
+    prevSymbolRef.current = newUpperSymbol;
+
+    // Read preferences for the NEW symbol from localStorage
+    const savedTimeframe = localStorage.getItem(`chart_timeframe_${newUpperSymbol}`);
+    const savedChartType = localStorage.getItem(`chart_type_${newUpperSymbol}`);
+    setTimeframe(savedTimeframe || initialTimeframe);
+    setChartType(savedChartType || initialChartType);
+
+    // Handle SMA migration from old single format
+    const savedEnabledSMAs = localStorage.getItem(`chart_enabled_smas_${newUpperSymbol}`);
+    if (savedEnabledSMAs) {
+      try {
+        setEnabledSMAs(JSON.parse(savedEnabledSMAs));
+      } catch { setEnabledSMAs([]); }
+    } else {
+      const smaEnabled = localStorage.getItem(`chart_sma_enabled_${newUpperSymbol}`) === 'true';
+      const smaPeriod = parseInt(localStorage.getItem(`chart_sma_period_${newUpperSymbol}`)) || 20;
+      if (smaEnabled && smaPeriod) {
+        setEnabledSMAs([smaPeriod]);
+      } else {
+        setEnabledSMAs([]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
 
   // N8 fix: Consolidated preference sync effect
   // Syncs timeframe, chartType, and SMA settings to store in a single effect
@@ -850,7 +893,12 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
             {['candlestick', 'line', 'area'].map(type => (
               <button
                 key={type}
-                onClick={() => setChartType(type)}
+                onClick={() => {
+                  // Save to localStorage immediately for persistence
+                  const key = `chart_type_${symbol?.toUpperCase()}`;
+                  localStorage.setItem(key, type);
+                  setChartType(type);
+                }}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   chartType === type
                     ? 'bg-card text-text-primary shadow-sm'

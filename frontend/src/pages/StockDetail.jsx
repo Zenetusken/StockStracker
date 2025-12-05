@@ -298,7 +298,7 @@ function StockDetail() {
 
         {/* Stock Chart */}
         <div className="mb-6">
-          <StockChart symbol={symbol} chartType="candlestick" timeframe="6M" />
+          <StockChart symbol={symbol} />
         </div>
 
         {/* Company Profile */}
