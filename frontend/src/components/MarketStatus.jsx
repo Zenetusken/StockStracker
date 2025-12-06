@@ -119,7 +119,8 @@ function MarketStatus() {
   const nextEventLabel = NEXT_EVENT_LABELS[status.nextEvent] || 'Next';
 
   return (
-    <div className="bg-card rounded-lg shadow p-4">
+    <div className="bg-card rounded-lg shadow p-4 flex flex-col min-h-[140px]">
+      {/* Header section */}
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -128,25 +129,9 @@ function MarketStatus() {
               {config.label}
             </span>
           </div>
-          <div className="text-xs text-text-muted mb-3">
+          <div className="text-xs text-text-muted">
             {status.currentTime?.day}, {status.currentTime?.time}
           </div>
-
-          {countdown && countdown.totalMinutes > 0 && (
-            <div>
-              <div className="text-xs text-text-muted mb-1">{nextEventLabel}</div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-text-primary">
-                  {countdown.hours}
-                </span>
-                <span className="text-sm text-text-muted">h</span>
-                <span className="text-2xl font-bold text-text-primary ml-1">
-                  {countdown.minutes}
-                </span>
-                <span className="text-sm text-text-muted">m</span>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className={`p-2 rounded-lg bg-page-bg ${config.textColor}`}>
@@ -154,8 +139,26 @@ function MarketStatus() {
         </div>
       </div>
 
+      {/* Countdown section */}
+      {countdown && countdown.totalMinutes > 0 && (
+        <div className="mt-3">
+          <div className="text-xs text-text-muted mb-1">{nextEventLabel}</div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-bold text-text-primary">
+              {countdown.hours}
+            </span>
+            <span className="text-sm text-text-muted">h</span>
+            <span className="text-2xl font-bold text-text-primary ml-1">
+              {countdown.minutes}
+            </span>
+            <span className="text-sm text-text-muted">m</span>
+          </div>
+        </div>
+      )}
+
+      {/* Weekend footer - attached to bottom */}
       {status.isWeekend && (
-        <div className="mt-3 pt-3 border-t border-border">
+        <div className="mt-auto pt-3 border-t border-border">
           <div className="text-xs text-text-muted flex items-center gap-1">
             <Clock className="w-3 h-3" />
             Markets reopen Monday 9:30 AM ET
