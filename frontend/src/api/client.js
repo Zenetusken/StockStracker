@@ -77,6 +77,12 @@ class ApiClient {
     // N2 fix: Extract signal for AbortController support
     const { signal } = options;
 
+    // For state-changing requests, ensure we have a CSRF token
+    const needsCsrf = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+    if (needsCsrf && !this.csrfToken) {
+      await this.fetchCsrfToken();
+    }
+
     // Build headers with CSRF token for state-changing requests
     const headers = {
       'Content-Type': 'application/json',
@@ -84,7 +90,7 @@ class ApiClient {
     };
 
     // Include CSRF token for POST, PUT, DELETE, PATCH requests
-    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && this.csrfToken) {
+    if (needsCsrf && this.csrfToken) {
       headers['x-csrf-token'] = this.csrfToken;
     }
 
@@ -132,12 +138,18 @@ class ApiClient {
 
         // If CSRF token error, refresh token and retry once
         if (response.status === 403 && data?.error?.includes('CSRF')) {
+          console.warn('[API] CSRF token invalid, refreshing and retrying...');
           await this.fetchCsrfToken();
           if (this.csrfToken) {
             config.headers['x-csrf-token'] = this.csrfToken;
             response = await fetch(url, config);
             if (response.status === 204) return null;
             data = await response.json().catch(() => null);
+            if (response.ok) {
+              console.log('[API] CSRF retry successful');
+            }
+          } else {
+            console.error('[API] Failed to refresh CSRF token');
           }
         }
 

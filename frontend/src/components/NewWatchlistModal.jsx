@@ -147,6 +147,7 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
                   <Icon
                     className="w-5 h-5"
                     style={{ color: selectedIcon === name ? selectedColor : undefined }}
+                    fill={selectedIcon === name ? selectedColor : 'none'}
                   />
                 </button>
               ))}
@@ -165,6 +166,7 @@ function NewWatchlistModal({ isOpen, onClose, onSuccess }) {
                   <IconComponent
                     className="w-5 h-5"
                     style={{ color: selectedColor }}
+                    fill={selectedColor}
                   />
                 );
               })()}

@@ -1,25 +1,12 @@
-import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Scale } from 'lucide-react';
 import { useQuotes } from '../stores/quoteStore';
 
 function BenchmarkComparison({ portfolioValue, portfolioCostBasis }) {
-  const { quotes, fetchQuote } = useQuotes(['SPY']);
-  const [loading, setLoading] = useState(true);
+  // useQuotes automatically subscribes via SSE and fetches via REST fallback
+  const { quotes, connected } = useQuotes(['SPY']);
 
-  // Fetch SPY quote on mount
-  useEffect(() => {
-    const loadBenchmark = async () => {
-      setLoading(true);
-      try {
-        await fetchQuote('SPY');
-      } catch (err) {
-        console.error('Failed to load SPY benchmark:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadBenchmark();
-  }, [fetchQuote]);
+  // Loading state based on whether we have the quote yet
+  const loading = !quotes['SPY'] && connected;
 
   const spyQuote = quotes['SPY'];
   const spyDayChange = spyQuote?.dp || 0;
