@@ -6,6 +6,7 @@ import MFAVerificationPage from './pages/MFAVerificationPage';
 import Dashboard from './pages/Dashboard';
 import Portfolio from './pages/Portfolio';
 import StockDetail from './pages/StockDetail';
+import Watchlists from './pages/Watchlists';
 import WatchlistDetail from './pages/WatchlistDetail';
 import PortfolioDetail from './pages/PortfolioDetail';
 import Alerts from './pages/Alerts';
@@ -108,6 +109,14 @@ function App() {
           }
         />
         <Route
+          path="/watchlists"
+          element={
+            <ProtectedRoute>
+              <Watchlists />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/watchlist/:id"
           element={
             <ProtectedRoute>
@@ -173,6 +182,7 @@ function AuthenticatedMobileNav() {
 }
 
 // Subtle disclaimer footer for legal protection
+// Positioned only in main content area, with gradient fade effect
 function DisclaimerFooter() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
@@ -180,12 +190,9 @@ function DisclaimerFooter() {
   if (!isAuthenticated) return null;
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 bg-dark-card/95 backdrop-blur-sm border-t border-gray-800 py-1.5 px-4 text-center z-40 md:pb-1.5 pb-16">
-      <p className="text-[10px] text-gray-500">
-        Data provided by Yahoo Finance & Finnhub for informational purposes only — not investment advice.
-        <span className="ml-1 text-gray-600">
-          Verify all data before making investment decisions.
-        </span>
+    <footer className="fixed bottom-0 left-0 right-0 sm:left-64 bg-gradient-to-t from-dark-bg/80 to-transparent pt-6 pb-1 px-4 text-center z-30 pointer-events-none md:pb-1 pb-14">
+      <p className="text-[9px] text-gray-500/70 pointer-events-auto select-none">
+        Data by Yahoo Finance & Finnhub • Not investment advice • Verify before investing
       </p>
     </footer>
   );

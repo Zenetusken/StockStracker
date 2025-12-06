@@ -16,13 +16,8 @@ export default function WatchlistSummaryCard() {
   const totalStocks = watchlists.reduce((sum, w) => sum + (w.item_count || 0), 0);
 
   const handleClick = () => {
-    // Navigate to first watchlist or default
-    const defaultWatchlist = watchlists.find((w) => w.is_default) || watchlists[0];
-    if (defaultWatchlist) {
-      navigate(`/watchlist/${defaultWatchlist.id}`);
-    } else {
-      navigate('/dashboard');
-    }
+    // Navigate to watchlists overview page
+    navigate('/watchlists');
   };
 
   // Loading state
@@ -48,7 +43,7 @@ export default function WatchlistSummaryCard() {
   if (watchlists.length === 0) {
     return (
       <div
-        onClick={() => navigate('/dashboard')}
+        onClick={() => navigate('/watchlists')}
         className="rounded-lg shadow bg-card p-6 cursor-pointer hover:shadow-md transition-shadow h-full"
       >
         <div className="flex items-center justify-between mb-3">
@@ -101,7 +96,7 @@ export default function WatchlistSummaryCard() {
                 <WatchlistIcon
                   className="w-4 h-4"
                   style={{ color: watchlist.color }}
-                  fill={watchlist.is_default ? watchlist.color : 'none'}
+                  fill={watchlist.color}
                 />
                 <span className="text-text-primary truncate max-w-[120px]">
                   {watchlist.name}
