@@ -1520,44 +1520,52 @@ router.get('/status', (req, res) => {
     let minutesUntil = 0;
     let isWeekend = false;
 
-    if (day === 0 || day === 6) {
-      // Weekend
-      isWeekend = true;
+    // Helper: Calculate minutes from current time to a target time on a future day
+    // targetMinutes: minutes from midnight (e.g., 570 for 9:30 AM)
+    // daysAhead: number of days to add
+    const minutesToTarget = (targetMinutes, daysAhead = 0) => {
+      if (daysAhead === 0 && targetMinutes > currentMinutes) {
+        return targetMinutes - currentMinutes;
+      }
+      // Minutes until midnight + full days + target time
+      const minutesToMidnight = 24 * 60 - currentMinutes;
+      return minutesToMidnight + ((daysAhead - 1) * 24 * 60) + targetMinutes;
+    };
+
+    // Check if it's effectively a "weekend" period (Sat, Sun, or Friday after 8 PM)
+    const isFridayAfterHours = day === 5 && currentMinutes >= afterHoursClose;
+    isWeekend = day === 0 || day === 6 || isFridayAfterHours;
+
+    if (isWeekend) {
+      // Weekend or Friday after hours - show countdown to Monday market open
       status = 'closed';
-      // Calculate minutes until Monday 9:30 AM
-      const daysUntilMonday = day === 0 ? 1 : 2;
-      minutesUntil = (daysUntilMonday * 24 * 60) + (marketOpen - currentMinutes);
+      let daysUntilMonday;
+      if (day === 5) daysUntilMonday = 3;      // Friday -> Monday
+      else if (day === 6) daysUntilMonday = 2; // Saturday -> Monday
+      else daysUntilMonday = 1;                 // Sunday -> Monday
+
+      minutesUntil = minutesToTarget(marketOpen, daysUntilMonday);
       nextEvent = 'market-open';
     } else if (currentMinutes >= preMarketOpen && currentMinutes < marketOpen) {
-      // Pre-market
+      // Pre-market (4:00 AM - 9:30 AM)
       status = 'pre-market';
       minutesUntil = marketOpen - currentMinutes;
       nextEvent = 'market-open';
     } else if (currentMinutes >= marketOpen && currentMinutes < marketClose) {
-      // Market open
+      // Market open (9:30 AM - 4:00 PM)
       status = 'open';
       minutesUntil = marketClose - currentMinutes;
       nextEvent = 'market-close';
     } else if (currentMinutes >= marketClose && currentMinutes < afterHoursClose) {
-      // After hours
+      // After hours (4:00 PM - 8:00 PM)
       status = 'after-hours';
       minutesUntil = afterHoursClose - currentMinutes;
       nextEvent = 'after-hours-close';
     } else {
-      // Closed (before pre-market or after after-hours)
+      // Closed - before pre-market (midnight - 4:00 AM)
       status = 'closed';
-      if (currentMinutes < preMarketOpen) {
-        minutesUntil = preMarketOpen - currentMinutes;
-        nextEvent = 'pre-market-open';
-      } else {
-        // After 8 PM, calculate to next day
-        minutesUntil = (24 * 60 - currentMinutes) + preMarketOpen;
-        nextEvent = 'pre-market-open';
-        // If Friday after hours, skip to Monday
-        if (day === 5 && currentMinutes >= afterHoursClose) {
-          minutesUntil += 2 * 24 * 60;
-        }
-      }
+      minutesUntil = preMarketOpen - currentMinutes;
+      nextEvent = 'pre-market-open';
     }
 
     // Format countdown
