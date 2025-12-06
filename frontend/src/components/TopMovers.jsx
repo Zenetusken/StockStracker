@@ -22,15 +22,24 @@ import { getMarketStatus } from '../utils/marketStatus';
 
 /**
  * Enhanced Top Movers Component
- * Displays market movers across multiple categories - ALL using Yahoo's dynamic screeners
- * No hardcoded symbol lists - all data comes from Yahoo Finance API
+ * Displays market movers across multiple categories using Yahoo Finance screeners.
+ *
+ * Data Sources (all Yahoo Finance):
+ * - Trending tickers (unfiltered viral movers)
+ * - Most actives (high volume)
+ * - Day gainers/losers (large/mid cap)
+ * - Small cap gainers
+ * - Aggressive small caps (penny stocks, micro-caps)
  *
  * Categories:
- * - Viral Movers (TRUE top movers - no price/market cap filters)
+ * - Top Movers (Multi-source merge from trending, actives, screeners)
  * - Large & Mid Cap (Gainers, Losers, Most Active)
  * - Small Cap (Gainers, Aggressive)
  * - Growth Stocks (Undervalued, Tech Growth)
  * - Most Watched (Trending)
+ * - Canada (TSX/TSXV/CSE)
+ *
+ * Display: Shows 15 stocks by default, expandable to 25 per tab
  */
 
 // Section definitions with tabs
@@ -41,7 +50,7 @@ const SECTIONS = [
     id: 'viral',
     label: 'Top Movers',
     icon: Flame,
-    description: 'Highest % gainers/losers across all market caps',
+    description: 'Multi-source: trending, actives, screeners (all market caps)',
     tabs: [
       { id: 'gainers', label: 'Top Gainers', icon: TrendingUp, color: 'text-gain' },
       { id: 'losers', label: 'Top Losers', icon: TrendingDown, color: 'text-loss' },
@@ -96,6 +105,10 @@ const SECTIONS = [
   },
 ];
 
+// Display configuration
+const DEFAULT_DISPLAY_COUNT = 15; // Show 15 stocks by default
+const EXPANDED_DISPLAY_COUNT = 25; // Show 25 stocks when expanded
+
 function TopMovers() {
   // N3 fix: Use store for movers data with caching
   const data = useMarketOverviewStore((state) => state.movers);
@@ -113,6 +126,8 @@ function TopMovers() {
     trending: 'watched',
     canada: 'gainers',
   });
+  // Track which tabs are showing expanded view (25 items)
+  const [expandedTabs, setExpandedTabs] = useState({});
   // N3 fix: Track current time in state for pure render (avoids Date.now() during render)
   const [currentTime, setCurrentTime] = useState(() => Date.now());
 
@@ -232,8 +247,23 @@ function TopMovers() {
     return section.tabs.some(tab => getStocksForTab(sectionId, tab.id).length > 0);
   };
 
+  // Toggle expanded view for a specific section/tab
+  const toggleExpandedTab = (sectionId, tabId) => {
+    const key = `${sectionId}:${tabId}`;
+    setExpandedTabs(prev => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  // Check if a tab is expanded
+  const isTabExpanded = (sectionId, tabId) => {
+    const key = `${sectionId}:${tabId}`;
+    return expandedTabs[key] || false;
+  };
+
   // Render stock list
-  const renderStockList = (stocks, showVolume = false) => {
+  const renderStockList = (stocks, showVolume = false, sectionId = '', tabId = '') => {
     if (!stocks || stocks.length === 0) {
       return (
         <div className="text-center py-4 text-text-muted text-sm">
@@ -242,9 +272,15 @@ function TopMovers() {
       );
     }
 
+    const isExpanded = isTabExpanded(sectionId, tabId);
+    const displayCount = isExpanded ? EXPANDED_DISPLAY_COUNT : DEFAULT_DISPLAY_COUNT;
+    const displayedStocks = stocks.slice(0, displayCount);
+    const hasMore = stocks.length > displayCount;
+    const hiddenCount = stocks.length - displayCount;
+
     return (
       <div className="space-y-1">
-        {stocks.slice(0, 10).map((stock, idx) => (
+        {displayedStocks.map((stock, idx) => (
           <Link
             key={stock.symbol}
             to={`/stock/${stock.symbol}`}
@@ -255,9 +291,17 @@ function TopMovers() {
                 {idx + 1}
               </span>
               <div className="min-w-0">
-                <span className="font-semibold text-text-primary text-sm">
-                  {stock.symbol}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-text-primary text-sm">
+                    {stock.symbol}
+                  </span>
+                  {/* Exchange badge for non-US stocks */}
+                  {stock.exchange && stock.exchange !== 'US' && stock.exchange !== 'XNAS' && stock.exchange !== 'XNYS' && (
+                    <span className="text-[10px] px-1 py-0.5 rounded bg-page-bg text-text-muted font-medium">
+                      {stock.exchange}
+                    </span>
+                  )}
+                </div>
                 {stock.name && stock.name !== stock.symbol && (
                   <p className="text-xs text-text-muted truncate max-w-[120px]">
                     {stock.name}
@@ -283,6 +327,20 @@ function TopMovers() {
             </div>
           </Link>
         ))}
+
+        {/* Show more/less toggle */}
+        {(hasMore || isExpanded) && (
+          <button
+            onClick={() => toggleExpandedTab(sectionId, tabId)}
+            className="w-full py-2 text-xs font-medium text-brand hover:text-brand/80 hover:bg-brand/5 rounded transition-colors"
+          >
+            {isExpanded ? (
+              `Show less`
+            ) : (
+              `Show ${hiddenCount} more`
+            )}
+          </button>
+        )}
       </div>
     );
   };
@@ -358,7 +416,7 @@ function TopMovers() {
             </div>
 
             {/* Stock list */}
-            {renderStockList(stocks, showVolume)}
+            {renderStockList(stocks, showVolume, section.id, activeTab)}
           </div>
         )}
       </div>

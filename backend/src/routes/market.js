@@ -354,7 +354,8 @@ async function fetchYTDData() {
         }
       }
 
-      let ytdOpenPrice = opens[firstYTDIndex];
+      // Use previous year close if available (standard YTD), otherwise fallback to Jan 2 open
+      let ytdOpenPrice = result.meta.chartPreviousClose || opens[firstYTDIndex];
       const currentPrice = closes[closes.length - 1];
 
       // Apply split adjustment to historical opening price
@@ -1176,26 +1177,88 @@ function generateSectorAnalysis(sectors, breadth) {
   });
 
   // === INSIGHT 3: Divergence Analysis ===
-  const divergentSectors = sectors.filter(s =>
+  // Two types of divergence:
+  // 1. Directional Divergence: Daily direction contradicts YTD direction
+  //    - YTD positive but daily negative = "fading against trend"
+  //    - YTD negative but daily positive = "surging against trend"
+  // 2. Rank Divergence: Large rank position change (>=5 positions)
+
+  // Directional divergence - sectors moving against their YTD trend
+  const directionalDivergent = sectors.filter(s => {
+    const dailyChange = s.daily?.changePercent || 0;
+    const ytdChange = s.ytd?.changePercent;
+    if (ytdChange == null) return false;
+    // YTD positive but daily negative, or vice versa
+    return (ytdChange > 0 && dailyChange < 0) || (ytdChange < 0 && dailyChange > 0);
+  });
+
+  // Rank divergence - extreme position changes
+  const rankDivergent = sectors.filter(s =>
     s.rank?.daily && s.rank?.ytd && Math.abs(s.rank.daily - s.rank.ytd) >= 5
   );
 
-  if (divergentSectors.length > 0) {
-    // Show all divergent sectors - the filter (>=5 rank difference) already limits scope
-    const examples = divergentSectors.map(s => {
+  // Combine both types, prioritizing directional divergence
+  // Use Set to avoid duplicates
+  const divergentSymbols = new Set();
+  const allDivergent = [];
+
+  // Add directional divergences first (more meaningful)
+  directionalDivergent.forEach(s => {
+    if (!divergentSymbols.has(s.symbol)) {
+      divergentSymbols.add(s.symbol);
+      const dailyChange = s.daily?.changePercent || 0;
+      const ytdChange = s.ytd?.changePercent || 0;
+      const direction = ytdChange > 0 && dailyChange < 0 ? 'fading' : 'surging';
+      allDivergent.push({ ...s, divergenceType: 'directional', direction });
+    }
+  });
+
+  // Add rank divergences that aren't already included
+  rankDivergent.forEach(s => {
+    if (!divergentSymbols.has(s.symbol)) {
+      divergentSymbols.add(s.symbol);
       const direction = s.rank.daily < s.rank.ytd ? 'surging' : 'fading';
+      allDivergent.push({ ...s, divergenceType: 'rank', direction });
+    }
+  });
+
+  if (allDivergent.length > 0) {
+    // Sort by magnitude of daily change (most extreme first)
+    allDivergent.sort((a, b) =>
+      Math.abs(b.daily?.changePercent || 0) - Math.abs(a.daily?.changePercent || 0)
+    );
+
+    // Determine insight text based on divergence type
+    const directionalCount = directionalDivergent.length;
+    const hasDirectional = directionalCount > 0;
+
+    // Use directional count when that's the primary type, otherwise total
+    const displayCount = hasDirectional ? directionalCount : allDivergent.length;
+
+    // Show up to 5 examples from the relevant set
+    const relevantSectors = hasDirectional ? directionalDivergent : allDivergent;
+    // Sort by magnitude of daily change
+    relevantSectors.sort((a, b) =>
+      Math.abs(b.daily?.changePercent || 0) - Math.abs(a.daily?.changePercent || 0)
+    );
+    const examples = relevantSectors.slice(0, 5).map(s => {
+      const dailyChange = s.daily?.changePercent || 0;
+      const ytdChange = s.ytd?.changePercent || 0;
+      const direction = ytdChange > 0 && dailyChange < 0 ? 'fading' : 'surging';
       return `${s.name} (${direction} today)`;
     });
 
     insights.push({
       type: 'divergence',
       icon: 'alert-triangle',
-      title: 'Rank Divergence',
-      text: `${divergentSectors.length} sector${divergentSectors.length > 1 ? 's' : ''} showing unusual activity`,
+      title: hasDirectional ? 'Trend Divergence' : 'Rank Divergence',
+      text: hasDirectional
+        ? `${displayCount} sector${displayCount > 1 ? 's' : ''} moving against YTD trend`
+        : `${displayCount} sector${displayCount > 1 ? 's' : ''} showing unusual activity`,
       subtext: examples.join(', '),
       sentiment: 'warning'
     });
-    signals.divergence = divergentSectors.length;
+    signals.divergence = displayCount;
   }
 
   // === INSIGHT 4: Breadth Summary ===
@@ -1514,35 +1577,41 @@ router.get('/movers/enhanced', async (req, res) => {
       canada: { label: 'Canada', gainers: [], mostActive: [] },
     };
 
-    // TOP MOVERS: HYBRID APPROACH
+    // TOP MOVERS: MULTI-SOURCE YAHOO APPROACH
     // Problem: Yahoo screeners filter by price (>$5) and market cap (>$2B), missing extreme movers
-    // Solution: Merge MULTIPLE sources to maximize coverage:
+    // Solution: Merge MULTIPLE Yahoo sources to maximize coverage:
     //   1. TRENDING TICKERS - unfiltered, captures "viral" extreme movers (SMX +141%)
     //   2. MOST ACTIVES - high-volume stocks often have big moves (even if not in gainers)
     //   3. DAY GAINERS - large/mid cap gainers (Yahoo filtered)
     //   4. SMALL CAP GAINERS - highest % gains but still filtered
+    //   5. AGGRESSIVE SMALL CAPS - 250 penny stocks and micro-caps with extreme volatility
     // Note: Some extreme movers (like QCLS +48%) have N/A market cap and are filtered from ALL
     // Yahoo screeners - this is a Yahoo data limitation we cannot bypass.
-    console.log('[Market] Fetching top movers (HYBRID: trending + actives + screeners)...');
+    console.log('[Market] Fetching top movers (trending + actives + screeners + aggressive)...');
     try {
-      // Fetch ALL sources in parallel for maximum coverage
+      // Fetch ALL Yahoo sources in parallel for maximum coverage
       // Pass forceRefresh to bypass caches when user clicks refresh
-      const [trendingMovers, mostActivesData, dayGainersLarge, smallCapGainersLarge, dayLosersLarge] = await Promise.all([
+      // Increased counts for broader global coverage
+      const [trendingMovers, mostActivesData, dayGainersLarge, smallCapGainersLarge, aggressiveSmallCapsLarge, dayLosersLarge] = await Promise.all([
         yahooFinanceService.getTrendingTickersWithQuotes(forceRefresh), // Extreme viral movers
-        getCachedScreener('most_actives', 50, forceRefresh),            // High volume (often big moves)
-        getCachedScreener('day_gainers', 75, forceRefresh),             // Large/mid cap gainers
-        getCachedScreener('small_cap_gainers', 50, forceRefresh),       // Small cap gainers
-        getCachedScreener('day_losers', 50, forceRefresh),              // Losers
+        getCachedScreener('most_actives', 100, forceRefresh),           // High volume (often big moves) - INCREASED
+        getCachedScreener('day_gainers', 100, forceRefresh),            // Large/mid cap gainers - INCREASED
+        getCachedScreener('small_cap_gainers', 50, forceRefresh),       // Small cap gainers (only 38 available)
+        getCachedScreener('aggressive_small_caps', 150, forceRefresh),  // Penny stocks & micro-caps
+        getCachedScreener('day_losers', 100, forceRefresh),             // Losers - INCREASED
       ]);
 
       // MERGE all gainers and deduplicate by symbol (keep highest % change)
       const MIN_GAINER_PERCENT = 3; // Lowered threshold to capture more from trending
       const gainerMap = new Map();
 
-      // Add trending movers first (these have extreme gains like 100%+)
+      // Add trending movers (these have extreme gains like 100%+)
       for (const stock of (trendingMovers || [])) {
         if (stock.changePercent >= MIN_GAINER_PERCENT) {
-          gainerMap.set(stock.symbol, stock);
+          const existing = gainerMap.get(stock.symbol);
+          if (!existing || stock.changePercent > existing.changePercent) {
+            gainerMap.set(stock.symbol, stock);
+          }
         }
       }
 
@@ -1557,7 +1626,8 @@ router.get('/movers/enhanced', async (req, res) => {
       }
 
       // Add screener results (these fill in the continuous distribution)
-      for (const stock of [...(dayGainersLarge || []), ...(smallCapGainersLarge || [])]) {
+      // Includes aggressive_small_caps for penny stock coverage
+      for (const stock of [...(dayGainersLarge || []), ...(smallCapGainersLarge || []), ...(aggressiveSmallCapsLarge || [])]) {
         if (stock.changePercent >= MIN_GAINER_PERCENT) {
           const existing = gainerMap.get(stock.symbol);
           // Keep the entry with the higher % change (in case of data discrepancies)
@@ -1567,24 +1637,17 @@ router.get('/movers/enhanced', async (req, res) => {
         }
       }
 
-      // Sort by % change descending and take top 10
+      // Sort by % change descending and take top 25 (increased from 10 for global coverage)
       categories.viral.gainers = Array.from(gainerMap.values())
         .sort((a, b) => (b.changePercent || 0) - (a.changePercent || 0))
-        .slice(0, 10);
+        .slice(0, 25);
 
-      // LOSERS: Also use hybrid approach for completeness
+      // LOSERS: Also use multi-source approach for completeness
       const MIN_LOSER_PERCENT = -3;
       const loserMap = new Map();
 
       // Add trending losers (stocks can trend down too)
       for (const stock of (trendingMovers || [])) {
-        if (stock.changePercent <= MIN_LOSER_PERCENT) {
-          loserMap.set(stock.symbol, stock);
-        }
-      }
-
-      // Add screener losers
-      for (const stock of (dayLosersLarge || [])) {
         if (stock.changePercent <= MIN_LOSER_PERCENT) {
           const existing = loserMap.get(stock.symbol);
           if (!existing || stock.changePercent < existing.changePercent) {
@@ -1593,38 +1656,50 @@ router.get('/movers/enhanced', async (req, res) => {
         }
       }
 
+      // Add screener losers (day_losers + aggressive_small_caps with negative changes)
+      for (const stock of [...(dayLosersLarge || []), ...(aggressiveSmallCapsLarge || [])]) {
+        if (stock.changePercent <= MIN_LOSER_PERCENT) {
+          const existing = loserMap.get(stock.symbol);
+          if (!existing || stock.changePercent < existing.changePercent) {
+            loserMap.set(stock.symbol, stock);
+          }
+        }
+      }
+
+      // Sort and take top 25 (increased from 10 for global coverage)
       categories.viral.losers = Array.from(loserMap.values())
         .sort((a, b) => (a.changePercent || 0) - (b.changePercent || 0)) // Most negative first
-        .slice(0, 10);
+        .slice(0, 25);
 
-      const trendingCount = (trendingMovers || []).filter(s => s.changePercent >= MIN_GAINER_PERCENT).length;
-      const activesCount = (mostActivesData || []).filter(s => s.changePercent >= MIN_GAINER_PERCENT).length;
-      console.log(`[Market] Top movers: ${categories.viral.gainers.length} gainers, ${categories.viral.losers.length} losers (HYBRID: trending:${trendingCount}, actives:${activesCount}, screeners)`);
+      const trendingCount = (trendingMovers || []).filter(s => Math.abs(s.changePercent) >= 3).length;
+      const activesCount = (mostActivesData || []).filter(s => Math.abs(s.changePercent) >= 3).length;
+      const aggressiveCount = (aggressiveSmallCapsLarge || []).filter(s => Math.abs(s.changePercent) >= 3).length;
+      console.log(`[Market] Top movers: ${categories.viral.gainers.length} gainers, ${categories.viral.losers.length} losers (trending:${trendingCount}, actives:${activesCount}, aggressive:${aggressiveCount})`);
     } catch (err) {
       console.warn('[Market] Top movers failed:', err.message);
     }
 
     // Batch 1: Large cap screeners (uses unified screener cache)
-    // Note: day_gainers:75 and day_losers:50 already fetched by viral movers above
-    // getCachedScreener will use cached 25-slice for efficiency (unless forceRefresh)
+    // Increased counts for broader global coverage
     console.log('[Market] Fetching large cap movers from unified cache...');
     const [largeCap1, largeCap2, largeCap3] = await Promise.all([
-      getCachedScreener('day_gainers', 25, forceRefresh),  // Uses cached slice from 75 results
-      getCachedScreener('day_losers', 25, forceRefresh),   // Uses cached slice from 50 results
-      getCachedScreener('most_actives', 25, forceRefresh),
+      getCachedScreener('day_gainers', 50, forceRefresh),    // Increased from 25
+      getCachedScreener('day_losers', 50, forceRefresh),     // Increased from 25
+      getCachedScreener('most_actives', 50, forceRefresh),   // Increased from 25
     ]);
     categories.largeCap.gainers = largeCap1 || [];
     categories.largeCap.losers = largeCap2 || [];
     categories.largeCap.mostActive = largeCap3 || [];
 
     // Batch 2: Small cap and growth screeners (uses unified screener cache)
+    // Increased counts for broader global coverage
     console.log('[Market] Fetching small cap and growth movers from unified cache...');
     const [smallCapGainers, aggressiveSmallCaps, undervaluedGrowth, techGrowth, mostWatched] = await Promise.all([
-      getCachedScreener('small_cap_gainers', 25, forceRefresh),
-      getCachedScreener('aggressive_small_caps', 25, forceRefresh),
-      getCachedScreener('undervalued_growth_stocks', 25, forceRefresh),
-      getCachedScreener('growth_technology_stocks', 25, forceRefresh),
-      getCachedScreener('most_watched_tickers', 25, forceRefresh),
+      getCachedScreener('small_cap_gainers', 50, forceRefresh),       // Increased from 25
+      getCachedScreener('aggressive_small_caps', 100, forceRefresh),  // Increased from 25 - this has penny stocks!
+      getCachedScreener('undervalued_growth_stocks', 50, forceRefresh),
+      getCachedScreener('growth_technology_stocks', 50, forceRefresh),
+      getCachedScreener('most_watched_tickers', 50, forceRefresh),
     ]);
     categories.smallCap.gainers = smallCapGainers || [];
     categories.smallCap.aggressive = aggressiveSmallCaps || [];

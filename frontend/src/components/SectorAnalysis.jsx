@@ -64,25 +64,27 @@ function extractMetrics(analysis, breadth) {
   const dailyTotal = dailyGainers + dailyLosers;
   const ytdTotal = ytdGainers + ytdLosers;
 
-  // Daily metric
+  // Daily metric - sentiment based on majority direction
+  // > 0.5 (majority up) = bullish, < 0.5 (majority down) = bearish, exactly 0.5 = neutral
   if (dailyTotal > 0) {
     const dailyRatio = dailyGainers / dailyTotal;
     metrics.push({
       label: 'Today',
       value: `${dailyGainers}/${dailyTotal}`,
       trend: dailyRatio >= 0.5 ? 'up' : 'down',
-      sentiment: dailyRatio >= 0.6 ? 'bullish' : dailyRatio <= 0.4 ? 'bearish' : 'neutral'
+      sentiment: dailyRatio > 0.5 ? 'bullish' : dailyRatio < 0.5 ? 'bearish' : 'neutral'
     });
   }
 
-  // YTD metric
+  // YTD metric - sentiment based on majority direction
+  // > 0.5 (majority up) = bullish, < 0.5 (majority down) = bearish, exactly 0.5 = neutral
   if (ytdTotal > 0) {
     const ytdRatio = ytdGainers / ytdTotal;
     metrics.push({
       label: 'YTD',
       value: `${ytdGainers}/${ytdTotal}`,
       trend: ytdRatio >= 0.5 ? 'up' : 'down',
-      sentiment: ytdRatio >= 0.7 ? 'bullish' : ytdRatio <= 0.3 ? 'bearish' : 'neutral'
+      sentiment: ytdRatio > 0.5 ? 'bullish' : ytdRatio < 0.5 ? 'bearish' : 'neutral'
     });
   }
 

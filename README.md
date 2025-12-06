@@ -60,17 +60,6 @@ That’s it. Your dashboard is live.
 - Backend API: http://localhost:3001
 
 
-## Disclaimer
-
-**This software is for informational purposes only — not investment advice.** The developers are not registered investment advisers.
-
-Market data from Yahoo Finance and Finnhub is provided "as is" without warranties. Data may be delayed, contain errors, or have discrepancies of 1-2% between sources. **Always verify information against official sources before making investment decisions.**
-
-THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY. See the [LICENSE](LICENSE) file for full terms. The developers are not liable for any financial losses arising from use of this software.
-
-By using this software, you accept sole responsibility for your investment decisions
-
-
 ## Contributing
 
 **StockTracker is under active development.**
@@ -82,3 +71,8 @@ We welcome contributions! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for
 MIT License - Copyright (c) 2025
 
 See the [LICENSE](LICENSE) file for details.
+
+
+## Disclaimer
+
+Market data is for informational purposes only and may have slight delays or variations between sources. Not investment advice—always do your own research.
