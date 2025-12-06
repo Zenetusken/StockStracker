@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { SearchPreviewPanel, WatchlistQuickAdd } from './search';
 import useKeyboardNavigation from '../hooks/useKeyboardNavigation';
 import { useSearchStore } from '../stores/searchStore';
+import { LoadingSpinner } from './ui';
 import api from '../api/client';
 
 // Delay before showing preview panel (ms) - set to 0 for immediate show
@@ -450,7 +451,7 @@ const SearchBar = forwardRef(function SearchBar(props, ref) {
           {/* Loading Indicator */}
           {loading && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <div className="animate-spin h-5 w-5 border-2 border-brand border-t-transparent rounded-full"></div>
+              <LoadingSpinner size="sm" />
             </div>
           )}
         </div>

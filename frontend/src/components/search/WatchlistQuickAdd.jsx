@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Check, Star, ChevronDown } from 'lucide-react';
 import { useWatchlistStore } from '../../stores/watchlistStore';
+import { LoadingSpinner } from '../ui';
 
 /**
  * WatchlistQuickAdd - Inline dropdown for quickly adding a symbol to a watchlist
@@ -141,7 +142,7 @@ function WatchlistQuickAdd({ symbol, onSuccess, className = '' }) {
           <div className="max-h-48 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-4">
-                <div className="animate-spin h-5 w-5 border-2 border-brand dark:border-dark-primary border-t-transparent rounded-full"></div>
+                <LoadingSpinner size="sm" />
               </div>
             ) : error && watchlists.length === 0 ? (
               <div className="px-3 py-4 text-center">

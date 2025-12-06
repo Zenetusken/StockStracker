@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { useWatchlistStore } from '../stores/watchlistStore';
+import { LoadingSpinner } from './ui';
 
 function AddToWatchlistModal({ isOpen, onClose, symbol }) {
   const [selectedWatchlistId, setSelectedWatchlistId] = useState(null);
@@ -102,7 +103,7 @@ function AddToWatchlistModal({ isOpen, onClose, symbol }) {
 
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin h-8 w-8 border-4 border-brand border-t-transparent rounded-full"></div>
+              <LoadingSpinner />
             </div>
           ) : watchlists.length === 0 ? (
             <div className="text-center py-8">

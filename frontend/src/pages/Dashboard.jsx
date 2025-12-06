@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import NewsFeed from '../components/NewsFeed';
 import MarketOverview from '../components/MarketOverview';
@@ -6,8 +7,78 @@ import MarketStatus from '../components/MarketStatus';
 import EconomicCalendar from '../components/EconomicCalendar';
 import PortfolioSummaryCard from '../components/PortfolioSummaryCard';
 import WatchlistSummaryCard from '../components/WatchlistSummaryCard';
+import { Skeleton } from '../components/ui';
 
 function Dashboard() {
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  useEffect(() => {
+    // Brief delay to allow components to mount and start fetching
+    const timer = setTimeout(() => setIsInitialLoad(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Page-level loading skeleton
+  if (isInitialLoad) {
+    return (
+      <Layout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Header skeleton */}
+          <div className="mb-8">
+            <Skeleton variant="title" className="w-64 mb-2" />
+            <Skeleton className="w-48" />
+          </div>
+
+          {/* Portfolio + Watchlist row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-card rounded-lg shadow p-6 h-40">
+              <Skeleton variant="title" className="w-24 mb-4" />
+              <Skeleton className="w-full mb-2" />
+              <Skeleton className="w-3/4" />
+            </div>
+            <div className="bg-card rounded-lg shadow p-6 h-40">
+              <Skeleton variant="title" className="w-24 mb-4" />
+              <Skeleton className="w-full mb-2" />
+              <Skeleton className="w-3/4" />
+            </div>
+          </div>
+
+          {/* Market Status + Top Movers row */}
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-card rounded-lg shadow p-4 h-36">
+              <Skeleton className="w-20 mb-2" />
+              <Skeleton variant="title" className="w-16" />
+            </div>
+            <div className="lg:col-span-2 bg-card rounded-lg shadow p-6 h-64">
+              <Skeleton variant="title" className="w-32 mb-4" />
+              <Skeleton className="w-full h-40" />
+            </div>
+          </div>
+
+          {/* Market Overview skeleton */}
+          <div className="mt-8 bg-card rounded-lg shadow p-6 h-80">
+            <Skeleton variant="title" className="w-40 mb-4" />
+            <Skeleton className="w-full h-56" />
+          </div>
+
+          {/* Economic Calendar + News row */}
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-card rounded-lg shadow p-6 h-48">
+              <Skeleton variant="title" className="w-32 mb-4" />
+              <Skeleton className="w-full mb-2" />
+              <Skeleton className="w-3/4 mb-2" />
+              <Skeleton className="w-1/2" />
+            </div>
+            <div className="lg:col-span-2 bg-card rounded-lg shadow p-6 h-64">
+              <Skeleton variant="title" className="w-28 mb-4" />
+              <Skeleton className="w-full h-40" />
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

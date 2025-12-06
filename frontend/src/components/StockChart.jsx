@@ -11,6 +11,7 @@ import {
   getAvailableSmaPeriods,
 } from '../utils/indicators';
 import IndicatorsPanel from './chart/IndicatorsPanel';
+import { LoadingSpinner } from './ui';
 
 /**
  * StockChart Component
@@ -894,7 +895,7 @@ function StockChart({ symbol, chartType: initialChartType = 'candlestick', timef
       {/* Loading Overlay */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-page-bg bg-opacity-90 rounded-lg z-10">
-          <div className="animate-spin h-12 w-12 border-4 border-brand border-t-transparent rounded-full"></div>
+          <LoadingSpinner size="lg" />
         </div>
       )}
 

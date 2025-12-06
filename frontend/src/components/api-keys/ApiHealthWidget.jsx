@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Key, CheckCircle, AlertTriangle, AlertCircle, Circle, ChevronRight } from 'lucide-react';
 import { useApiKeysStore } from '../../stores/apiKeysStore';
 import RateLimitBar from './RateLimitBar';
+import { Skeleton } from '../ui';
 
 const STATUS_CONFIG = {
   healthy: {
@@ -31,7 +32,7 @@ const STATUS_CONFIG = {
 };
 
 export default function ApiHealthWidget({ onClick }) {
-  const { services, fetchServices, getOverallStatus } = useApiKeysStore();
+  const { services, isLoading, fetchServices, getOverallStatus } = useApiKeysStore();
 
   useEffect(() => {
     fetchServices().catch(console.error);
@@ -43,6 +44,25 @@ export default function ApiHealthWidget({ onClick }) {
 
   // Get configured services for display
   const configuredServices = services.filter(s => s.active_keys > 0);
+
+  // Loading state - show skeleton while fetching
+  if (isLoading && services.length === 0) {
+    return (
+      <div className="rounded-lg shadow bg-card p-6 h-full">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Key className="w-5 h-5 text-text-secondary" />
+            <h3 className="text-lg font-semibold text-text-primary">API Status</h3>
+          </div>
+        </div>
+        <div className="space-y-3">
+          <Skeleton className="w-3/4" />
+          <Skeleton className="w-1/2" />
+          <Skeleton className="w-2/3" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -612,12 +612,34 @@ router.get('/sectors/performance', async (req, res) => {
 });
 
 /**
- * Sector classification for rotation analysis
- * Cyclical sectors tend to outperform in expansions, defensive in contractions
+ * Sector classification for rotation analysis (MSCI methodology)
+ * Based on MSCI Cyclical and Defensive Sectors Indexes Methodology
+ * Classification uses correlation with OECD Composite Leading Indicator:
+ * - Cyclical: Positive correlation with business cycle expansion
+ * - Defensive: Negative correlation (outperform during contractions)
+ *
  * NOTE: Uses official S&P 500 sector index symbols (^SP500-XX format) to match SECTOR_INDICES
+ *
+ * Key changes from naive classification:
+ * - Real Estate: Moved to CYCLICAL (interest-rate sensitive, leveraged)
+ * - Energy: Moved to DEFENSIVE (counter-cyclical commodity exposure)
  */
-const CYCLICAL_SECTORS = ['^SP500-45', '^SP500-25', '^SP500-40', '^SP500-20', '^SP500-15', '^GSPE', '^SP500-50']; // Tech, Consumer Disc, Financials, Industrials, Materials, Energy, Communication
-const DEFENSIVE_SECTORS = ['^SP500-35', '^SP500-30', '^SP500-55', '^SP500-60']; // Healthcare, Consumer Staples, Utilities, Real Estate
+const CYCLICAL_SECTORS = [
+  '^SP500-45',  // Technology
+  '^SP500-25',  // Consumer Discretionary
+  '^SP500-40',  // Financials
+  '^SP500-20',  // Industrials
+  '^SP500-15',  // Materials
+  '^SP500-50',  // Communication Services
+  '^SP500-60',  // Real Estate (MSCI: cyclical, interest-rate sensitive)
+];
+
+const DEFENSIVE_SECTORS = [
+  '^SP500-35',  // Healthcare
+  '^SP500-30',  // Consumer Staples
+  '^SP500-55',  // Utilities
+  '^GSPE',      // Energy (MSCI: defensive, counter-cyclical commodity exposure)
+];
 
 /**
  * Calculate production-ready market sentiment using multiple factors:
@@ -665,46 +687,119 @@ function calculateMarketSentiment(indices, sectors, ytdData = null) {
   }
 
   // === FACTOR 2: VIX Level (weight: 18%) ===
+  // Uses smooth piecewise linear interpolation to avoid abrupt score jumps at boundaries
   const vix = indices.find(i => i.symbol === '^VIX');
   const vixLevel = vix?.price ?? null;
 
-  if (vixLevel !== null) {
-    // VIX interpretation:
-    // < 15: Complacency (bullish but watch for reversal)
-    // 15-20: Normal (neutral to slightly bullish)
-    // 20-25: Elevated fear (slightly bearish)
-    // 25-30: High fear (bearish)
-    // > 30: Panic (extreme bearish)
+  if (vixLevel !== null && vixLevel > 0) {
+    // VIX anchor points for smooth interpolation: (level, score)
+    // Scores transition smoothly between these anchor points
+    const vixAnchors = [
+      { level: 10, score: 0.6, description: 'Very low volatility' },
+      { level: 15, score: 0.35, description: 'Low volatility' },
+      { level: 20, score: 0.05, description: 'Normal volatility' },
+      { level: 25, score: -0.25, description: 'Elevated fear' },
+      { level: 30, score: -0.55, description: 'High fear' },
+      { level: 40, score: -0.85, description: 'Panic levels' },
+    ];
+
     let vixScore;
     let vixDescription;
 
-    if (vixLevel < 15) {
-      vixScore = 0.5;
-      vixDescription = 'Low volatility';
-    } else if (vixLevel < 20) {
-      vixScore = 0.2;
-      vixDescription = 'Normal volatility';
-    } else if (vixLevel < 25) {
-      vixScore = -0.2;
-      vixDescription = 'Elevated fear';
-    } else if (vixLevel < 30) {
-      vixScore = -0.5;
-      vixDescription = 'High fear';
+    // Find the appropriate segment and linearly interpolate
+    if (vixLevel <= vixAnchors[0].level) {
+      // Below minimum anchor - cap at maximum bullish score
+      vixScore = vixAnchors[0].score;
+      vixDescription = vixAnchors[0].description;
+    } else if (vixLevel >= vixAnchors[vixAnchors.length - 1].level) {
+      // Above maximum anchor - cap at maximum bearish score
+      vixScore = vixAnchors[vixAnchors.length - 1].score;
+      vixDescription = vixAnchors[vixAnchors.length - 1].description;
     } else {
-      vixScore = -0.8;
-      vixDescription = 'Panic levels';
+      // Find segment and linearly interpolate
+      for (let i = 0; i < vixAnchors.length - 1; i++) {
+        const lower = vixAnchors[i];
+        const upper = vixAnchors[i + 1];
+
+        if (vixLevel >= lower.level && vixLevel < upper.level) {
+          // Linear interpolation between anchor points
+          const t = (vixLevel - lower.level) / (upper.level - lower.level);
+          vixScore = lower.score + (upper.score - lower.score) * t;
+          // Description based on which anchor we're closer to
+          vixDescription = t < 0.5 ? lower.description : upper.description;
+          break;
+        }
+      }
     }
 
+    // === VIX DIRECTION ADJUSTMENT ===
+    // A falling VIX = decreasing fear (bullish), rising VIX = increasing fear (bearish)
+    const vixChange = vix?.changePercent ?? 0;
+    let directionModifier = 0;
+    let directionNote = '';
+
+    if (vixChange < -5) {
+      directionModifier = 0.15;
+      directionNote = ', fear dropping sharply';
+    } else if (vixChange < -2) {
+      directionModifier = 0.08;
+      directionNote = ', fear easing';
+    } else if (vixChange > 5) {
+      directionModifier = -0.15;
+      directionNote = ', fear spiking';
+    } else if (vixChange > 2) {
+      directionModifier = -0.08;
+      directionNote = ', fear rising';
+    }
+
+    // Apply direction adjustment and clamp to [-1, 1]
+    const adjustedVixScore = Math.max(-1, Math.min(1, vixScore + directionModifier));
+    const finalVixDescription = vixDescription + directionNote;
+
     const vixWeight = 0.18;
-    weightedScore += vixScore * vixWeight;
+    weightedScore += adjustedVixScore * vixWeight;
     totalWeight += vixWeight;
 
     factors.push({
       name: 'VIX',
       value: Math.round(vixLevel * 100) / 100,
-      score: vixScore,
+      score: Math.round(adjustedVixScore * 100) / 100,
       weight: vixWeight,
-      description: vixDescription
+      description: finalVixDescription
+    });
+  } else if (spx && spx.high && spx.low && spx.price && spx.price > 0) {
+    // VIX unavailable - use SPX intraday range as volatility proxy
+    const intradayRange = ((spx.high - spx.low) / spx.price) * 100;
+
+    // Typical SPX intraday range: 0.5% (calm) to 3%+ (volatile)
+    let proxyVixScore;
+    let proxyDescription;
+
+    if (intradayRange < 0.5) {
+      proxyVixScore = 0.3;
+      proxyDescription = 'Low intraday range (VIX unavailable)';
+    } else if (intradayRange < 1.0) {
+      proxyVixScore = 0.1;
+      proxyDescription = 'Normal intraday range (VIX unavailable)';
+    } else if (intradayRange < 2.0) {
+      proxyVixScore = -0.2;
+      proxyDescription = 'Elevated intraday range (VIX unavailable)';
+    } else {
+      proxyVixScore = -0.5;
+      proxyDescription = 'High intraday range (VIX unavailable)';
+    }
+
+    // Use reduced weight since this is a proxy
+    const proxyWeight = 0.10;
+    weightedScore += proxyVixScore * proxyWeight;
+    totalWeight += proxyWeight;
+
+    factors.push({
+      name: 'Volatility (Proxy)',
+      value: Math.round(intradayRange * 100) / 100,
+      score: proxyVixScore,
+      weight: proxyWeight,
+      description: proxyDescription
     });
   }
 
@@ -760,9 +855,14 @@ function calculateMarketSentiment(indices, sectors, ytdData = null) {
     });
   }
 
-  // === YTD TREND FACTORS (only if YTD data available) ===
-  if (ytdData && Object.keys(ytdData).length > 0) {
+  // === YTD TREND FACTORS (only if YTD data has adequate coverage) ===
+  // Require minimum 70% sector coverage for reliable YTD analysis
+  const ytdDataCount = ytdData ? Object.keys(ytdData).length : 0;
+  const ytdCoverageRatio = ytdDataCount / SECTOR_INDICES.length;
+  const MIN_YTD_COVERAGE = 0.7; // Require at least 70% (8 of 11) sectors
+  const hasAdequateYtdData = ytdData && ytdCoverageRatio >= MIN_YTD_COVERAGE;
 
+  if (hasAdequateYtdData) {
     // === FACTOR 5: YTD Sector Breadth (weight: 12%) ===
     // Measures sustained trend strength - more sectors up YTD = healthier market
     const sectorsWithYtd = validSectors.filter(s => ytdData[s.symbol]?.ytdChangePercent != null);
@@ -832,9 +932,10 @@ function calculateMarketSentiment(indices, sectors, ytdData = null) {
       });
     }
 
-    // === FACTOR 7: Divergence Detection (weight: 8%) ===
-    // Warns when daily leaders are YTD laggards (potential reversal)
-    // or daily laggards are YTD leaders (potential catch-up)
+    // === FACTOR 7: Directional Divergence Detection (weight: 8%) ===
+    // ENHANCED: Considers divergence DIRECTION, not just magnitude
+    // - Laggards catching up (bullish rotation) = positive signal
+    // - Leaders falling behind (bearish rotation) = negative signal
     const sectorsWithBothData = validSectors.filter(s =>
       s.changePercent != null && ytdData[s.symbol]?.ytdChangePercent != null
     );
@@ -846,37 +947,82 @@ function calculateMarketSentiment(indices, sectors, ytdData = null) {
         ytdData[b.symbol].ytdChangePercent - ytdData[a.symbol].ytdChangePercent
       );
 
-      // Calculate rank divergence for each sector
+      // Calculate directional divergence metrics
+      let bullishRotationSignal = 0;  // YTD laggards outperforming today
+      let bearishRotationSignal = 0;  // YTD leaders underperforming today
       let totalDivergence = 0;
       let significantDivergences = 0;
 
       sectorsWithBothData.forEach(sector => {
         const dailyRank = dailyRanked.findIndex(s => s.symbol === sector.symbol) + 1;
         const ytdRank = ytdRanked.findIndex(s => s.symbol === sector.symbol) + 1;
-        const rankDiff = Math.abs(dailyRank - ytdRank);
-        totalDivergence += rankDiff;
-        if (rankDiff >= 5) significantDivergences++; // Large rank change = significant divergence
+        const rankDiff = dailyRank - ytdRank; // Positive = doing better today vs YTD rank
+        const absRankDiff = Math.abs(rankDiff);
+
+        totalDivergence += absRankDiff;
+        if (absRankDiff >= 5) significantDivergences++;
+
+        // Weight by how extreme the divergence is
+        if (rankDiff < -3) {
+          // Sector ranked much HIGHER today than YTD (laggard catching up)
+          // This is bullish if the sector is positive today
+          if (sector.changePercent > 0) {
+            bullishRotationSignal += Math.abs(rankDiff);
+          }
+        } else if (rankDiff > 3) {
+          // Sector ranked much LOWER today than YTD (leader falling behind)
+          // This is bearish if the sector is negative today
+          if (sector.changePercent < 0) {
+            bearishRotationSignal += Math.abs(rankDiff);
+          }
+        }
       });
 
-      // Average divergence normalized (lower = more aligned, higher = more divergent)
       const avgDivergence = totalDivergence / sectorsWithBothData.length;
       const maxPossibleDivergence = sectorsWithBothData.length - 1;
 
-      // High divergence = uncertainty (bearish), Low divergence = trend confirmation (bullish)
-      // Normalize: 0 divergence = +1, max divergence = -1
-      const divergenceScore = 1 - (2 * avgDivergence / maxPossibleDivergence);
+      // Net rotation signal: positive = bullish rotation, negative = bearish rotation
+      const netRotationSignal = bullishRotationSignal - bearishRotationSignal;
+
+      // Calculate divergence score based on BOTH magnitude and direction
+      // Base score from alignment (low divergence = good)
+      const alignmentComponent = 1 - (avgDivergence / maxPossibleDivergence);
+
+      // Directional component: bullish rotation adds, bearish rotation subtracts
+      // Normalize to roughly -0.5 to +0.5 range
+      const maxRotationSignal = sectorsWithBothData.length * 5; // Theoretical max
+      const directionalComponent = (netRotationSignal / maxRotationSignal) * 0.5;
+
+      // Combine: alignment matters more when divergence is low, direction matters more when high
       const divergenceWeight = 0.08;
+      let divergenceScore;
+
+      if (avgDivergence < 2) {
+        // Low divergence: alignment is dominant, small directional adjustment
+        divergenceScore = alignmentComponent * 0.8 + directionalComponent * 0.2;
+      } else {
+        // High divergence: direction becomes more important
+        divergenceScore = alignmentComponent * 0.4 + directionalComponent * 0.6;
+      }
+
+      // Clamp to valid range
+      divergenceScore = Math.max(-1, Math.min(1, divergenceScore));
 
       weightedScore += divergenceScore * divergenceWeight;
       totalWeight += divergenceWeight;
 
+      // Enhanced description
       let divergenceDescription;
       if (avgDivergence < 2) {
         divergenceDescription = 'Daily aligns with YTD trends';
+      } else if (netRotationSignal > 3) {
+        divergenceDescription = 'Bullish rotation: laggards catching up';
+      } else if (netRotationSignal < -3) {
+        divergenceDescription = 'Bearish rotation: leaders fading';
       } else if (avgDivergence < 4) {
         divergenceDescription = 'Moderate rank divergence';
       } else {
-        divergenceDescription = `High divergence (${significantDivergences} sectors)`;
+        divergenceDescription = `Mixed rotation (${significantDivergences} sectors divergent)`;
       }
 
       factors.push({
@@ -887,6 +1033,15 @@ function calculateMarketSentiment(indices, sectors, ytdData = null) {
         description: divergenceDescription
       });
     }
+  } else if (ytdData && ytdDataCount > 0) {
+    // Partial YTD data - add informational factor but don't use for scoring
+    factors.push({
+      name: 'YTD Data',
+      value: ytdDataCount,
+      score: 0,
+      weight: 0,
+      description: `Partial YTD data (${ytdDataCount}/${SECTOR_INDICES.length} sectors) - excluded`
+    });
   }
 
   // === CALCULATE FINAL SCORE ===
@@ -894,23 +1049,53 @@ function calculateMarketSentiment(indices, sectors, ytdData = null) {
   const finalScore = totalWeight > 0 ? weightedScore / totalWeight : 0;
 
   // Confidence based on data availability (100% = all 7 factors available)
-  const maxWeight = ytdData ? 1.0 : 0.65; // Max possible weight depends on YTD data availability
+  // Use hasAdequateYtdData (70%+ coverage) not just any YTD data
+  const maxWeight = hasAdequateYtdData ? 1.0 : 0.65;
   const confidence = Math.round((totalWeight / maxWeight) * 100);
+
+  // === FLAT MARKET DETECTION ===
+  // Detect low-conviction scenarios where "neutral" is more appropriate
+  // than a slight directional bias
+  const spxFactor = factors.find(f => f.name === 'S&P 500');
+  const vixFactor = factors.find(f => f.name === 'VIX');
+  const breadthFactor = factors.find(f => f.name === 'Breadth');
+
+  const isFlat = (
+    // S&P 500 change is minimal (< 0.15%)
+    spxFactor && Math.abs(spxFactor.value) < 0.15 &&
+    // VIX is in normal range (15-20) with neutral-ish score
+    vixFactor && Math.abs(vixFactor.score) < 0.15 &&
+    // Breadth is balanced (score near zero)
+    breadthFactor && Math.abs(breadthFactor.score) < 0.2 &&
+    // Final score is in the "slight" range that could flip either way
+    Math.abs(finalScore) < 0.25
+  );
 
   // === DETERMINE LABEL ===
   let label;
-  if (finalScore > 0.4) label = 'bullish';
-  else if (finalScore > 0.15) label = 'slightly-bullish';
-  else if (finalScore < -0.4) label = 'bearish';
-  else if (finalScore < -0.15) label = 'slightly-bearish';
-  else label = 'neutral';
+  if (isFlat) {
+    // Override to neutral for flat/indecisive markets
+    label = 'neutral';
+  } else if (finalScore > 0.4) {
+    label = 'bullish';
+  } else if (finalScore > 0.15) {
+    label = 'slightly-bullish';
+  } else if (finalScore < -0.4) {
+    label = 'bearish';
+  } else if (finalScore < -0.15) {
+    label = 'slightly-bearish';
+  } else {
+    label = 'neutral';
+  }
 
   return {
     score: Math.round(finalScore * 100) / 100,  // -1 to +1, rounded to 2 decimals
     label,
     confidence,
     factors,
-    hasYtdData: ytdData !== null && Object.keys(ytdData).length > 0,
+    hasYtdData: hasAdequateYtdData,
+    ytdCoverage: ytdCoverageRatio,  // 0-1 ratio of sectors with YTD data
+    isFlat,  // Flag for flat market detection
     timestamp: Date.now()
   };
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Newspaper, AlertCircle, RefreshCw, Loader2, Filter } from 'lucide-react';
 import NewsCard from './NewsCard';
 import { useNewsStore } from '../stores/newsStore';
+import { LoadingSpinner } from './ui';
 
 /**
  * NewsFeed Component
@@ -157,7 +158,7 @@ function NewsFeed({
           {title}
         </h2>
         <div className="flex items-center justify-center py-8">
-          <div className="animate-spin h-8 w-8 border-4 border-brand border-t-transparent rounded-full"></div>
+          <LoadingSpinner />
         </div>
       </div>
     );

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PieChart as PieChartIcon, LayoutGrid, Building2 } from 'lucide-react';
 import api from '../api/client';
+import { LoadingSpinner } from './ui';
 
 // Color palette for pie slices
 const COLORS = [
@@ -251,7 +252,7 @@ function AllocationPieChart({ holdings, totalValue, cashBalance }) {
           <div className="flex-shrink-0 relative" data-testid="pie-chart-svg">
             {loadingSectors && viewMode === 'sector' && (
               <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-full">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand border-t-transparent" />
+                <LoadingSpinner />
               </div>
             )}
             <svg width="200" height="200" viewBox="0 0 200 200">

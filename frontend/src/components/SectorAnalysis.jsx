@@ -146,58 +146,164 @@ function MetricPill({ label, value, trend, sentiment }) {
   );
 }
 
-function SignalMeter({ label, value, detail, showValue }) {
-  const getColor = (pct) => {
-    if (pct >= 70) return 'bg-emerald-500';
-    if (pct >= 55) return 'bg-emerald-400';
-    if (pct >= 45) return 'bg-gray-400';
-    if (pct >= 30) return 'bg-rose-400';
-    return 'bg-rose-500';
+// Enhanced: Dual-direction breadth bar showing gainers vs losers from center
+function BreadthBar({ gainers, losers, label }) {
+  const total = gainers + losers || 1;
+  const gainerPct = (gainers / total) * 100;
+  const loserPct = (losers / total) * 100;
+  const isPositive = gainers > losers;
+  const isEqual = gainers === losers;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-text-muted uppercase tracking-wide font-medium">{label}</span>
+        <span className={`text-xs font-semibold ${
+          isEqual ? 'text-text-secondary' : isPositive ? 'text-emerald-500' : 'text-rose-500'
+        }`}>
+          {gainers}/{total}
+        </span>
+      </div>
+
+      {/* Dual-direction bar */}
+      <div className="relative h-2.5 bg-page-bg rounded-full overflow-hidden">
+        {/* Center marker */}
+        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-text-muted/30 z-10" />
+
+        {/* Gainers (right side) */}
+        <div
+          className="absolute left-1/2 h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-r-full transition-all duration-700"
+          style={{ width: `${gainerPct / 2}%` }}
+        />
+
+        {/* Losers (left side) */}
+        <div
+          className="absolute right-1/2 h-full bg-gradient-to-l from-rose-500 to-rose-400 rounded-l-full transition-all duration-700"
+          style={{ width: `${loserPct / 2}%` }}
+        />
+      </div>
+
+      {/* Labels */}
+      <div className="flex justify-between text-[10px] text-text-muted">
+        <span>{losers} down</span>
+        <span>{gainers} up</span>
+      </div>
+    </div>
+  );
+}
+
+// Enhanced: Horizontal gauge showing cyclical ↔ defensive spectrum
+function RotationGauge({ rotation }) {
+  // rotation: negative = defensive, positive = cyclical
+  // Map -15 to +15 range to 0-100 for positioning
+  const normalized = Math.max(-15, Math.min(15, rotation));
+  const position = 50 + (normalized / 15) * 50;
+  const isSignificant = Math.abs(rotation) > 3;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-text-muted uppercase tracking-wide font-medium">Rotation</span>
+        <span className={`text-xs font-mono font-semibold ${
+          rotation > 0 ? 'text-emerald-500' : rotation < 0 ? 'text-rose-500' : 'text-text-secondary'
+        }`}>
+          {rotation > 0 ? '+' : ''}{rotation.toFixed(1)}%
+        </span>
+      </div>
+
+      {/* Gradient gauge */}
+      <div className="relative h-3 rounded-full overflow-hidden bg-gradient-to-r from-rose-500/20 via-gray-500/10 to-emerald-500/20">
+        {/* Center marker */}
+        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-text-muted/40 z-10" />
+
+        {/* Position indicator */}
+        <div
+          className={`absolute top-0 h-full w-1.5 rounded-full transition-all duration-700 ${
+            isSignificant
+              ? rotation > 0 ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50' : 'bg-rose-500 shadow-lg shadow-rose-500/50'
+              : 'bg-text-secondary'
+          }`}
+          style={{ left: `calc(${position}% - 3px)` }}
+        />
+      </div>
+
+      {/* Labels */}
+      <div className="flex justify-between text-[10px] text-text-muted">
+        <span>← Defensive</span>
+        <span>Cyclical →</span>
+      </div>
+    </div>
+  );
+}
+
+// Enhanced: Semi-circular arc with glowing segments
+function MomentumArc({ filled, total }) {
+  const segments = Array.from({ length: total }, (_, i) => i < filled);
+
+  return (
+    <div className="space-y-1.5">
+      <span className="text-xs text-text-muted uppercase tracking-wide font-medium block">Momentum</span>
+
+      <div className="flex items-center gap-3">
+        {/* Arc visualization */}
+        <div className="relative w-14 h-7 flex-shrink-0">
+          <svg viewBox="0 0 56 28" className="w-full h-full">
+            {segments.map((isFilled, i) => {
+              const startAngle = 180 + (i * 60);
+              const endAngle = startAngle + 55;
+              const startRad = (startAngle * Math.PI) / 180;
+              const endRad = (endAngle * Math.PI) / 180;
+              const cx = 28, cy = 28, r = 20;
+
+              const x1 = cx + r * Math.cos(startRad);
+              const y1 = cy + r * Math.sin(startRad);
+              const x2 = cx + r * Math.cos(endRad);
+              const y2 = cy + r * Math.sin(endRad);
+
+              return (
+                <path
+                  key={i}
+                  d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
+                  fill="none"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  className={`transition-all duration-500 ${
+                    isFilled ? 'stroke-emerald-500' : 'stroke-page-bg'
+                  }`}
+                  style={isFilled ? { filter: 'drop-shadow(0 0 3px rgb(16 185 129 / 0.5))' } : {}}
+                />
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Text */}
+        <div>
+          <div className="text-base font-bold text-text-primary">{filled}/{total}</div>
+          <div className="text-[10px] text-text-muted leading-tight">leaders aligned</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Enhanced: Badge with icon and severity coloring
+function DivergenceBadge({ count }) {
+  const severity = count >= 4 ? 'high' : count >= 2 ? 'moderate' : 'low';
+  const colors = {
+    high: 'bg-amber-500/15 border-amber-500/30 text-amber-500',
+    moderate: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+    low: 'bg-gray-500/10 border-gray-500/20 text-text-secondary'
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-baseline mb-1">
-        <span className="text-xs text-text-muted uppercase tracking-wide">{label}</span>
-        {showValue && <span className="text-xs font-mono text-text-secondary">{showValue}</span>}
-      </div>
-      <div className="h-2 bg-page-bg rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${getColor(value)}`}
-          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-        />
-      </div>
-      <div className="text-xs text-text-muted mt-1">{detail}</div>
-    </div>
-  );
-}
+    <div className="space-y-1.5">
+      <span className="text-xs text-text-muted uppercase tracking-wide font-medium block">Divergence</span>
 
-function SignalDots({ label, filled, total, detail }) {
-  return (
-    <div>
-      <div className="text-xs text-text-muted uppercase tracking-wide mb-1">{label}</div>
-      <div className="flex gap-1">
-        {[...Array(total)].map((_, i) => (
-          <div
-            key={i}
-            className={`w-3 h-3 rounded-full ${
-              i < filled ? 'bg-emerald-500' : 'bg-page-bg border border-card-border'
-            }`}
-          />
-        ))}
-      </div>
-      <div className="text-xs text-text-muted mt-1">{detail}</div>
-    </div>
-  );
-}
-
-function SignalCount({ label, count, detail }) {
-  return (
-    <div>
-      <div className="text-xs text-text-muted uppercase tracking-wide mb-1">{label}</div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-lg font-semibold text-amber-500">{count}</span>
-        <span className="text-xs text-text-muted">{detail}</span>
+      <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${colors[severity]}`}>
+        <AlertTriangle className="w-3.5 h-3.5" />
+        <span className="text-base font-bold">{count}</span>
+        <span className="text-[10px] opacity-70">{count === 1 ? 'sector' : 'sectors'}</span>
       </div>
     </div>
   );
@@ -208,53 +314,51 @@ function SignalBreakdown({ breadth, signals }) {
   const dailyLosers = breadth?.daily?.losers || 0;
   const ytdGainers = breadth?.ytd?.gainers || 0;
   const ytdLosers = breadth?.ytd?.losers || 0;
-  const dailyTotal = dailyGainers + dailyLosers || 1;
-  const ytdTotal = ytdGainers + ytdLosers || 1;
-  const dailyPercent = (dailyGainers / dailyTotal) * 100;
-  const ytdPercent = (ytdGainers / ytdTotal) * 100;
+  const hasDivergence = (signals?.divergence || 0) > 0;
 
   return (
-    <div className="bg-card-bg border border-card-border rounded-lg p-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {/* Daily Breadth */}
-        <SignalMeter
-          label="Daily Breadth"
-          value={dailyPercent}
-          detail={`${dailyGainers} up / ${dailyLosers} down`}
-        />
+    <div className="bg-card-bg/50 backdrop-blur-sm border border-card-border/50 rounded-lg p-4">
+      {/* Header with legend */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-4 h-4 text-brand" />
+          <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+            Signal Breakdown
+          </span>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-text-muted">
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Bullish
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-rose-500" /> Bearish
+          </span>
+        </div>
+      </div>
 
-        {/* YTD Breadth */}
-        <SignalMeter
-          label="YTD Breadth"
-          value={ytdPercent}
-          detail={`${ytdGainers} up / ${ytdLosers} down`}
-        />
+      {/* Enhanced grid layout */}
+      <div className={`grid gap-4 ${hasDivergence ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'}`}>
+        {/* Breadth metrics grouped */}
+        <div className="space-y-3 p-3 bg-page-bg/30 rounded-lg">
+          <BreadthBar label="Daily Breadth" gainers={dailyGainers} losers={dailyLosers} />
+          <BreadthBar label="YTD Breadth" gainers={ytdGainers} losers={ytdLosers} />
+        </div>
 
-        {/* Rotation Spread - only show if significant */}
-        {Math.abs(signals?.rotation || 0) > 1 && (
-          <SignalMeter
-            label="Rotation Spread"
-            value={50 + ((signals?.rotation || 0) / 30) * 50}
-            detail={`${(signals?.rotation || 0) > 0 ? 'Cyclical' : 'Defensive'} tilt`}
-            showValue={`${(signals?.rotation || 0) > 0 ? '+' : ''}${(signals?.rotation || 0).toFixed(1)}%`}
-          />
-        )}
+        {/* Rotation gauge */}
+        <div className="p-3 bg-page-bg/30 rounded-lg">
+          <RotationGauge rotation={signals?.rotation || 0} />
+        </div>
 
-        {/* Momentum Alignment */}
-        <SignalDots
-          label="Momentum"
-          filled={signals?.momentum || 0}
-          total={3}
-          detail={`${signals?.momentum || 0}/3 leaders aligned`}
-        />
+        {/* Momentum arc */}
+        <div className="p-3 bg-page-bg/30 rounded-lg">
+          <MomentumArc filled={signals?.momentum || 0} total={3} />
+        </div>
 
-        {/* Divergence - only show if present */}
-        {(signals?.divergence || 0) > 0 && (
-          <SignalCount
-            label="Rank Divergence"
-            count={signals?.divergence || 0}
-            detail={(signals?.divergence || 0) === 1 ? 'sector' : 'sectors'}
-          />
+        {/* Divergence badge - only show if present */}
+        {hasDivergence && (
+          <div className="p-3 bg-page-bg/30 rounded-lg">
+            <DivergenceBadge count={signals?.divergence || 0} />
+          </div>
         )}
       </div>
     </div>
@@ -349,10 +453,16 @@ function SectorAnalysis({ analysis, breadth }) {
         />
       )}
 
-      {/* Signal Breakdown (collapsible) */}
-      {showBreakdown && breadth && (
-        <SignalBreakdown breadth={breadth} signals={analysis?.signals} />
-      )}
+      {/* Signal Breakdown (animated collapsible) */}
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-out ${
+          showBreakdown && breadth ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+        }`}
+      >
+        {breadth && (
+          <SignalBreakdown breadth={breadth} signals={analysis?.signals} />
+        )}
+      </div>
 
       {/* Insights Grid */}
       {analysis.insights && analysis.insights.length > 0 && (

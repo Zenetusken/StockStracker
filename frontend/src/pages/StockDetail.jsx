@@ -8,6 +8,7 @@ import MarketStatusBadge from '../components/MarketStatusBadge';
 import AddToWatchlistModal from '../components/AddToWatchlistModal';
 import StockChart from '../components/StockChart';
 import NewsFeed from '../components/NewsFeed';
+import { LoadingSpinner } from '../components/ui';
 import api from '../api/client';
 
 function StockDetail() {
@@ -143,7 +144,7 @@ function StockDetail() {
         </header>
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin h-12 w-12 border-4 border-brand border-t-transparent rounded-full"></div>
+            <LoadingSpinner size="lg" />
           </div>
         </main>
       </div>

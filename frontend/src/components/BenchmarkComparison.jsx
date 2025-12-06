@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, Scale } from 'lucide-react';
 import { useQuotes } from '../stores/quoteStore';
+import { LoadingSpinner, Skeleton } from './ui';
 
 function BenchmarkComparison({ portfolioValue, portfolioCostBasis }) {
   // useQuotes automatically subscribes via SSE and fetches via REST fallback
@@ -41,8 +42,19 @@ function BenchmarkComparison({ portfolioValue, portfolioCostBasis }) {
       </div>
 
       {loading ? (
-        <div className="text-center py-4 text-text-secondary">
-          Loading benchmark data...
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-4 bg-page-bg rounded-lg">
+                <Skeleton className="w-16 mb-2" />
+                <Skeleton variant="title" className="w-20 mb-1" />
+                <Skeleton className="w-12" />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-center py-2">
+            <LoadingSpinner size="sm" />
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
