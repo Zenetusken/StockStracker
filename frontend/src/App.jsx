@@ -159,6 +159,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ErrorBoundary>
+        <DisclaimerFooter />
         <AuthenticatedMobileNav />
       </RateLimitEventsProvider>
     </BrowserRouter>
@@ -169,6 +170,25 @@ function App() {
 function AuthenticatedMobileNav() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return isAuthenticated ? <MobileBottomNav /> : null;
+}
+
+// Subtle disclaimer footer for legal protection
+function DisclaimerFooter() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  // Only show on authenticated pages
+  if (!isAuthenticated) return null;
+
+  return (
+    <footer className="fixed bottom-0 left-0 right-0 bg-dark-card/95 backdrop-blur-sm border-t border-gray-800 py-1.5 px-4 text-center z-40 md:pb-1.5 pb-16">
+      <p className="text-[10px] text-gray-500">
+        Data provided by Yahoo Finance & Finnhub for informational purposes only — not investment advice.
+        <span className="ml-1 text-gray-600">
+          Verify all data before making investment decisions.
+        </span>
+      </p>
+    </footer>
+  );
 }
 
 export default App;

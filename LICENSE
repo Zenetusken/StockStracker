@@ -19,3 +19,26 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+ADDITIONAL DISCLAIMER FOR FINANCIAL DATA
+
+This software displays financial market data obtained from third-party sources
+including Yahoo Finance and Finnhub. This data is provided "AS IS" without any
+warranties of accuracy, completeness, or timeliness.
+
+THIS SOFTWARE DOES NOT PROVIDE INVESTMENT ADVICE. Nothing in this application
+constitutes investment advice, financial advice, trading advice, or any other
+type of advice. The developers are not registered as securities broker-dealers
+or investment advisers with the U.S. Securities and Exchange Commission (SEC),
+FINRA, or any state securities regulatory authority.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY DIRECT,
+INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES INCLUDING
+BUT NOT LIMITED TO LOSS OF PROFITS, LOSS OF DATA, BUSINESS INTERRUPTION, OR
+ANY FINANCIAL LOSSES ARISING FROM THE USE OF THIS SOFTWARE OR RELIANCE ON
+DATA DISPLAYED BY THIS SOFTWARE.
+
+You use this software at your own risk. Always verify financial data against
+official sources before making investment decisions.

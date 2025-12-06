@@ -21,21 +21,25 @@ const MAJOR_INDICES = [
 ];
 
 /**
- * Sector ETFs for sector performance heatmap
+ * Official S&P 500 Sector Indices for sector performance heatmap
+ * Switched from ETFs (XLK, XLF, etc.) to official indices because:
+ * 1. ETFs are prone to stock splits (5 had 2:1 splits on Dec 5, 2025)
+ * 2. ETFs have tracking error from expense ratios
+ * 3. Official indices provide true benchmark values from S&P
  * #117: Sector performance heatmap
  */
-const SECTOR_ETFS = [
-  { symbol: 'XLK', name: 'Technology', color: '#3B82F6' },
-  { symbol: 'XLF', name: 'Financials', color: '#10B981' },
-  { symbol: 'XLV', name: 'Healthcare', color: '#EC4899' },
-  { symbol: 'XLE', name: 'Energy', color: '#F59E0B' },
-  { symbol: 'XLI', name: 'Industrials', color: '#6366F1' },
-  { symbol: 'XLY', name: 'Consumer Disc.', color: '#8B5CF6' },
-  { symbol: 'XLP', name: 'Consumer Staples', color: '#14B8A6' },
-  { symbol: 'XLRE', name: 'Real Estate', color: '#F97316' },
-  { symbol: 'XLU', name: 'Utilities', color: '#EF4444' },
-  { symbol: 'XLB', name: 'Materials', color: '#84CC16' },
-  { symbol: 'XLC', name: 'Communication', color: '#06B6D4' },
+const SECTOR_INDICES = [
+  { symbol: '^SP500-45', name: 'Technology', color: '#3B82F6' },
+  { symbol: '^SP500-40', name: 'Financials', color: '#10B981' },
+  { symbol: '^SP500-35', name: 'Healthcare', color: '#EC4899' },
+  { symbol: '^GSPE', name: 'Energy', color: '#F59E0B' },  // Official S&P 500 Energy Sector (^SP500-10 format unavailable)
+  { symbol: '^SP500-20', name: 'Industrials', color: '#6366F1' },
+  { symbol: '^SP500-25', name: 'Consumer Disc.', color: '#8B5CF6' },
+  { symbol: '^SP500-30', name: 'Consumer Staples', color: '#14B8A6' },
+  { symbol: '^SP500-60', name: 'Real Estate', color: '#F97316' },
+  { symbol: '^SP500-55', name: 'Utilities', color: '#EF4444' },
+  { symbol: '^SP500-15', name: 'Materials', color: '#84CC16' },
+  { symbol: '^SP500-50', name: 'Communication', color: '#06B6D4' },
 ];
 
 // Cache for market data
@@ -211,9 +215,10 @@ async function getIndexQuotes(indexConfigs, forceRefresh = false) {
 }
 
 /**
- * Batch fetch quotes for sectors (ETFs only - not index symbols)
- * Uses Yahoo batch endpoint (1 API call for all symbols)
- * @param {string[]} symbols - Array of stock symbols
+ * Fetch quotes for sector indices with caching
+ * Uses Yahoo getQuote() for official S&P sector indices (^SP500-xx symbols)
+ * Note: Spark/batch endpoints don't support index symbols, so we fetch individually in parallel
+ * @param {string[]} symbols - Array of index symbols (e.g., ^SP500-45, ^SP500-40)
  * @param {boolean} forceRefresh - Bypass cache when true (for manual refresh)
  * @returns {Object} Map of symbol -> enriched quote data
  */
@@ -224,33 +229,29 @@ async function getSectorQuotes(symbols, forceRefresh = false) {
   }
 
   if (forceRefresh) {
-    console.log('[Market] Sector quotes force refresh');
+    console.log('[Market] Sector index quotes force refresh');
   }
 
-  let batchQuotes = {};
+  console.log(`[Market] Fetching ${symbols.length} sector indices via Yahoo getQuote...`);
 
-  // PRIMARY: Use Yahoo batch endpoint (1 API call)
-  if (!yahooFinanceService.isRateLimited()) {
+  // Fetch all indices in parallel using getQuote (works with ^ symbols)
+  const quotePromises = symbols.map(async (symbol) => {
     try {
-      batchQuotes = await withTimeout(yahooFinanceService.getBatchQuotes(symbols), 8000);
-      console.log(`[Market] Yahoo batch sectors: ${Object.keys(batchQuotes).length}/${symbols.length} quotes`);
+      const quote = await withTimeout(yahooFinanceService.getQuote(symbol), 5000);
+      return { symbol, quote };
     } catch (error) {
-      console.log(`[Market] Yahoo batch failed for sectors: ${error.message}`);
+      console.log(`[Market] Failed to fetch ${symbol}: ${error.message}`);
+      return { symbol, quote: null };
     }
-  }
+  });
 
-  // FALLBACK: For missing symbols, use Finnhub individual calls
-  const missingSymbols = symbols.filter(s => !batchQuotes[s.toUpperCase()]);
-  if (missingSymbols.length > 0) {
-    console.log(`[Market] Fetching ${missingSymbols.length} missing sectors from Finnhub`);
-    const fallbackQuotes = await finnhub.getQuotes(missingSymbols);
-    Object.assign(batchQuotes, fallbackQuotes);
-  }
+  const results = await Promise.all(quotePromises);
 
   // Enrich all quotes
   const enrichedQuotes = {};
-  for (const symbol of symbols) {
-    const quote = batchQuotes[symbol.toUpperCase()];
+  let successCount = 0;
+
+  for (const { symbol, quote } of results) {
     if (quote && quote.c !== 0) {
       enrichedQuotes[symbol] = {
         symbol,
@@ -264,8 +265,11 @@ async function getSectorQuotes(symbols, forceRefresh = false) {
         volume: quote.v || 0,
       };
       marketCache.set(symbol, { data: enrichedQuotes[symbol], timestamp: Date.now() });
+      successCount++;
     }
   }
+
+  console.log(`[Market] Sector indices fetched: ${successCount}/${symbols.length}`);
 
   // Update cache
   batchSectorsCache = enrichedQuotes;
@@ -275,9 +279,10 @@ async function getSectorQuotes(symbols, forceRefresh = false) {
 }
 
 /**
- * Fetch YTD performance data for all sector ETFs
+ * Fetch YTD performance data for all sector indices
  * Uses Yahoo Finance chart API with 'ytd' range to get year-to-date candles
  * Calculates YTD change from first trading day of year to current price
+ * Note: Official indices don't have stock splits, but split detection is kept as safety measure
  * @returns {Object} Map of symbol -> { ytdChangePercent, ytdOpenPrice, currentPrice }
  */
 async function fetchYTDData() {
@@ -288,13 +293,14 @@ async function fetchYTDData() {
     return ytdPerformanceCache;
   }
 
-  console.log('[Market] Fetching YTD performance data...');
+  console.log('[Market] Fetching YTD performance data for sector indices...');
   const ytdData = {};
 
-  // Fetch YTD candles for each sector ETF in parallel
-  const fetchPromises = SECTOR_ETFS.map(async (sector) => {
+  // Fetch YTD candles for each sector index in parallel
+  const fetchPromises = SECTOR_INDICES.map(async (sector) => {
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sector.symbol}?interval=1d&range=ytd`;
+      // URL-encode symbol to handle ^ prefix in index symbols (e.g., ^SP500-45)
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sector.symbol)}?interval=1d&range=ytd`;
       const response = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0' },
         timeout: 10000,
@@ -376,7 +382,7 @@ async function fetchYTDData() {
   });
 
   await Promise.all(fetchPromises);
-  console.log(`[Market] YTD data fetched for ${Object.keys(ytdData).length}/${SECTOR_ETFS.length} sectors`);
+  console.log(`[Market] YTD data fetched for ${Object.keys(ytdData).length}/${SECTOR_INDICES.length} sectors`);
 
   // Update cache
   ytdPerformanceCache = ytdData;
@@ -476,10 +482,10 @@ router.get('/sectors', async (req, res) => {
     console.log('[Market] Fetching sector performance (batch)...');
 
     // BATCH FETCH: Get all 11 sectors in 1 API call
-    const sectorSymbols = SECTOR_ETFS.map(s => s.symbol);
+    const sectorSymbols = SECTOR_INDICES.map(s => s.symbol);
     const sectorQuotes = await getSectorQuotes(sectorSymbols);
 
-    const sectors = SECTOR_ETFS.map(sector => ({
+    const sectors = SECTOR_INDICES.map(sector => ({
       ...sector,
       ...sectorQuotes[sector.symbol],
     }));
@@ -525,12 +531,12 @@ router.get('/sectors/performance', async (req, res) => {
     // Fetch both daily quotes and YTD data in parallel
     // Pass forceRefresh to bypass cache when user clicks refresh
     const [sectorQuotes, ytdData] = await Promise.all([
-      getSectorQuotes(SECTOR_ETFS.map(s => s.symbol), forceRefresh),
+      getSectorQuotes(SECTOR_INDICES.map(s => s.symbol), forceRefresh),
       fetchYTDData(),
     ]);
 
     // Combine daily and YTD data for each sector
-    const sectors = SECTOR_ETFS.map(sector => {
+    const sectors = SECTOR_INDICES.map(sector => {
       const daily = sectorQuotes[sector.symbol] || {};
       const ytd = ytdData[sector.symbol] || {};
 
@@ -608,9 +614,10 @@ router.get('/sectors/performance', async (req, res) => {
 /**
  * Sector classification for rotation analysis
  * Cyclical sectors tend to outperform in expansions, defensive in contractions
+ * NOTE: Uses official S&P 500 sector index symbols (^SP500-XX format) to match SECTOR_INDICES
  */
-const CYCLICAL_SECTORS = ['XLK', 'XLY', 'XLF', 'XLI', 'XLB', 'XLE', 'XLC']; // Tech, Consumer Disc, Financials, Industrials, Materials, Energy, Communication
-const DEFENSIVE_SECTORS = ['XLV', 'XLP', 'XLU', 'XLRE']; // Healthcare, Consumer Staples, Utilities, Real Estate
+const CYCLICAL_SECTORS = ['^SP500-45', '^SP500-25', '^SP500-40', '^SP500-20', '^SP500-15', '^GSPE', '^SP500-50']; // Tech, Consumer Disc, Financials, Industrials, Materials, Energy, Communication
+const DEFENSIVE_SECTORS = ['^SP500-35', '^SP500-30', '^SP500-55', '^SP500-60']; // Healthcare, Consumer Staples, Utilities, Real Estate
 
 /**
  * Calculate production-ready market sentiment using multiple factors:
@@ -1181,7 +1188,7 @@ router.get('/overview', async (req, res) => {
         // Pass forceRefresh to bypass cache when user clicks refresh
         const [indicesQuotes, sectorsQuotes, ytdData] = await Promise.all([
           getIndexQuotes(MAJOR_INDICES, forceRefresh),
-          getSectorQuotes(SECTOR_ETFS.map(s => s.symbol), forceRefresh),
+          getSectorQuotes(SECTOR_INDICES.map(s => s.symbol), forceRefresh),
           fetchYTDData().catch(err => {
             // YTD is optional - gracefully degrade if unavailable
             console.log('[Market] YTD fetch failed, sentiment will use daily factors only:', err.message);
@@ -1194,7 +1201,7 @@ router.get('/overview', async (req, res) => {
           ...indicesQuotes[index.symbol],
         }));
 
-        const sectors = SECTOR_ETFS.map(sector => ({
+        const sectors = SECTOR_INDICES.map(sector => ({
           ...sector,
           ...sectorsQuotes[sector.symbol],
         }));
@@ -1694,10 +1701,10 @@ async function prewarmCache() {
     // Fetch indices (individual calls - batch doesn't support ^symbols) and sectors (batch)
     await Promise.all([
       getIndexQuotes(MAJOR_INDICES),
-      getSectorQuotes(SECTOR_ETFS.map(s => s.symbol)),
+      getSectorQuotes(SECTOR_INDICES.map(s => s.symbol)),
     ]);
 
-    const totalSymbols = MAJOR_INDICES.length + SECTOR_ETFS.length;
+    const totalSymbols = MAJOR_INDICES.length + SECTOR_INDICES.length;
     console.log(`[Market] Cache pre-warmed with ${totalSymbols} symbols`);
   } catch (error) {
     console.log('[Market] Cache pre-warm failed:', error.message);
