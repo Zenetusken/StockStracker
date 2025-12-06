@@ -187,9 +187,19 @@ router.delete('/:id', (req, res) => {
       return res.status(400).json({ error: 'Cannot delete default portfolio' });
     }
 
-    // Delete portfolio (this will cascade to holdings, transactions, etc.)
+    // Delete portfolio and all related records in proper order
+    // 1. Delete lot_sales (references tax_lots, no cascade)
+    db.prepare(`
+      DELETE FROM lot_sales
+      WHERE tax_lot_id IN (SELECT id FROM tax_lots WHERE portfolio_id = ?)
+    `).run(id);
+    // 2. Delete tax_lots
+    db.prepare(`DELETE FROM tax_lots WHERE portfolio_id = ?`).run(id);
+    // 3. Delete holdings
     db.prepare(`DELETE FROM portfolio_holdings WHERE portfolio_id = ?`).run(id);
+    // 4. Delete transactions
     db.prepare(`DELETE FROM transactions WHERE portfolio_id = ?`).run(id);
+    // 5. Finally delete the portfolio
     db.prepare(`DELETE FROM portfolios WHERE id = ?`).run(id);
 
     res.json({ success: true, message: 'Portfolio deleted' });

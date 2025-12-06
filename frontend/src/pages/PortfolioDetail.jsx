@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download, Upload, ChevronUp, ChevronDown, Layers, Receipt } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, ArrowUpRight, ArrowDownRight, Plus, Pencil, Trash2, X, Download, Upload, ChevronUp, ChevronDown, Layers, Receipt, MoreVertical } from 'lucide-react';
 import Layout from '../components/Layout';
 import { usePortfolioStore } from '../stores/portfolioStore';
 import { useQuotes } from '../stores/quoteStore';
@@ -8,6 +8,7 @@ import AddTransactionModal from '../components/AddTransactionModal';
 import EditTransactionModal from '../components/EditTransactionModal';
 import TaxLotsModal from '../components/TaxLotsModal';
 import LotSalesModal from '../components/LotSalesModal';
+import DeletePortfolioModal from '../components/DeletePortfolioModal';
 import PortfolioValueChart from '../components/PortfolioValueChart';
 import AllocationPieChart from '../components/AllocationPieChart';
 import BenchmarkComparison from '../components/BenchmarkComparison';
@@ -37,6 +38,8 @@ function PortfolioDetail() {
   const [holdingsFilter, setHoldingsFilter] = useState('all'); // 'all' | 'gainers' | 'losers'
   const [viewingTaxLots, setViewingTaxLots] = useState(null); // symbol string or null
   const [showLotSalesModal, setShowLotSalesModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const fileInputRef = useRef(null);
 
   // Get holdings symbols for quote subscription
@@ -368,6 +371,11 @@ function PortfolioDetail() {
     }
   };
 
+  // Handle successful portfolio deletion - navigate to portfolio list
+  const handleDeleteSuccess = () => {
+    navigate('/portfolio');
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -413,22 +421,74 @@ function PortfolioDetail() {
                 </span>
               )}
             </div>
-            <button
-              onClick={() => setShowLotSalesModal(true)}
-              data-testid="realized-gains-button"
-              className="flex items-center gap-2 px-4 py-2 bg-card border border-line text-text-primary rounded-lg hover:bg-card-hover transition-colors"
-            >
-              <Receipt className="w-4 h-4" />
-              Realized Gains
-            </button>
-            <button
-              onClick={() => setShowAddTransactionModal(true)}
-              data-testid="add-transaction-button"
-              className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Transaction
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowLotSalesModal(true)}
+                data-testid="realized-gains-button"
+                className="flex items-center gap-2 px-4 py-2 bg-card border border-line text-text-primary rounded-lg hover:bg-card-hover transition-colors"
+              >
+                <Receipt className="w-4 h-4" />
+                Realized Gains
+              </button>
+              <button
+                onClick={() => setShowAddTransactionModal(true)}
+                data-testid="add-transaction-button"
+                className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand-hover transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Transaction
+              </button>
+
+              {/* Menu button */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="p-2 hover:bg-card-hover rounded-lg transition-colors"
+                  data-testid="portfolio-menu-button"
+                >
+                  <MoreVertical className="w-5 h-5 text-text-secondary" />
+                </button>
+
+                {showMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-line py-1 z-10">
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-card-hover flex items-center gap-2"
+                      onClick={() => {
+                        setShowMenu(false);
+                        exportHoldingsToCsv();
+                      }}
+                      data-testid="menu-export-holdings"
+                    >
+                      <Download className="w-4 h-4 text-brand" />
+                      Export Holdings
+                    </button>
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-card-hover flex items-center gap-2"
+                      onClick={() => {
+                        setShowMenu(false);
+                        exportToCsv();
+                      }}
+                      data-testid="menu-export-transactions"
+                    >
+                      <Download className="w-4 h-4 text-brand" />
+                      Export Transactions
+                    </button>
+                    <div className="border-t border-line my-1"></div>
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-loss hover:bg-card-hover flex items-center gap-2"
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowDeleteModal(true);
+                      }}
+                      data-testid="menu-delete-portfolio"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete Portfolio
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           {portfolio.description && (
             <p className="text-text-secondary ml-11">{portfolio.description}</p>
@@ -966,6 +1026,14 @@ function PortfolioDetail() {
           isOpen={showLotSalesModal}
           onClose={() => setShowLotSalesModal(false)}
           portfolioId={id}
+        />
+
+        {/* Delete Portfolio Modal */}
+        <DeletePortfolioModal
+          portfolio={portfolio}
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onSuccess={handleDeleteSuccess}
         />
       </div>
     </Layout>
