@@ -52,10 +52,9 @@ export default function SidebarSettingsMenu({ onOpenApiKeysModal }) {
   const { currentThemeId, themes, changeTheme, themeMode, setThemeMode } =
     useTheme();
 
-  // API keys status - fetch services and get status
+  // API keys status - fetch services to get Finnhub status
   const services = useApiKeysStore((state) => state.services);
   const fetchServices = useApiKeysStore((state) => state.fetchServices);
-  const getOverallStatus = useApiKeysStore((state) => state.getOverallStatus);
 
   // Fetch services on mount
   useEffect(() => {
@@ -64,13 +63,28 @@ export default function SidebarSettingsMenu({ onOpenApiKeysModal }) {
     });
   }, [fetchServices]);
 
-  // Get status (returns { status: 'xxx', color: 'xxx' })
-  const apiStatusResult = getOverallStatus();
-  const statusKey = apiStatusResult?.status || 'not_configured';
-  const statusConfig = STATUS_CONFIG[statusKey] || STATUS_CONFIG.not_configured;
+  // Get Finnhub-specific status (only API key that matters)
+  // Yahoo Finance doesn't require an API key
+  const finnhub = services.find((s) => s.name === 'finnhub');
 
-  // Count configured keys
-  const totalKeys = services.reduce((sum, s) => sum + (s.active_keys || 0), 0);
+  let finnhubStatusKey = 'not_configured';
+  let finnhubStatusText = 'Not configured';
+
+  if (finnhub?.active_keys > 0) {
+    const usagePercent = finnhub.usage?.percentUsed || 0;
+    if (usagePercent >= 90) {
+      finnhubStatusKey = 'warning';
+      finnhubStatusText = 'Limited';
+    } else if (usagePercent >= 70) {
+      finnhubStatusKey = 'warning';
+      finnhubStatusText = 'High usage';
+    } else {
+      finnhubStatusKey = 'healthy';
+      finnhubStatusText = 'Connected';
+    }
+  }
+
+  const statusConfig = STATUS_CONFIG[finnhubStatusKey] || STATUS_CONFIG.not_configured;
 
   const handleLogout = async () => {
     setIsOpen(false);
@@ -222,11 +236,9 @@ export default function SidebarSettingsMenu({ onOpenApiKeysModal }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-text-muted">
-                    {totalKeys > 0
-                      ? `${totalKeys} key${totalKeys !== 1 ? 's' : ''}`
-                      : statusConfig.label}
+                    {finnhubStatusText}
                   </span>
-                  <span className="relative flex h-2.5 w-2.5" title={statusConfig.label}>
+                  <span className="relative flex h-2.5 w-2.5" title={finnhubStatusText}>
                     {statusConfig.pulse && (
                       <span
                         className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${statusConfig.color}`}

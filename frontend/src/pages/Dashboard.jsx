@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import Layout from '../components/Layout';
-import { ApiHealthWidget, ApiKeysModal } from '../components/api-keys';
 import NewsFeed from '../components/NewsFeed';
 import MarketOverview from '../components/MarketOverview';
 import TopMovers from '../components/TopMovers';
@@ -10,8 +8,6 @@ import PortfolioSummaryCard from '../components/PortfolioSummaryCard';
 import WatchlistSummaryCard from '../components/WatchlistSummaryCard';
 
 function Dashboard() {
-  const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
-
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -24,15 +20,12 @@ function Dashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Portfolio Card */}
           <PortfolioSummaryCard />
 
           {/* Watchlist Card */}
           <WatchlistSummaryCard />
-
-          {/* API Status Card */}
-          <ApiHealthWidget onClick={() => setIsApiKeysModalOpen(true)} />
         </div>
 
         {/* Market Status + Top Movers Row (#118-121) */}
@@ -66,12 +59,6 @@ function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* API Keys Modal */}
-      <ApiKeysModal
-        isOpen={isApiKeysModalOpen}
-        onClose={() => setIsApiKeysModalOpen(false)}
-      />
     </Layout>
   );
 }
