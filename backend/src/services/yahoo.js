@@ -560,9 +560,15 @@ class YahooFinanceService {
     try {
       await this.throttle();
 
+      // VIX has different settlement times (4:15 PM ET vs 4:00 PM for stocks)
+      // Yahoo's chartPreviousClose with range=1d returns stale data for VIX
+      // Use range=2d for VIX to get accurate previous close from historical data
+      const isVIX = symbol.toUpperCase() === '^VIX';
+      const range = isVIX ? '2d' : '1d';
+
       const url = new URL(`${YAHOO_BASE_URL}/${encodeURIComponent(symbol)}`);
       url.searchParams.set('interval', '1d');
-      url.searchParams.set('range', '1d');
+      url.searchParams.set('range', range);
 
       const response = await fetch(url.toString(), {
         headers: {
@@ -606,12 +612,21 @@ class YahooFinanceService {
       // Get latest values
       const lastIndex = quote.close.length - 1;
 
+      // For VIX, calculate previous close from historical data (second-to-last close)
+      // For other symbols, use meta.chartPreviousClose which is reliable
+      let previousClose;
+      if (isVIX && quote.close.length >= 2) {
+        previousClose = quote.close[lastIndex - 1];
+      } else {
+        previousClose = meta.chartPreviousClose || meta.previousClose;
+      }
+
       return {
         c: meta.regularMarketPrice || quote.close[lastIndex],
         h: meta.regularMarketDayHigh || Math.max(...quote.high.filter(h => h != null)),
         l: meta.regularMarketDayLow || Math.min(...quote.low.filter(l => l != null)),
-        o: quote.open[0],
-        pc: meta.chartPreviousClose || meta.previousClose,
+        o: isVIX ? (quote.open[lastIndex] || quote.open[0]) : quote.open[0],
+        pc: previousClose,
         t: Math.floor(Date.now() / 1000),
       };
     } catch (error) {
